@@ -1,14 +1,16 @@
 from PyQt5.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel, 
-                             QPushButton, QFrame, QSpacerItem, QSizePolicy)
+                             QPushButton, QFrame, QSpacerItem, QSizePolicy, QDialog)
 from PyQt5.QtCore import Qt, QTimer, pyqtSignal
 from PyQt5.QtGui import QFont, QPalette
+
+
+from screens.pin_dialog import PinDialog
 
 class IdleScreen(QWidget):
     def __init__(self, main_app):
         super().__init__()
         self.main_app = main_app
         self.setup_ui()
-        self.setup_timer()
     
     def setup_ui(self):
         # Main layout
@@ -27,49 +29,24 @@ class IdleScreen(QWidget):
         
         frame_layout = QVBoxLayout(main_frame)
         frame_layout.setContentsMargins(50, 50, 50, 50)
-        frame_layout.setSpacing(30)
+        frame_layout.setSpacing(40)
         
         # Title
-        title = QLabel("PRINTING SYSTEM")
+        title = QLabel("SELF SERVICE PRINTING KIOSK")
         title.setAlignment(Qt.AlignCenter)
         title.setStyleSheet("""
             QLabel {
                 color: white;
                 font-size: 48px;
                 font-weight: bold;
-                margin: 20px;
-            }
-        """)
-        
-        # Subtitle
-        subtitle = QLabel("Touch screen to start printing")
-        subtitle.setAlignment(Qt.AlignCenter)
-        subtitle.setStyleSheet("""
-            QLabel {
-                color: #cccccc;
-                font-size: 24px;
-                margin: 10px;
-            }
-        """)
-        
-        # Status indicator
-        self.status_label = QLabel("System Ready")
-        self.status_label.setAlignment(Qt.AlignCenter)
-        self.status_label.setStyleSheet("""
-            QLabel {
-                color: #00ff00;
-                font-size: 18px;
-                margin: 10px;
-                padding: 10px;
-                border: 2px solid #00ff00;
-                border-radius: 10px;
-                background-color: rgba(0, 255, 0, 0.1);
+                margin: 30px;
             }
         """)
         
         # Main action button
         start_button = QPushButton("START PRINTING")
         start_button.setMinimumHeight(80)
+        start_button.setMaximumWidth(800)
         start_button.setStyleSheet("""
             QPushButton {
                 background-color: #2d5aa0;
@@ -79,7 +56,7 @@ class IdleScreen(QWidget):
                 border: none;
                 border-radius: 15px;
                 padding: 20px;
-                margin: 20px;
+                margin: 30px;
             }
             QPushButton:hover {
                 background-color: #3d6ab0;
@@ -90,28 +67,17 @@ class IdleScreen(QWidget):
         """)
         start_button.clicked.connect(self.start_printing)
         
-        # Instructions
-        instructions = QLabel("Insert USB drive with PDF files\nSystem will automatically detect and process files")
-        instructions.setAlignment(Qt.AlignCenter)
-        instructions.setStyleSheet("""
-            QLabel {
-                color: #aaaaaa;
-                font-size: 16px;
-                line-height: 1.5;
-                margin: 20px;
-            }
-        """)
-        
-        # Add spacers and widgets
-        frame_layout.addItem(QSpacerItem(20, 40, QSizePolicy.Minimum, QSizePolicy.Expanding))
+        # --- Original Layout Spacing ---
+        frame_layout.addItem(QSpacerItem(20, 60, QSizePolicy.Minimum, QSizePolicy.Expanding))
         frame_layout.addWidget(title)
-        frame_layout.addWidget(subtitle)
-        frame_layout.addWidget(self.status_label)
-        frame_layout.addWidget(start_button)
-        frame_layout.addWidget(instructions)
-        frame_layout.addItem(QSpacerItem(20, 40, QSizePolicy.Minimum, QSizePolicy.Expanding))
+        frame_layout.addItem(QSpacerItem(20, 20, QSizePolicy.Minimum, QSizePolicy.Fixed))
         
-        # Bottom info
+        button_layout = QHBoxLayout()
+        button_layout.addItem(QSpacerItem(40, 20, QSizePolicy.Expanding, QSizePolicy.Minimum))
+        button_layout.addWidget(start_button)
+        button_layout.addItem(QSpacerItem(40, 20, QSizePolicy.Expanding, QSizePolicy.Minimum))
+        frame_layout.addLayout(button_layout)
+        
         bottom_info = QLabel("Supported formats: PDF files only")
         bottom_info.setAlignment(Qt.AlignCenter)
         bottom_info.setStyleSheet("""
@@ -123,54 +89,61 @@ class IdleScreen(QWidget):
         """)
         frame_layout.addWidget(bottom_info)
         
+        frame_layout.addStretch(1)
+        # --- End Original Layout Spacing ---
+
+        # Admin Button
+        admin_button = QPushButton("Admin")
+        admin_button.setFixedSize(90, 35)
+        admin_button.setStyleSheet("""
+            QPushButton {
+                background-color: #3a3a5a;
+                color: #cccccc;
+                font-size: 13px;
+                font-weight: bold;
+                border: 1px solid #555;
+                border-radius: 8px;
+            }
+            QPushButton:hover {
+                background-color: #4a4a6a;
+                border-color: #777;
+            }
+        """)
+        admin_button.clicked.connect(self.go_to_admin)
+        
+        admin_layout = QHBoxLayout()
+        admin_layout.addStretch(1)
+        admin_layout.addWidget(admin_button)
+        
+        frame_layout.addLayout(admin_layout)
+
         layout.addWidget(main_frame)
         self.setLayout(layout)
-    
-    def setup_timer(self):
-        """Setup timer for status blinking effect"""
-        self.blink_timer = QTimer()
-        self.blink_timer.timeout.connect(self.blink_status)
-        self.blink_timer.start(1000)  # Blink every second
-        self.blink_state = True
-    
-    def blink_status(self):
-        """Animate status indicator"""
-        if self.blink_state:
-            self.status_label.setStyleSheet("""
-                QLabel {
-                    color: #00ff00;
-                    font-size: 18px;
-                    margin: 10px;
-                    padding: 10px;
-                    border: 2px solid #00ff00;
-                    border-radius: 10px;
-                    background-color: rgba(0, 255, 0, 0.1);
-                }
-            """)
-        else:
-            self.status_label.setStyleSheet("""
-                QLabel {
-                    color: #00ff00;
-                    font-size: 18px;
-                    margin: 10px;
-                    padding: 10px;
-                    border: 2px solid #00ff00;
-                    border-radius: 10px;
-                    background-color: rgba(0, 255, 0, 0.05);
-                }
-            """)
-        self.blink_state = not self.blink_state
     
     def start_printing(self):
         """Navigate to USB screen"""
         self.main_app.show_screen('usb')
+
+    def go_to_admin(self):
+        """
+        Show the PIN dialog and navigate to the admin screen
+        only if the correct PIN is entered.
+        """
+        dialog = PinDialog(self)
+        # .exec_() shows the dialog and waits until it's closed.
+        # It returns QDialog.Accepted if self.accept() was called inside the dialog.
+        result = dialog.exec_()
+
+        if result == QDialog.Accepted:
+            print("PIN Accepted. Navigating to admin screen.")
+            self.main_app.show_screen('admin')
+        else:
+            print("PIN Dialog closed without correct PIN.")
     
     def on_enter(self):
         """Called when screen becomes active"""
-        if hasattr(self, 'blink_timer'):
-            self.blink_timer.start(1000)
+        pass
     
     def on_leave(self):
         """Called when leaving screen"""
-        if hasattr(self, 'blink_timer'):
-            self.blink_timer.stop()
+        pass

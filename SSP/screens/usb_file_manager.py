@@ -9,19 +9,13 @@ class USBFileManager:
     """Handles USB detection and PDF file filtering"""
     
     def __init__(self):
-        # Create a temporary folder for this session
-        self.temp_base_dir = os.path.join(tempfile.gettempdir(), "PrintingSystem")
-        self.session_id = datetime.now().strftime("%Y%m%d_%H%M%S")
-        self.destination_dir = os.path.join(self.temp_base_dir, f"Session_{self.session_id}")
-        
+        # Create temp directory path
+        self.destination_dir = os.path.join(os.path.expanduser("~"), "SSP TEMP")
+        os.makedirs(self.destination_dir, exist_ok=True)
+        print(f"✅ Temp directory created/verified: {self.destination_dir}")
+
         self.supported_extensions = ['.pdf']
         self.last_known_drives = set()
-        
-        # Create the destination directory
-        if not os.path.exists(self.destination_dir):
-            os.makedirs(self.destination_dir)
-            
-        print(f"USBFileManager initialized with destination: {self.destination_dir}")
     
     def get_usb_drives(self):
         """Detect ONLY actual USB/removable drives - exclude all internal drives"""
@@ -184,77 +178,62 @@ class USBFileManager:
         return list(new_drives), list(removed_drives)
     
     def scan_and_copy_pdf_files(self, source_dir):
-        """Fast scan and copy PDF files to temporary folder"""
-        found_files = []
-        
+        """Scan for and copy PDF files from USB drive"""
+        print(f"\n🔍 Starting scan_and_copy_pdf_files for {source_dir}")
+        copied_files = []
+
         try:
-            # Ensure destination directory exists
-            if not os.path.exists(self.destination_dir):
-                os.makedirs(self.destination_dir)
-                print(f"Created destination directory: {self.destination_dir}")
-        
-            print(f"Scanning and copying PDF files from {source_dir} to {self.destination_dir}")
-        
-            # Scan and copy PDF files
-            for root, dirs, files in os.walk(source_dir):
-                for file in files:
-                    if file.lower().endswith('.pdf'):
+            print(f"📂 Scanning and copying PDF files from {source_dir} to {self.destination_dir}")
+            
+            for root, _, files in os.walk(source_dir):
+                for filename in files:
+                    if filename.lower().endswith('.pdf'):
+                        source_path = os.path.join(root, filename)
+                        dest_path = os.path.join(self.destination_dir, filename)
+                        
                         try:
-                            source_path = os.path.join(root, file)
-                        
-                            # Verify source file exists
-                            if not os.path.exists(source_path):
-                                print(f"Source file does not exist: {source_path}")
-                                continue
-                            
-                            file_size = os.path.getsize(source_path)
-                        
-                            # Create unique filename if duplicate exists
-                            dest_filename = file
-                            counter = 1
-                            while os.path.exists(os.path.join(self.destination_dir, dest_filename)):
-                                name, ext = os.path.splitext(file)
-                                dest_filename = f"{name}_{counter}{ext}"
-                                counter += 1
-                        
-                            dest_path = os.path.join(self.destination_dir, dest_filename)
-                        
-                            # Ensure destination directory still exists (in case it was deleted)
-                            if not os.path.exists(self.destination_dir):
-                                os.makedirs(self.destination_dir)
-                        
-                            # Copy the file
-                            print(f"Copying {source_path} to {dest_path}")
+                            # Copy file and verify
                             shutil.copy2(source_path, dest_path)
-                        
-                            # Verify the copy was successful
                             if os.path.exists(dest_path):
-                                print(f"Successfully copied: {dest_filename}")
-                            
-                                pages = self.estimate_pdf_pages_fast(file_size)
-                            
-                                file_info = {
-                                    'filename': dest_filename,
-                                    'original_path': source_path,
+                                file_size = os.path.getsize(dest_path)
+                                print(f"✅ Copied {filename} ({file_size/1024:.1f} KB)")
+                                
+                                # Get PDF page count
+                                try:
+                                    import fitz  # PyMuPDF
+                                    doc = fitz.open(dest_path)
+                                    page_count = len(doc)
+                                    doc.close()
+                                except Exception:
+                                    page_count = 1
+                                    print(f"⚠️ Could not get page count for {filename}")
+                                
+                                copied_files.append({
+                                    'filename': filename,
+                                    'path': dest_path,
                                     'size': file_size,
-                                    'type': '.pdf',
-                                    'path': dest_path,  # Use copied path
-                                    'pages': pages
-                                }
-                                found_files.append(file_info)
-                            else:
-                                print(f"Failed to copy file: {dest_filename}")
-                            
+                                    'pages': page_count,
+                                    'type': '.pdf'
+                                })
                         except Exception as e:
-                            print(f"Error copying {file}: {e}")
-                            continue
-                        
+                            print(f"❌ Error copying {filename}: {str(e)}")
+                            
+            # After all files are processed
+            if copied_files:
+                print(f"✅ Successfully copied {len(copied_files)} PDF files:")
+                for f in copied_files:
+                    print(f"   📄 {f['filename']} ({f['size']/1024:.1f} KB, {f['pages']} pages)")
+            else:
+                print("❌ No PDF files found to copy")
+                
+            return copied_files
+
         except Exception as e:
-            print(f"Error scanning directory {source_dir}: {e}")
-    
-        print(f"Successfully copied {len(found_files)} PDF files")
-        return found_files
-    
+            print(f"❌ Error in scan_and_copy_pdf_files: {str(e)}")
+            import traceback
+            traceback.print_exc()
+            return []
+        
     def cleanup_temp_files(self):
         """Delete all files in the temporary directory after printing"""
         try:
