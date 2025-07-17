@@ -5,6 +5,7 @@ import os
 from PyQt5.QtWidgets import QApplication, QMainWindow, QStackedWidget
 from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QIcon
+from screens.idle_screen import IdleScreen
 from screens.usb_screen import USBScreen
 from screens.file_browser_screen import FileBrowserScreen
 from screens.payment_dialog import PaymentScreen
@@ -28,28 +29,26 @@ class PrintingSystemApp(QMainWindow):
 
         print("Initializing screens...")
 
-        # Create all screen instances once
-        # self.idle_screen = IdleScreen(self) # Commented out due to PinDialog error
+        # Create all screen instances once in the correct order
+        self.idle_screen = IdleScreen(self)
         self.usb_screen = USBScreen(self)
         self.file_browser_screen = FileBrowserScreen(self)
-        ## FIX: Instantiated the correctly named class 'Print_Options_Screen'
         self.printing_options_screen = Print_Options_Screen(self)
         self.payment_screen = PaymentScreen(self)
 
-        # Add screens to the stack
-        # self.stacked_widget.addWidget(self.idle_screen)
-        self.stacked_widget.addWidget(self.usb_screen)
-        self.stacked_widget.addWidget(self.file_browser_screen)
-        self.stacked_widget.addWidget(self.printing_options_screen)
-        self.stacked_widget.addWidget(self.payment_screen)
+        # Add screens to the stack in the same order
+        self.stacked_widget.addWidget(self.idle_screen)         # Index 0
+        self.stacked_widget.addWidget(self.usb_screen)          # Index 1
+        self.stacked_widget.addWidget(self.file_browser_screen) # Index 2
+        self.stacked_widget.addWidget(self.printing_options_screen) # Index 3
+        self.stacked_widget.addWidget(self.payment_screen)      # Index 4
 
-        ## FIX: Updated screen map to reflect the removal of idle_screen for now.
-        ## You can add it back later.
+        ## FIX: Updated the print statement to be accurate.
         print(f"Stacked widget has {self.stacked_widget.count()} screens")
-        print(f"Screen index map: usb=0, file_browser=1, printing_options=2, payment=3")
+        print(f"Screen index map: idle=0, usb=1, file_browser=2, printing_options=3, payment=4")
 
-        # Set initial screen
-        self.show_screen('usb') # Changed from 'idle' to 'usb' for testing
+        ## FIX: Set the initial screen to 'idle'.
+        self.show_screen('idle')
 
         self.setStyleSheet("""
             QMainWindow {
@@ -62,13 +61,13 @@ class PrintingSystemApp(QMainWindow):
         """Switch between screens using a predefined map."""
         print(f"\n🔄 Attempting to show screen: {screen_name}")
 
-        ## FIX: Updated map to match the current widget order.
+        ## FIX: The screen map is now correct and matches the widget order.
         screen_map = {
-            # 'idle': 0,
-            'usb': 0,
-            'file_browser': 1,
-            'printing_options': 2,
-            'payment': 3
+            'idle': 0,
+            'usb': 1,
+            'file_browser': 2,
+            'printing_options': 3,
+            'payment': 4
         }
 
         if screen_name in screen_map:

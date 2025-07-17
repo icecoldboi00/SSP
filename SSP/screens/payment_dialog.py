@@ -1,9 +1,16 @@
+# screens/payment_dialog.py
+
+# FIX: Import the 'os' module
+import os 
+
 from PyQt5.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QComboBox, QLineEdit,
     QScrollArea, QFrame, QMessageBox
 )
 from PyQt5.QtCore import Qt, QTimer, pyqtSignal, QThread
 import time
+
+# ... the rest of the file remains the same ...
 
 # Try to import pigpio, but continue without it if not available
 try:
@@ -148,14 +155,30 @@ class PaymentScreen(QWidget):
         self.payment_data = payment_data
         self.total_cost = payment_data['total_cost']
         
+        # Reset state for new transaction
+        self.amount_received = 0
+        self.disable_payment_mode() # Ensure payment mode is off initially
+        
         # Update UI
         self.total_label.setText(f"Total Amount Due: ₱{self.total_cost:.2f}")
-        summary = (f"Print Job Summary:\n"
-                  f"• Pages: {len(payment_data['selected_pages'])}\n"
-                  f"• Copies: {payment_data['copies']}\n"
-                  f"• Mode: {payment_data['color_mode']}\n"
-                  f"• Price per page: ₱{payment_data['price_per_page']:.2f}")
-        self.summary_label.setText(summary)
+
+        # Rebuilt the summary string using the correct keys and the 'analysis' dictionary.
+        analysis = payment_data.get('analysis', {})
+        pricing_info = analysis.get('pricing', {})
+        b_count = pricing_info.get('black_pages_count', 0)
+        c_count = pricing_info.get('color_pages_count', 0)
+        doc_name = os.path.basename(payment_data['pdf_data']['path'])
+
+        summary_lines = [
+            f"<b>Print Job Summary:</b>",
+            f"• Document: {doc_name}",
+            f"• Copies: {payment_data['copies']}",
+            f"• Color Mode: {payment_data['color_mode']}",
+            f"• Breakdown: {b_count} B&W pages, {c_count} Color pages"
+        ]
+        self.summary_label.setText("<br>".join(summary_lines))
+        
+        # This line now gets called correctly
         self.update_payment_status()
 
     def init_ui(self):
@@ -177,11 +200,13 @@ class PaymentScreen(QWidget):
         self.summary_label.setStyleSheet("""
             QLabel {
                 color: black;
-                font-size: 24px;
-                font-weight: bold;
+                font-size: 16px; /* Adjusted size for more text */
+                font-weight: normal; /* Adjusted for better readability */
                 margin-bottom: 15px;
+                line-height: 1.5; /* Spacing between lines */
             }
         """)
+        self.summary_label.setWordWrap(True) # Ensure text wraps
         content_layout.addWidget(self.summary_label)
 
         # Total Amount Display
