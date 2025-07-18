@@ -14,7 +14,6 @@ import numpy as np
 from typing import List, Tuple, Dict
 
 class PDFColorAnalyzer:
-    # ## FIX: Set your fixed B&W price here
     def __init__(self, black_price: float, color_price: float):
         self.black_price = black_price
         self.color_price = color_price
@@ -32,7 +31,8 @@ class PDFColorAnalyzer:
 
     def analyze_pdf_pages(self, pdf_path: str, pages_to_check: List[int], user_wants_color: bool, dpi: int = 150) -> Dict:
         results = {
-            'page_analysis': {}, 'pricing': {'black_pages_count': 0, 'color_pages_count': 0, 'base_cost': 0},
+            'page_analysis': {}, 
+            'pricing': {'black_pages_count': 0, 'color_pages_count': 0, 'base_cost': 0},
             'error': None
         }
         try:
@@ -47,16 +47,18 @@ class PDFColorAnalyzer:
                 page_image = np.frombuffer(pix.samples, dtype=np.uint8).reshape(pix.height, pix.width, 3)
 
                 is_black_only = self.is_page_black_only(page_image)
-                price = self.black_price
-
-                if not is_black_only and user_wants_color:
-                    price = self.color_price
+                
+                page_price = 0 
+                
+                if user_wants_color and not is_black_only:
+                    page_price = self.color_price
                     results['pricing']['color_pages_count'] += 1
                 else:
+                    page_price = self.black_price
                     results['pricing']['black_pages_count'] += 1
-
-                results['pricing']['base_cost'] += price
-                results['page_analysis'][page_num_1_based] = {'is_black_only': is_black_only, 'final_price': price}
+                
+                results['pricing']['base_cost'] += page_price
+                results['page_analysis'][page_num_1_based] = {'is_black_only': is_black_only, 'final_price': page_price}
 
             pdf_document.close()
             return results
@@ -91,14 +93,13 @@ class Print_Options_Screen(QWidget):
         self.selected_pdf = None
         self.selected_pages = None
 
-        # ## FIX: Set your fixed prices here. The user requested 3 pesos for B&W.
-        self.analyzer = PDFColorAnalyzer(black_price=3.0, color_price=8.0)
+        ## FIX: Updated prices to match your new requirement.
+        self.analyzer = PDFColorAnalyzer(black_price=3.0, color_price=5.0)
         self.analysis_thread = None
         self.analysis_results = None
 
         self.setup_ui()
 
-    # ... setup_ui remains the same as the previous version ...
     def setup_ui(self):
         self.analysis_details_label = QLabel("Analysis details will appear here.")
         self.analysis_details_label.setStyleSheet("color: #aaa; font-size: 14px; margin-top: 5px;")
@@ -152,23 +153,19 @@ class Print_Options_Screen(QWidget):
         self.copies_spin.setValue(1)
         self.trigger_analysis()
 
-    # ## FIX: This method now contains the core logic change.
     def trigger_analysis(self):
-        """Decides whether to run the full analysis or do a simple B&W calculation."""
         if not self.selected_pdf: return
 
-        # Stop any analysis that might be running from a previous selection.
         if self.analysis_thread and self.analysis_thread.isRunning():
             self.analysis_thread.stop()
             self.analysis_thread.wait()
 
-        self.continue_btn.setEnabled(False) # Always disable until calculation is done
+        self.continue_btn.setEnabled(False) 
         self.analysis_results = None
 
         user_wants_color = (self.color_combo.currentText() == "Color")
 
         if user_wants_color:
-            # --- USER WANTS COLOR: Run the detailed background analysis ---
             self.cost_label.setText("Analyzing pages and calculating cost...")
             self.analysis_details_label.setText("This may take a moment for large documents...")
             
@@ -177,30 +174,24 @@ class Print_Options_Screen(QWidget):
             self.analysis_thread.analysis_complete.connect(self.on_analysis_finished)
             self.analysis_thread.start()
         else:
-            # --- USER WANTS B&W: Calculate cost directly, no thread needed ---
             self.cost_label.setText("Calculating cost...")
             
             num_pages = len(self.selected_pages)
-            # Use the fixed B&W price from the analyzer instance
             base_cost = num_pages * self.analyzer.black_price
             
-            # Create a "mock" result dictionary that looks like the real one
-            # This allows us to reuse the on_analysis_finished logic
             bw_results = {
                 'pricing': {
                     'base_cost': base_cost,
                     'black_pages_count': num_pages,
-                    'color_pages_count': 0  # Explicitly zero
+                    'color_pages_count': 0 
                 },
-                'page_analysis': {}, # No need for page-by-page data
+                'page_analysis': {},
                 'error': None
             }
-            # Immediately call the handler with our manually created result
             self.on_analysis_finished(bw_results)
 
 
     def on_analysis_finished(self, results):
-        """This slot is called when the background thread is done OR for B&W direct calculation."""
         if results.get('error'):
             self.cost_label.setText("Error during analysis!")
             self.analysis_details_label.setText(results['error'])
@@ -208,11 +199,10 @@ class Print_Options_Screen(QWidget):
             return
         
         self.analysis_results = results
-        self.continue_btn.setEnabled(True) # Re-enable the continue button
+        self.continue_btn.setEnabled(True) 
         self.update_cost_display()
 
     def update_cost_display(self):
-        """Updates the cost labels using the stored analysis results. This is fast."""
         if not self.analysis_results:
             return
         
@@ -222,13 +212,11 @@ class Print_Options_Screen(QWidget):
 
         self.cost_label.setText(f"Total Cost: ₱{total_cost:.2f}")
 
-        # Update the details label for clarity
         b_count = self.analysis_results['pricing']['black_pages_count']
         c_count = self.analysis_results['pricing']['color_pages_count']
         if c_count > 0:
             details_text = f"Based on {num_copies} copies of ({b_count} B&W pages + {c_count} Color pages)"
         else:
-            # Simpler message for pure B&W jobs
             details_text = f"Based on {num_copies} copies of {b_count} Black & White pages"
         self.analysis_details_label.setText(details_text)
         

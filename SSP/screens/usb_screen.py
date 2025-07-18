@@ -1,3 +1,5 @@
+# usb_screen.py
+
 import sys
 import os
 import shutil
@@ -665,11 +667,8 @@ class USBScreen(QWidget):
                 print("📂 Loading files into browser...")
                 self.main_app.file_browser_screen.load_pdf_files(pdf_files)
                 print("🔄 Initiating screen transition...")
-                result = self.main_app.show_screen('file_browser')
-                if not result:
-                    print("❌ Screen transition failed!")
-                    self.start_usb_monitoring()
-                    QMessageBox.warning(self, "Error", "Failed to switch to PDF preview screen")
+                # FIX: Removed the flawed check. This call correctly initiates the transition.
+                self.main_app.show_screen('file_browser')
             except Exception as e:
                 print(f"❌ Error during transition: {str(e)}")
                 import traceback
