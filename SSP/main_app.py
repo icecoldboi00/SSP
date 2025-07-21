@@ -1,3 +1,5 @@
+# main_app.py
+
 import sys
 import os
 from PyQt5.QtWidgets import QApplication, QMainWindow, QStackedWidget
@@ -6,13 +8,15 @@ from PyQt5.QtGui import QIcon
 from screens.idle_screen import IdleScreen
 from screens.usb_screen import USBScreen
 from screens.file_browser_screen import FileBrowserScreen
+from screens.payment_dialog import PaymentScreen
+from screens.Print_Options_Screen import Print_Options_Screen
 from screens.admin_screen import AdminScreen
 
 try:
     from screens.usb_file_manager import USBFileManager
-    print("USBFileManager imported successfully in main_app.py")
+    print("✅ USBFileManager imported successfully in main_app.py")
 except Exception as e:
-    print(f"Failed to import USBFileManager in main_app.py: {e}")
+    print(f"❌ Failed to import USBFileManager in main_app.py: {e}")
 
 class PrintingSystemApp(QMainWindow):
     def __init__(self):
@@ -20,123 +24,83 @@ class PrintingSystemApp(QMainWindow):
         self.setWindowTitle("Printing System GUI")
         self.setGeometry(100, 100, 1200, 800)
         self.setMinimumSize(1000, 700)
-        
-        # Create stacked widget for screen management
+
         self.stacked_widget = QStackedWidget()
         self.setCentralWidget(self.stacked_widget)
-        
-        print("Initializing screens...")
-        
-        # Create screens
-        self.idle_screen = IdleScreen(self)
-        print("Idle screen created")
-        
-        self.usb_screen = USBScreen(self)
-        print("USB screen created")
-        
-        self.file_browser_screen = FileBrowserScreen(self)
-        print("File browser screen created")
 
-        self.admin_screen = AdminScreen(self)
-        print("Admin screen created")
-        
-        # Add screens to stack
-        self.stacked_widget.addWidget(self.idle_screen)
-        self.stacked_widget.addWidget(self.usb_screen)
-        self.stacked_widget.addWidget(self.file_browser_screen)
-        self.stacked_widget.addWidget(self.admin_screen)
-        
+        print("Initializing screens...")
+
+        # Create all screen instances once in the correct order
+        self.idle_screen = IdleScreen(self)
+        self.usb_screen = USBScreen(self)
+        self.file_browser_screen = FileBrowserScreen(self)
+        self.printing_options_screen = Print_Options_Screen(self)
+        self.payment_screen = PaymentScreen(self)
+        self.admin_screen = AdminScreen(self) # FIX: Instantiate AdminScreen
+
+        # Add screens to the stack in the same order
+        self.stacked_widget.addWidget(self.idle_screen)         # Index 0
+        self.stacked_widget.addWidget(self.usb_screen)          # Index 1
+        self.stacked_widget.addWidget(self.file_browser_screen) # Index 2
+        self.stacked_widget.addWidget(self.printing_options_screen) # Index 3
+        self.stacked_widget.addWidget(self.payment_screen)      # Index 4
+        self.stacked_widget.addWidget(self.admin_screen)        # Index 5
+
+        ## FIX: Updated the print statement to be accurate.
         print(f"Stacked widget has {self.stacked_widget.count()} screens")
-        print(f"Screen index map: idle=0, usb=1, file_browser=2") # Added for clarity
-        
-        # Set initial screen
+        print(f"Screen index map: idle=0, usb=1, file_browser=2, printing_options=3, payment=4, admin=5")
+
+        ## FIX: Set the initial screen to 'idle'.
         self.show_screen('idle')
-        
-        # Apply global stylesheet
+
         self.setStyleSheet("""
             QMainWindow {
                 background-color: #1e1e2e;
             }
         """)
-        
         print("Main app initialization complete")
-    
+
     def show_screen(self, screen_name):
-        """Switch between screens"""
-        print("\n=== SCREEN TRANSITION DEBUG ===")
-        print(f"Attempting to show screen: {screen_name}")
-        
+        """Switch between screens, calling on_leave and on_enter methods."""
+        print(f"\n🔄 Attempting to show screen: {screen_name}")
+
+        ## FIX: The screen map is now correct and includes the admin screen.
         screen_map = {
             'idle': 0,
             'usb': 1,
             'file_browser': 2,
-            'admin': 3
+            'printing_options': 3,
+            'payment': 4,
+            'admin': 5
         }
-        
+
         if screen_name in screen_map:
-            try:
-                # Handle screen exit/enter events
-                current_widget = self.stacked_widget.currentWidget()
-                current_index = self.stacked_widget.currentIndex()
-                target_index = screen_map[screen_name]
-                
-                print(f"Current: index={current_index}, widget={type(current_widget).__name__}")
-                print(f"Target: index={target_index}, screen={screen_name}")
-                
-                if hasattr(current_widget, 'on_leave'):
-                    print(f"Calling on_leave for {type(current_widget).__name__}")
-                    current_widget.on_leave()
-                
-                # Force immediate screen switch
-                print(f"Setting current index to {target_index}")
-                self.stacked_widget.setCurrentIndex(target_index)
-                
-                new_widget = self.stacked_widget.currentWidget()
-                actual_index = self.stacked_widget.currentIndex()
-                print(f"New widget: {type(new_widget).__name__} at index {actual_index}")
-                
-                if hasattr(new_widget, 'on_enter'):
-                    print(f"Calling on_enter for {type(new_widget).__name__}")
-                    new_widget.on_enter()
-                
-                # Force immediate update
-                print("Forcing UI update")
-                self.stacked_widget.update()
-                QApplication.processEvents()
-                
-                # Verify the switch
-                final_widget = self.stacked_widget.currentWidget()
-                final_index = self.stacked_widget.currentIndex()
-                print(f"Final state: index={final_index}, widget={type(final_widget).__name__}")
-                
-                if final_index == target_index:
-                    print(f"Successfully switched to {screen_name} screen")
-                    return True
-                else:
-                    print(f"Screen switch verification failed!")
-                    print(f"Expected index {target_index}, but got {final_index}")
-                    return False
-                
-            except Exception as e:
-                print(f"Error during screen transition: {str(e)}")
-                import traceback
-                traceback.print_exc()
-                return False
+            # FIX: Call on_leave for the current screen
+            current_widget = self.stacked_widget.currentWidget()
+            if hasattr(current_widget, 'on_leave'):
+                print(f"  -> Calling on_leave() for {type(current_widget).__name__}")
+                current_widget.on_leave()
+
+            # Switch to the new screen
+            target_index = screen_map[screen_name]
+            self.stacked_widget.setCurrentIndex(target_index)
+            
+            # FIX: Call on_enter for the new screen
+            new_widget = self.stacked_widget.currentWidget()
+            if hasattr(new_widget, 'on_enter'):
+                print(f"  -> Calling on_enter() for {type(new_widget).__name__}")
+                new_widget.on_enter()
+            
+            print(f"✅ Successfully switched to '{screen_name}' screen at index {target_index}")
         else:
-            print(f"ERROR: Unknown screen name: {screen_name}")
-            return False
+            print(f"❌ ERROR: Unknown screen name: {screen_name}")
 
 def main():
     app = QApplication(sys.argv)
-    
-    # Set application properties
     app.setApplicationName("Printing System GUI")
     app.setApplicationVersion("1.0")
-    
-    # Create and show main window
     window = PrintingSystemApp()
     window.show()
-    
     sys.exit(app.exec_())
 
 if __name__ == '__main__':

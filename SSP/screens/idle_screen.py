@@ -3,7 +3,6 @@ from PyQt5.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel,
 from PyQt5.QtCore import Qt, QTimer, pyqtSignal
 from PyQt5.QtGui import QFont, QPalette
 
-
 from screens.pin_dialog import PinDialog
 
 class IdleScreen(QWidget):

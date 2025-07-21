@@ -1,9 +1,16 @@
+# screens/payment_dialog.py
+
+# FIX: Import the 'os' module
+import os 
+
 from PyQt5.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QComboBox, QLineEdit,
     QScrollArea, QFrame, QMessageBox
 )
 from PyQt5.QtCore import Qt, QTimer, pyqtSignal, QThread
 import time
+
+# ... the rest of the file remains the same ...
 
 # Try to import pigpio, but continue without it if not available
 try:
@@ -130,11 +137,11 @@ class PaymentScreen(QWidget):
     payment_completed = pyqtSignal(dict)
     go_back_to_viewer = pyqtSignal(dict)
 
-    def __init__(self, main_app, pdf_data):
+    def __init__(self, main_app):
         super().__init__()
         self.main_app = main_app
-        self.pdf_data = pdf_data
         self.total_cost = 0
+        self.payment_data = None
         self.payment_processing = False
         self.amount_received = 0
         self.gpio_thread = None
@@ -142,15 +149,37 @@ class PaymentScreen(QWidget):
 
         self.init_ui()
         self.setup_gpio()
-        self.calculate_cost()
+    
+    def set_payment_data(self, payment_data):
+        """Set payment data received from Print Options screen"""
+        self.payment_data = payment_data
+        self.total_cost = payment_data['total_cost']
+        
+        # Reset state for new transaction
+        self.amount_received = 0
+        self.disable_payment_mode() # Ensure payment mode is off initially
+        
+        # Update UI
+        self.total_label.setText(f"Total Amount Due: ₱{self.total_cost:.2f}")
 
-    def setup_gpio(self):
-        self.gpio_thread = GPIOPaymentThread()
-        self.gpio_thread.coin_inserted.connect(self.on_coin_inserted)
-        self.gpio_thread.bill_inserted.connect(self.on_bill_inserted)
-        self.gpio_thread.payment_status.connect(self.on_payment_status)
-        self.gpio_thread.enable_acceptor.connect(self.gpio_thread.set_acceptor_state)
-        self.gpio_thread.start()
+        # Rebuilt the summary string using the correct keys and the 'analysis' dictionary.
+        analysis = payment_data.get('analysis', {})
+        pricing_info = analysis.get('pricing', {})
+        b_count = pricing_info.get('black_pages_count', 0)
+        c_count = pricing_info.get('color_pages_count', 0)
+        doc_name = os.path.basename(payment_data['pdf_data']['path'])
+
+        summary_lines = [
+            f"<b>Print Job Summary:</b>",
+            f"• Document: {doc_name}",
+            f"• Copies: {payment_data['copies']}",
+            f"• Color Mode: {payment_data['color_mode']}",
+            f"• Breakdown: {b_count} B&W pages, {c_count} Color pages"
+        ]
+        self.summary_label.setText("<br>".join(summary_lines))
+        
+        # This line now gets called correctly
+        self.update_payment_status()
 
     def init_ui(self):
         main_layout = QVBoxLayout(self)
@@ -166,47 +195,22 @@ class PaymentScreen(QWidget):
         content_layout.setContentsMargins(30, 30, 30, 30)
         content_layout.setSpacing(20)
 
-        # Print Type row (label + combobox)
-        print_type_row = QHBoxLayout()
-        print_type_label = QLabel("Print type:")
-        print_type_label.setStyleSheet("font-size: 16px; font-weight: bold; color: black;")
-        self.print_type_combo = QComboBox()
-        self.print_type_combo.addItems([
-            "Black & White - ₱2.00 per page",
-            "Color - ₱5.00 per page"
-        ])
-        self.print_type_combo.setStyleSheet("font-size: 14px; min-height: 20px; color: black;")
-        self.print_type_combo.currentTextChanged.connect(self.calculate_cost)
-        print_type_row.addWidget(print_type_label)
-        print_type_row.addWidget(self.print_type_combo)
-        print_type_row.addStretch()
-        content_layout.addLayout(print_type_row)
+        # Order Summary
+        self.summary_label = QLabel("Print Job Summary")
+        self.summary_label.setStyleSheet("""
+            QLabel {
+                color: black;
+                font-size: 16px; /* Adjusted size for more text */
+                font-weight: normal; /* Adjusted for better readability */
+                margin-bottom: 15px;
+                line-height: 1.5; /* Spacing between lines */
+            }
+        """)
+        self.summary_label.setWordWrap(True) # Ensure text wraps
+        content_layout.addWidget(self.summary_label)
 
-        # Paper Size row
-        paper_size_row = QHBoxLayout()
-        paper_label = QLabel("Paper size:")
-        paper_label.setStyleSheet("font-size: 16px; font-weight: bold; color: black;")
-        paper_display = QLabel('Letter (8.5" x 11")')
-        paper_display.setStyleSheet("font-size: 14px; color: #6c757d;")
-        paper_size_row.addWidget(paper_label)
-        paper_size_row.addWidget(paper_display)
-        paper_size_row.addStretch()
-        content_layout.addLayout(paper_size_row)
-
-        # Copies row
-        copies_row = QHBoxLayout()
-        copies_label = QLabel("Copies:")
-        copies_label.setStyleSheet("font-size: 16px; font-weight: bold; color: black;")
-        self.copies_input = QLineEdit("1")
-        self.copies_input.setStyleSheet("font-size: 14px; min-height: 20px;")
-        self.copies_input.textChanged.connect(self.calculate_cost)
-        copies_row.addWidget(copies_label)
-        copies_row.addWidget(self.copies_input)
-        copies_row.addStretch()
-        content_layout.addLayout(copies_row)
-
-        # Total
-        self.total_label = QLabel("Total: ₱0.00")
+        # Total Amount Display
+        self.total_label = QLabel("Total Amount Due: ₱0.00")
         self.total_label.setAlignment(Qt.AlignCenter)
         self.total_label.setStyleSheet("""
             QLabel {
@@ -220,19 +224,12 @@ class PaymentScreen(QWidget):
         """)
         content_layout.addWidget(self.total_label)
 
-        # Payment Status row
-        payment_status_row = QHBoxLayout()
-        payment_section_label = QLabel("Payment status:")
-        payment_section_label.setStyleSheet("font-size: 16px; font-weight: bold; color: black;")
-        initial_status = "Click 'Enable Payment' to start accepting coins/bills" if PIGPIO_AVAILABLE else "GPIO not available - Payment system running in simulation mode"
-        self.payment_status_label = QLabel(initial_status)
+        # Payment Status
+        self.payment_status_label = QLabel("Click 'Enable Payment' to begin")
         self.payment_status_label.setStyleSheet("font-size: 14px; color: #6c757d;")
-        payment_status_row.addWidget(payment_section_label)
-        payment_status_row.addWidget(self.payment_status_label)
-        payment_status_row.addStretch()
-        content_layout.addLayout(payment_status_row)
+        content_layout.addWidget(self.payment_status_label)
 
-        # Amount Received
+        # Amount Received Display
         self.amount_received_label = QLabel("Amount Received: ₱0.00")
         self.amount_received_label.setAlignment(Qt.AlignCenter)
         self.amount_received_label.setStyleSheet("""
@@ -248,7 +245,7 @@ class PaymentScreen(QWidget):
         """)
         content_layout.addWidget(self.amount_received_label)
 
-        # Change / Remaining
+        # Change/Remaining Display
         self.change_label = QLabel("")
         self.change_label.setAlignment(Qt.AlignCenter)
         self.change_label.setStyleSheet("""
@@ -265,19 +262,20 @@ class PaymentScreen(QWidget):
         """)
         content_layout.addWidget(self.change_label)
 
-        # Simulation buttons if no GPIO
+        # Add simulation buttons if no GPIO
         if not PIGPIO_AVAILABLE:
             self.add_simulation_buttons(content_layout)
 
-        # Buttons row
+        # Control Buttons
         button_layout = QHBoxLayout()
         button_layout.setSpacing(15)
 
-        self.cancel_btn = QPushButton("Cancel Transaction")
-        self.cancel_btn.setMinimumHeight(45)
-        self.cancel_btn.setStyleSheet("""
+        # Back button
+        self.back_btn = QPushButton("← Back to Options")
+        self.back_btn.setMinimumHeight(45)
+        self.back_btn.setStyleSheet("""
             QPushButton {
-                background-color: #dc3545;
+                background-color: #4d4d80;
                 color: white;
                 border: none;
                 border-radius: 6px;
@@ -286,29 +284,12 @@ class PaymentScreen(QWidget):
                 padding: 12px 24px;
             }
             QPushButton:hover {
-                background-color: #c82333;
+                background-color: #5d5d90;
             }
         """)
-        self.cancel_btn.clicked.connect(self.cancel_transaction)
+        self.back_btn.clicked.connect(self.go_back)
 
-        self.back_to_viewer_btn = QPushButton("Edit Selected Pages")
-        self.back_to_viewer_btn.setMinimumHeight(45)
-        self.back_to_viewer_btn.setStyleSheet("""
-            QPushButton {
-                background-color: #ffc107;
-                color: black;
-                border: none;
-                border-radius: 6px;
-                font-size: 16px;
-                font-weight: bold;
-                padding: 12px 24px;
-            }
-            QPushButton:hover {
-                background-color: #e0a800;
-            }
-        """)
-        self.back_to_viewer_btn.clicked.connect(self.back_to_viewer)
-
+        # Enable Payment button
         self.enable_payment_btn = QPushButton("Enable Payment")
         self.enable_payment_btn.setMinimumHeight(45)
         self.enable_payment_btn.setStyleSheet("""
@@ -327,9 +308,10 @@ class PaymentScreen(QWidget):
         """)
         self.enable_payment_btn.clicked.connect(self.enable_payment_mode)
 
-        self.payment_btn = QPushButton("Complete Payment")
+        # Add payment button (after the enable_payment_btn)
+        self.payment_btn = QPushButton("Complete Payment & Print")
         self.payment_btn.setMinimumHeight(45)
-        self.payment_btn.setEnabled(False)
+        self.payment_btn.setEnabled(False)  # Initially disabled until payment is sufficient
         self.payment_btn.setStyleSheet("""
             QPushButton {
                 background-color: #28a745;
@@ -345,17 +327,26 @@ class PaymentScreen(QWidget):
             }
             QPushButton:disabled {
                 background-color: #6c757d;
+                color: #dee2e6;
             }
         """)
         self.payment_btn.clicked.connect(self.complete_payment)
 
-        button_layout.addWidget(self.cancel_btn)
-        button_layout.addWidget(self.back_to_viewer_btn)
+        button_layout.addWidget(self.back_btn)
+        button_layout.addStretch()
         button_layout.addWidget(self.enable_payment_btn)
-        button_layout.addWidget(self.payment_btn)
+        button_layout.addWidget(self.payment_btn)  # Add payment button to layout
         content_layout.addLayout(button_layout)
 
         scroll.setWidget(content)
+
+    def setup_gpio(self):
+        self.gpio_thread = GPIOPaymentThread()
+        self.gpio_thread.coin_inserted.connect(self.on_coin_inserted)
+        self.gpio_thread.bill_inserted.connect(self.on_bill_inserted)
+        self.gpio_thread.payment_status.connect(self.on_payment_status)
+        self.gpio_thread.enable_acceptor.connect(self.gpio_thread.set_acceptor_state)
+        self.gpio_thread.start()
 
     def add_simulation_buttons(self, layout):
         sim_label = QLabel("Simulation Mode - Test Payment:")
@@ -419,24 +410,6 @@ class PaymentScreen(QWidget):
         if self.payment_ready:
             self.on_bill_inserted(value)
 
-    def calculate_cost(self):
-        try:
-            pages = self.pdf_data['pages']
-            copies = int(self.copies_input.text() or "1")
-            print_type = self.print_type_combo.currentText()
-            if "Black & White" in print_type:
-                base_cost = 2.00
-            else:
-                base_cost = 5.00
-            self.total_cost = pages * base_cost * copies
-            self.total_label.setText(f"Total: ₱{self.total_cost:.2f}")
-            self.update_payment_status()
-            if self.payment_ready:
-                self.disable_payment_mode()
-        except ValueError:
-            self.total_label.setText("Total: ₱0.00")
-            self.total_cost = 0
-
     def enable_payment_mode(self):
         if self.total_cost <= 0:
             QMessageBox.warning(self, "Invalid Amount", "Please set a valid print job first")
@@ -461,8 +434,6 @@ class PaymentScreen(QWidget):
         """)
         self.enable_payment_btn.clicked.disconnect()
         self.enable_payment_btn.clicked.connect(self.disable_payment_mode)
-        self.print_type_combo.setEnabled(False)
-        self.copies_input.setEnabled(False)
         status_text = "Payment mode enabled - Insert coins or bills"
         if not PIGPIO_AVAILABLE:
             status_text = "Payment mode enabled - Use simulation buttons to test"
@@ -490,8 +461,6 @@ class PaymentScreen(QWidget):
         """)
         self.enable_payment_btn.clicked.disconnect()
         self.enable_payment_btn.clicked.connect(self.enable_payment_mode)
-        self.print_type_combo.setEnabled(True)
-        self.copies_input.setEnabled(True)
         status_text = "Payment mode disabled - Click 'Enable Payment' to start"
         if not PIGPIO_AVAILABLE:
             status_text = "Payment mode disabled - Running in simulation mode"
@@ -516,7 +485,9 @@ class PaymentScreen(QWidget):
         self.payment_status_label.setText(status)
 
     def update_payment_status(self):
+        """Update the payment status display based on amount received."""
         self.amount_received_label.setText(f"Amount Received: ₱{self.amount_received:.2f}")
+        
         if self.amount_received >= self.total_cost and self.total_cost > 0:
             change = self.amount_received - self.total_cost
             if change > 0:
@@ -570,25 +541,32 @@ class PaymentScreen(QWidget):
             self.payment_btn.setEnabled(False)
 
     def complete_payment(self):
+        """Handle payment completion and transition to printing"""
         if self.amount_received >= self.total_cost:
-            payment_method = 'Cash Payment (Coins/Bills)'
-            if not PIGPIO_AVAILABLE:
-                payment_method = 'Simulation Mode Payment'
             payment_info = {
-                'pdf_data': self.pdf_data,
-                'print_type': self.print_type_combo.currentText(),
-                'paper_size': 'Letter (8.5" x 11")',
-                'copies': int(self.copies_input.text() or "1"),
+                'pdf_data': self.payment_data['pdf_data'],
+                'selected_pages': self.payment_data['selected_pages'],
+                'color_mode': self.payment_data['color_mode'],
+                'copies': self.payment_data['copies'],
                 'total_cost': self.total_cost,
                 'amount_received': self.amount_received,
                 'change': self.amount_received - self.total_cost,
-                'payment_method': payment_method
+                'payment_method': 'Cash Payment' if PIGPIO_AVAILABLE else 'Simulation'
             }
+            
+            # Emit payment completion signal and return to idle
             self.payment_completed.emit(payment_info)
-            self.go_back_to_idle()
+            
+            # Show success message
+            QMessageBox.information(self, "Payment Complete", 
+                f"Payment successful!\nChange: ₱{payment_info['change']:.2f}\n\nPrinting will begin shortly...")
+            
+            # Go back to idle screen
+            self.main_app.show_screen('idle')
         else:
+            remaining = self.total_cost - self.amount_received
             QMessageBox.warning(self, "Insufficient Payment", 
-                              f"Please insert ₱{self.total_cost - self.amount_received:.2f} more")
+                f"Please insert ₱{remaining:.2f} more")
 
     def cancel_transaction(self):
         """Immediately go to idle, cancel everything."""
@@ -602,20 +580,33 @@ class PaymentScreen(QWidget):
         """Go back to file browser/viewer screen with current settings."""
         # Pass back all state, including all_pages_state if present
         payment_return = {
-            'pdf_data': self.pdf_data.copy(),
-            'print_type': self.print_type_combo.currentText(),
-            'copies': self.copies_input.text()
+            'pdf_data': self.payment_data.copy(),
+            'total_cost': self.total_cost,
+            'amount_received': self.amount_received
         }
-        # Pass all page state if possible (fix for preserving unchecked)
-        if "all_pages_state" in self.pdf_data:
-            payment_return['pdf_data']['all_pages_state'] = self.pdf_data['all_pages_state']
+        
         self.go_back_to_viewer.emit(payment_return)
+        
+        # Return to printing options screen
         if hasattr(self.main_app, 'show_screen'):
-            self.main_app.show_screen("file_browser")
+            self.main_app.show_screen('printing_options')
 
-    def go_back_to_idle(self):
+    def go_back(self):
+        """Return to printing options screen"""
         if self.gpio_thread:
             self.gpio_thread.stop()
             self.gpio_thread.wait(3000)
-        if hasattr(self.main_app, "show_screen"):
-            self.main_app.show_screen("idle")
+        
+        # Reset payment state
+        self.payment_ready = False
+        self.amount_received = 0
+        self.payment_data = None
+        
+        # Update UI
+        self.amount_received_label.setText("Amount Received: ₱0.00")
+        self.change_label.setText("")
+        self.payment_status_label.setText("Click 'Enable Payment' to begin")
+        
+        # Return to printing options screen
+        if hasattr(self.main_app, 'show_screen'):
+            self.main_app.show_screen('printing_options')

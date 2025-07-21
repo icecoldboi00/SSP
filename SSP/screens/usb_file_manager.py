@@ -1,3 +1,5 @@
+# usb_file_manager.py
+
 import os
 import shutil
 import psutil
@@ -9,10 +11,13 @@ class USBFileManager:
     """Handles USB detection and PDF file filtering"""
     
     def __init__(self):
-        # Create temp directory path
-        self.destination_dir = os.path.join(os.path.expanduser("~"), "SSP TEMP")
+        # FIX: Create a unique session ID and a session-specific temp directory
+        self.session_id = datetime.now().strftime('%Y%m%d_%H%M%S')
+        temp_base_dir = os.path.join(tempfile.gettempdir(), "PrintingSystem")
+        self.destination_dir = os.path.join(temp_base_dir, f"Session_{self.session_id}")
+        
         os.makedirs(self.destination_dir, exist_ok=True)
-        print(f"✅ Temp directory created/verified: {self.destination_dir}")
+        print(f"✅ Temp directory created for session {self.session_id}: {self.destination_dir}")
 
         self.supported_extensions = ['.pdf']
         self.last_known_drives = set()
@@ -263,14 +268,16 @@ class USBFileManager:
     def cleanup_all_temp_folders(self):
         """Clean up all old temporary folders from previous sessions"""
         try:
-            if os.path.exists(self.temp_base_dir):
-                print(f"Cleaning up old session folders in {self.temp_base_dir}")
+            # FIX: Use the correct base directory
+            temp_base_dir = os.path.join(tempfile.gettempdir(), "PrintingSystem")
+            if os.path.exists(temp_base_dir):
+                print(f"Cleaning up old session folders in {temp_base_dir}")
             
                 current_session_folder = f"Session_{self.session_id}"
             
-                for folder_name in os.listdir(self.temp_base_dir):
+                for folder_name in os.listdir(temp_base_dir):
                     if folder_name.startswith("Session_") and folder_name != current_session_folder:
-                        folder_path = os.path.join(self.temp_base_dir, folder_name)
+                        folder_path = os.path.join(temp_base_dir, folder_name)
                         try:
                             if os.path.isdir(folder_path):
                                 shutil.rmtree(folder_path)
@@ -296,7 +303,7 @@ class USBFileManager:
                     'folder_path': self.destination_dir,
                     'file_count': len(files),
                     'total_size': total_size,
-                    'session_id': self.session_id
+                    'session_id': self.session_id # This will now work
                 }
             else:
                 return None
