@@ -179,46 +179,47 @@ class PDFPageWidget(QFrame):
 class PDFPreviewThread(QThread):
     preview_ready = pyqtSignal(int, QPixmap)
     error_occurred = pyqtSignal(int, str)
-    def __init__(self, pdf_path, total_pages):
+    def __init__(self, pdf_path, pages_to_render: list):
         super().__init__()
         self.pdf_path = pdf_path
-        self.total_pages = total_pages
+        self.pages_to_render = pages_to_render
         self.running = True
+
     def run(self):
         if not PYMUPDF_AVAILABLE:
-            for i in range(min(self.total_pages, 10)):
-                if not self.running:
-                    break
-                self.error_occurred.emit(i + 1, "PyMuPDF not available")
+            for page_num_1_based in self.pages_to_render:
+                if not self.running: break
+                self.error_occurred.emit(page_num_1_based, "PyMuPDF not available")
             return
         try:
             doc = fitz.open(self.pdf_path)
-            actual_pages = len(doc)
-            pages_to_render = min(self.total_pages, actual_pages, 20)
-            for page_num in range(pages_to_render):
+            for page_num_1_based in self.pages_to_render:
                 if not self.running:
                     break
                 try:
-                    page = doc[page_num]
+                    page_num_0_based = page_num_1_based - 1
+                    page = doc[page_num_0_based]
                     mat = fitz.Matrix(1.2, 1.2)
                     pix = page.get_pixmap(matrix=mat)
                     img_data = pix.tobytes("ppm")
                     qimg = QImage.fromData(img_data)
                     pixmap = QPixmap.fromImage(qimg)
                     scaled_pixmap = pixmap.scaled(180, 220, Qt.KeepAspectRatio, Qt.SmoothTransformation)
-                    self.preview_ready.emit(page_num + 1, scaled_pixmap)
+                    self.preview_ready.emit(page_num_1_based, scaled_pixmap)
                 except Exception as e:
-                    self.error_occurred.emit(page_num + 1, str(e))
+                    self.error_occurred.emit(page_num_1_based, str(e))
             doc.close()
         except Exception as e:
-            self.error_occurred.emit(1, f"Failed to open PDF: {str(e)}")
+            error_page = self.pages_to_render[0] if self.pages_to_render else 1
+            self.error_occurred.emit(error_page, f"Failed to open PDF: {str(e)}")
+
     def stop(self):
         self.running = False
 
 class FileBrowserScreen(QWidget):
-    # Fixed preview area for single page mode
     SINGLE_PAGE_PREVIEW_WIDTH = 360
     SINGLE_PAGE_PREVIEW_HEIGHT = 460
+    ITEMS_PER_GRID_PAGE = 8
 
     def __init__(self, main_app):
         super().__init__()
@@ -231,12 +232,14 @@ class FileBrowserScreen(QWidget):
         self.selected_pdf = None
         self.pdf_buttons = []
         self.page_widgets = []
+        self.page_widget_map = {}
         self.selected_pages = None
         self.pdf_page_selections = {}
         self.preview_thread = None
         self.restore_payment_data = None
         self.view_mode = 'all'
         self.single_page_index = 1
+        self.current_grid_page = 1
         self.setup_ui()
 
     def setup_ui(self):
@@ -329,7 +332,6 @@ class FileBrowserScreen(QWidget):
         right_layout.setContentsMargins(20, 20, 20, 20)
         right_layout.setSpacing(15)
 
-        # View mode buttons
         view_mode_layout = QHBoxLayout()
         view_mode_layout.setSpacing(10)
         common_btn_style = """
@@ -427,14 +429,11 @@ class FileBrowserScreen(QWidget):
         self.preview_layout.setSpacing(10)
         self.preview_scroll.setWidget(self.preview_widget)
 
-    
-        # Single Page View with Zoom Controls
         self.single_page_widget = QWidget()
         self.single_page_layout = QVBoxLayout(self.single_page_widget)
         self.single_page_layout.setSpacing(8)
         self.single_page_layout.setAlignment(Qt.AlignVCenter)
-
-        # Navigation and zoom controls
+        
         nav_layout = QHBoxLayout()
         nav_btn_style = """
             QPushButton {
@@ -462,13 +461,11 @@ class FileBrowserScreen(QWidget):
             }
         """
         
-        # Page navigation
         self.prev_page_btn = QPushButton("←")
         self.prev_page_btn.setStyleSheet(nav_btn_style)
         self.next_page_btn = QPushButton("→")
         self.next_page_btn.setStyleSheet(nav_btn_style)
         
-        # Page indicator
         self.page_input = QLabel("1")
         self.page_input.setStyleSheet("""
             QLabel {
@@ -484,7 +481,6 @@ class FileBrowserScreen(QWidget):
             }
         """)
         
-        # Zoom controls
         zoom_btn_style = """
             QPushButton {
                 background-color: #4CAF50;
@@ -515,10 +511,9 @@ class FileBrowserScreen(QWidget):
         self.zoom_in_btn.setStyleSheet(zoom_btn_style)
         self.zoom_out_btn = QPushButton("−")
         self.zoom_out_btn.setStyleSheet(zoom_btn_style)
-        self.zoom_reset_btn = QPushButton("⌂")  # Home/reset icon
+        self.zoom_reset_btn = QPushButton("⌂")
         self.zoom_reset_btn.setStyleSheet(zoom_btn_style)
 
-        # Zoom label style (merged)
         zoom_label_style = """
             QLabel {
                 background: #333;
@@ -536,7 +531,6 @@ class FileBrowserScreen(QWidget):
         self.zoom_label = QLabel("100%")
         self.zoom_label.setStyleSheet(zoom_label_style)
         
-        # Zoom level indicator
         self.zoom_label = QLabel("100%")
         self.zoom_label.setStyleSheet("""
             QLabel {
@@ -552,20 +546,17 @@ class FileBrowserScreen(QWidget):
             }
         """)
         
-        # Layout navigation controls
         nav_layout.addWidget(self.prev_page_btn)
         nav_layout.addWidget(self.page_input)
         nav_layout.addWidget(self.next_page_btn)
         nav_layout.addStretch()
         
-        # Add zoom controls
         nav_layout.addWidget(QLabel("Zoom:"))
         nav_layout.addWidget(self.zoom_out_btn)
         nav_layout.addWidget(self.zoom_label)
         nav_layout.addWidget(self.zoom_in_btn)
         nav_layout.addWidget(self.zoom_reset_btn)
         
-        # Connect signals
         self.prev_page_btn.clicked.connect(self.prev_single_page)
         self.next_page_btn.clicked.connect(self.next_single_page)
         self.zoom_in_btn.clicked.connect(self.zoom_in)
@@ -574,7 +565,6 @@ class FileBrowserScreen(QWidget):
         
         self.single_page_layout.addLayout(nav_layout)
         
-        # Checkbox
         self.single_page_checkbox = QCheckBox("Select this page")
         self.single_page_checkbox.setStyleSheet("""
             QCheckBox {
@@ -585,11 +575,51 @@ class FileBrowserScreen(QWidget):
         self.single_page_checkbox.stateChanged.connect(self.single_page_checkbox_changed)
         self.single_page_layout.addWidget(self.single_page_checkbox)
         
-        # Enhanced preview widget with zoom support
         self.single_page_preview = PDFPreviewWidget()
         self.single_page_preview.setFixedSize(self.SINGLE_PAGE_PREVIEW_WIDTH, self.SINGLE_PAGE_PREVIEW_HEIGHT)
         self.single_page_preview.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
         self.single_page_layout.addWidget(self.single_page_preview, 0, Qt.AlignHCenter)
+
+        # Grid View Pagination Controls
+        self.grid_pagination_widget = QWidget()
+        grid_pagination_layout = QHBoxLayout(self.grid_pagination_widget)
+        grid_pagination_layout.setContentsMargins(0, 5, 0, 5)
+
+        nav_button_style = """
+            QPushButton {
+                background-color: #2d5aa0;
+                color: white;
+                font-size: 14px;
+                font-weight: bold;
+                border: none;
+                border-radius: 4px;
+                padding: 8px 16px;
+            }
+            QPushButton:hover {
+                background-color: #3d6ab0;
+            }
+            QPushButton:disabled {
+                background-color: #2a2a4a;
+                color: #555;
+            }
+        """
+        self.prev_grid_page_btn = QPushButton("<< Prev")
+        self.prev_grid_page_btn.setStyleSheet(nav_button_style)
+        self.prev_grid_page_btn.clicked.connect(self.prev_grid_page)
+
+        self.grid_page_label = QLabel("Page 1 / 1")
+        self.grid_page_label.setAlignment(Qt.AlignCenter)
+        self.grid_page_label.setStyleSheet("color: #ccc; font-size: 14px;")
+
+        self.next_grid_page_btn = QPushButton("Next >>")
+        self.next_grid_page_btn.setStyleSheet(nav_button_style)
+        self.next_grid_page_btn.clicked.connect(self.next_grid_page)
+
+        grid_pagination_layout.addStretch()
+        grid_pagination_layout.addWidget(self.prev_grid_page_btn)
+        grid_pagination_layout.addWidget(self.grid_page_label)
+        grid_pagination_layout.addWidget(self.next_grid_page_btn)
+        grid_pagination_layout.addStretch()
 
         bottom_controls = QHBoxLayout()
         bottom_controls.setSpacing(15)
@@ -658,6 +688,7 @@ class FileBrowserScreen(QWidget):
 
         right_layout.addLayout(preview_header_layout)
         right_layout.addWidget(self.preview_scroll)
+        right_layout.addWidget(self.grid_pagination_widget)
         right_layout.addWidget(self.single_page_widget)
         right_layout.addLayout(bottom_controls)
         content_layout.addWidget(left_panel)
@@ -665,7 +696,9 @@ class FileBrowserScreen(QWidget):
         main_layout.addWidget(header_frame)
         main_layout.addLayout(content_layout)
         self.setLayout(main_layout)
+        
         self.single_page_widget.hide()
+        self.grid_pagination_widget.hide()
 
     def _set_view_mode_buttons_style(self):
         pass
@@ -689,11 +722,11 @@ class FileBrowserScreen(QWidget):
 
     def show_single_page(self):
         self.preview_scroll.hide()
+        self.grid_pagination_widget.hide()
         self.single_page_widget.show()
         if not self.selected_pdf:
             return
         
-        # Enable borderless mode for single page view
         self.single_page_preview.setBorderless(True)
         
         total_pages = self.selected_pdf['pages']
@@ -708,7 +741,6 @@ class FileBrowserScreen(QWidget):
         self.single_page_checkbox.setChecked(self.selected_pages.get(page_num, False))
         self.single_page_checkbox.blockSignals(False)
         
-        # Update zoom label
         self.update_zoom_label()
         
         self.single_page_preview.clear()
@@ -718,24 +750,13 @@ class FileBrowserScreen(QWidget):
                 doc = fitz.open(self.selected_pdf['path'])
                 if page_num <= len(doc):
                     page = doc[page_num-1]
-                    
-                    # Increase DPI for better quality in borderless mode
-                    dpi = 300  # Higher DPI for better quality when zooming
+                    dpi = 300
                     scale = dpi / 72.0
-                    
-                    # Create transformation matrix
                     mat = fitz.Matrix(scale, scale)
-                    
-                    # Render the page
                     pix = page.get_pixmap(matrix=mat, alpha=False)
-                    
-                    # Convert to QImage and QPixmap
                     qimg = QImage(pix.samples, pix.width, pix.height, pix.stride, QImage.Format_RGB888)
                     pixmap = QPixmap.fromImage(qimg)
-                    
-                    # The enhanced PDFPreviewWidget will handle scaling and zooming
                     self.single_page_preview.setPixmap(pixmap)
-                    
                 doc.close()
             except Exception as e:
                 print(f"Error rendering page {page_num}: {e}")
@@ -745,47 +766,49 @@ class FileBrowserScreen(QWidget):
 
     def show_pdf_preview(self):
         self.preview_scroll.show()
+        self.grid_pagination_widget.show()
         self.single_page_widget.hide()
+        
         if not self.selected_pdf:
+            self.grid_pagination_widget.hide()
             return
         
-        # Disable borderless mode for all pages view (restore borders)
         self.single_page_preview.setBorderless(False)
         
         self.clear_preview()
         pdf_path = self.selected_pdf['path']
-        pages = self.selected_pdf['pages']
-        self.page_info.setText(f"PDF: {pages} pages")
+        total_doc_pages = self.selected_pdf['pages']
+        
+        self.page_info.setText("")
         self.update_selected_count()
         self.select_all_btn.setVisible(True)
         self.deselect_all_btn.setVisible(True)
         self.continue_btn.setVisible(True)
-        max_preview_pages = min(pages, 20)
+
+        total_grid_pages = (total_doc_pages + self.ITEMS_PER_GRID_PAGE - 1) // self.ITEMS_PER_GRID_PAGE
+        self.grid_page_label.setText(f"{self.current_grid_page} / {total_grid_pages}")
+        
+        self.prev_grid_page_btn.setEnabled(self.current_grid_page > 1)
+        self.next_grid_page_btn.setEnabled(self.current_grid_page < total_grid_pages)
+
+        start_page = (self.current_grid_page - 1) * self.ITEMS_PER_GRID_PAGE + 1
+        end_page = min(self.current_grid_page * self.ITEMS_PER_GRID_PAGE, total_doc_pages)
+        pages_to_show = list(range(start_page, end_page + 1))
+        
         cols = 4
-        for page_num in range(1, max_preview_pages + 1):
-            row = (page_num - 1) // cols
-            col = (page_num - 1) % cols
+        for i, page_num in enumerate(pages_to_show):
+            row = i // cols
+            col = i % cols
             checked = self.selected_pages.get(page_num, True)
             page_widget = PDFPageWidget(page_num, checked=checked)
             page_widget.page_selected.connect(self.on_page_widget_clicked)
             page_widget.page_checkbox_clicked.connect(self.on_page_selected)
             self.page_widgets.append(page_widget)
+            self.page_widget_map[page_num] = page_widget
             self.preview_layout.addWidget(page_widget, row, col)
-        if pages > 20:
-            note_label = QLabel(f"... and {pages - 20} more pages\n(All pages selected by default)")
-            note_label.setAlignment(Qt.AlignCenter)
-            note_label.setStyleSheet("""
-                QLabel {
-                    color: #888;
-                    font-size: 12px;
-                    font-style: italic;
-                    padding: 20px;
-                }
-            """)
-            row = (max_preview_pages - 1) // cols + 1
-            self.preview_layout.addWidget(note_label, row, 0, 1, cols)
+
         if PYMUPDF_AVAILABLE:
-            self.preview_thread = PDFPreviewThread(pdf_path, max_preview_pages)
+            self.preview_thread = PDFPreviewThread(pdf_path, pages_to_show)
             self.preview_thread.preview_ready.connect(self.on_preview_ready)
             self.preview_thread.error_occurred.connect(self.on_preview_error)
             self.preview_thread.start()
@@ -793,6 +816,19 @@ class FileBrowserScreen(QWidget):
             for widget in self.page_widgets:
                 widget.preview_label.setText(f"Page {widget.page_num}\n\nPDF Preview\nRequires PyMuPDF")
 
+    def prev_grid_page(self):
+        if self.current_grid_page > 1:
+            self.current_grid_page -= 1
+            self.show_pdf_preview()
+
+    def next_grid_page(self):
+        if not self.selected_pdf: return
+        total_doc_pages = self.selected_pdf['pages']
+        total_grid_pages = (total_doc_pages + self.ITEMS_PER_GRID_PAGE - 1) // self.ITEMS_PER_GRID_PAGE
+        if self.current_grid_page < total_grid_pages:
+            self.current_grid_page += 1
+            self.show_pdf_preview()
+            
     def prev_single_page(self):
         if self.single_page_index > 1:
             self.single_page_index -= 1
@@ -848,6 +884,7 @@ class FileBrowserScreen(QWidget):
         self.clear_preview()
         self.page_info.setText("Select a PDF to preview pages")
         self.preview_header.setText("Select a PDF file to preview pages")
+        self.grid_pagination_widget.hide()
         if self.pdf_files_data:
             self.select_pdf(self.pdf_files_data[0])
 
@@ -865,7 +902,8 @@ class FileBrowserScreen(QWidget):
             child = self.preview_layout.takeAt(0)
             if child.widget():
                 child.widget().deleteLater()
-        self.page_widgets = []
+        self.page_widgets.clear()
+        self.page_widget_map.clear()
         self.select_all_btn.setVisible(False)
         self.deselect_all_btn.setVisible(False)
         self.continue_btn.setVisible(False)
@@ -874,18 +912,25 @@ class FileBrowserScreen(QWidget):
     def select_pdf(self, pdf_data):
         if self.selected_pdf is not None and self.selected_pages is not None:
             self.pdf_page_selections[self.selected_pdf['path']] = self.selected_pages.copy()
+        
         self.selected_pdf = pdf_data
+        
         if pdf_data['path'] in self.pdf_page_selections:
             self.selected_pages = self.pdf_page_selections[pdf_data['path']].copy()
         else:
             self.selected_pages = {i: True for i in range(1, pdf_data['pages'] + 1)}
+        
         for btn in self.pdf_buttons:
             btn.set_selected(btn.pdf_data == pdf_data)
+            
         self.preview_header.setText(f"{pdf_data['filename']}")
         self.view_mode = 'all'
         self.update_view_mode_buttons()
-        self.show_pdf_preview()
+        
+        self.current_grid_page = 1
         self.single_page_index = 1
+        
+        self.show_pdf_preview()
 
     def update_selected_count(self):
         if not self.selected_pages:
@@ -926,15 +971,10 @@ class FileBrowserScreen(QWidget):
             self.single_page_checkbox.blockSignals(False)
 
     def continue_to_print_options(self):
-        """
-        Gathers selected PDF and page data and transitions
-        to the Print Options screen.
-        """
         if not self.selected_pdf:
             QMessageBox.warning(self, "No PDF Selected", "Please select a PDF file.")
             return
 
-        # Get a list of the page numbers the user has checked
         selected_pages_list = [page for page, selected in self.selected_pages.items() if selected]
 
         if not selected_pages_list:
@@ -944,26 +984,23 @@ class FileBrowserScreen(QWidget):
         print("DEBUG: Transitioning to Print Options screen...")
         print(f"DEBUG: PDF: {self.selected_pdf['filename']}, Pages: {selected_pages_list}")
 
-        # Get the single, existing print options screen instance from the main app
         options_screen = self.main_app.printing_options_screen
-
-        # Call the method on that screen to pass the data it needs
         options_screen.set_pdf_data(self.selected_pdf, selected_pages_list)
-
-        # Tell the main app to switch screens
         self.main_app.show_screen('printing_options')
 
     def on_preview_ready(self, page_num, pixmap):
-        if self.view_mode == 'all' and page_num <= len(self.page_widgets):
-            widget = self.page_widgets[page_num - 1]
-            widget.set_preview_image(pixmap)
+        if self.view_mode == 'all':
+            widget = self.page_widget_map.get(page_num)
+            if widget:
+                widget.set_preview_image(pixmap)
         elif self.view_mode == 'single' and page_num == self.single_page_index:
             self.single_page_preview.setPixmap(pixmap)
 
     def on_preview_error(self, page_num, error_msg):
-        if self.view_mode == 'all' and page_num <= len(self.page_widgets):
-            widget = self.page_widgets[page_num - 1]
-            widget.set_error_message(error_msg)
+        if self.view_mode == 'all':
+            widget = self.page_widget_map.get(page_num)
+            if widget:
+                widget.set_error_message(error_msg)
         elif self.view_mode == 'single' and page_num == self.single_page_index:
             self.single_page_preview.clear()
 
@@ -982,25 +1019,21 @@ class FileBrowserScreen(QWidget):
             self.preview_thread.wait()
 
     def zoom_in(self):
-        """Zoom in on the current page"""
         if self.single_page_preview:
             self.single_page_preview.zoomIn()
             self.update_zoom_label()
 
     def zoom_out(self):
-        """Zoom out on the current page"""
         if self.single_page_preview:
             self.single_page_preview.zoomOut()
             self.update_zoom_label()
 
     def zoom_reset(self):
-        """Reset zoom to fit the widget"""
         if self.single_page_preview:
             self.single_page_preview.resetZoom()
             self.update_zoom_label()
 
     def update_zoom_label(self):
-        """Update the zoom percentage label"""
         if self.single_page_preview:
             zoom_factor = self.single_page_preview.getZoomFactor()
             percentage = int(zoom_factor * 100)
