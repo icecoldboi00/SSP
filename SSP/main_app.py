@@ -30,15 +30,15 @@ class PrintingSystemApp(QMainWindow):
 
         print("Initializing screens...")
 
-        # Create all screen instances once in the correct order
+        # Create all screen instances
         self.idle_screen = IdleScreen(self)
         self.usb_screen = USBScreen(self)
         self.file_browser_screen = FileBrowserScreen(self)
         self.printing_options_screen = Print_Options_Screen(self)
         self.payment_screen = PaymentScreen(self)
-        self.admin_screen = AdminScreen(self) # FIX: Instantiate AdminScreen
+        self.admin_screen = AdminScreen(self)  # Make sure this is initialized
 
-        # Add screens to the stack in the same order
+        # Add screens to the stack
         self.stacked_widget.addWidget(self.idle_screen)         # Index 0
         self.stacked_widget.addWidget(self.usb_screen)          # Index 1
         self.stacked_widget.addWidget(self.file_browser_screen) # Index 2
@@ -59,6 +59,9 @@ class PrintingSystemApp(QMainWindow):
             }
         """)
         print("Main app initialization complete")
+
+        # Connect payment signals
+        self.payment_screen.payment_completed.connect(self.on_payment_completed)
 
     def show_screen(self, screen_name):
         """Switch between screens, calling on_leave and on_enter methods."""
@@ -94,6 +97,11 @@ class PrintingSystemApp(QMainWindow):
             print(f"✅ Successfully switched to '{screen_name}' screen at index {target_index}")
         else:
             print(f"❌ ERROR: Unknown screen name: {screen_name}")
+
+    def on_payment_completed(self, payment_info):
+        """Handle successful payment and printing"""
+        print(f"Payment completed. Printing {payment_info['copies']} copies...")
+        # Add any additional payment processing logic here
 
 def main():
     app = QApplication(sys.argv)
