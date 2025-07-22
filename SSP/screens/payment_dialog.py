@@ -346,7 +346,7 @@ class PaymentScreen(QWidget):
             # Start dispensing in a separate thread to not freeze the GUI.
             self.dispense_thread = DispenseThread(self.change_dispenser, change_amount)
             self.dispense_thread.status_update.connect(self.on_dispense_status_update)
-            self.dispense_thread.finished.connect(self.on_dispensing_finished)
+            self.dispense_thread.dispensing_finished.connect(self.on_dispensing_finished)
             self.dispense_thread.start()
         else:
             # If no change, show message and return to idle.
