@@ -316,6 +316,20 @@ class PaymentScreen(QWidget):
             QMessageBox.warning(self, "Insufficient Payment", "Payment is not sufficient.")
             return
 
+        # Calculate total pages needed
+        total_pages = len(self.payment_data['selected_pages']) * self.payment_data['copies']
+        
+        # Check if there's enough paper
+        admin_screen = self.main_app.admin_screen
+        if not admin_screen.update_paper_count(total_pages):
+            QMessageBox.critical(self, "Out of Paper", 
+                f"Not enough paper to complete print job.\n"
+                f"Current paper count: {admin_screen.get_paper_count()} sheets\n"
+                f"Required: {total_pages} sheets\n\n"
+                "Please contact administrator to refill paper.")
+            return
+
+        # Continue with existing payment completion code...
         change_amount = self.amount_received - self.total_cost
         payment_info = {
             'pdf_data': self.payment_data['pdf_data'],
