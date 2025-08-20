@@ -14,8 +14,8 @@ class IdleScreen(QWidget):
     def setup_ui(self):
         # Main layout
         layout = QVBoxLayout()
-        layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(0)
+        layout.setContentsMargins(0, 0, 0, 0) # No padding on edges
+        layout.setSpacing(0) # No spacing between widgets
         
         # Create main frame with background
         main_frame = QFrame()
@@ -26,6 +26,7 @@ class IdleScreen(QWidget):
             }
         """)
         
+        # Organize layout inside frame
         frame_layout = QVBoxLayout(main_frame)
         frame_layout.setContentsMargins(50, 50, 50, 50)
         frame_layout.setSpacing(40)
@@ -42,7 +43,7 @@ class IdleScreen(QWidget):
             }
         """)
         
-        # Main action button
+        # Main start button
         start_button = QPushButton("START PRINTING")
         start_button.setMinimumHeight(80)
         start_button.setMaximumWidth(800)
@@ -66,7 +67,7 @@ class IdleScreen(QWidget):
         """)
         start_button.clicked.connect(self.start_printing)
         
-        # --- Original Layout Spacing ---
+        # Center button with spacers and stretch
         frame_layout.addItem(QSpacerItem(20, 60, QSizePolicy.Minimum, QSizePolicy.Expanding))
         frame_layout.addWidget(title)
         frame_layout.addItem(QSpacerItem(20, 20, QSizePolicy.Minimum, QSizePolicy.Fixed))
@@ -89,7 +90,6 @@ class IdleScreen(QWidget):
         frame_layout.addWidget(bottom_info)
         
         frame_layout.addStretch(1)
-        # --- End Original Layout Spacing ---
 
         # Admin Button
         admin_button = QPushButton("Admin")
@@ -111,7 +111,7 @@ class IdleScreen(QWidget):
         admin_button.clicked.connect(self.go_to_admin)
         
         admin_layout = QHBoxLayout()
-        admin_layout.addStretch(1)
+        admin_layout.addStretch(1) #push right spacer
         admin_layout.addWidget(admin_button)
         
         frame_layout.addLayout(admin_layout)
@@ -119,18 +119,13 @@ class IdleScreen(QWidget):
         layout.addWidget(main_frame)
         self.setLayout(layout)
     
+        # Go to usb_screen 
     def start_printing(self):
-        """Navigate to USB screen"""
         self.main_app.show_screen('usb')
 
+        # Go to admin_screen
     def go_to_admin(self):
-        """
-        Show the PIN dialog and navigate to the admin screen
-        only if the correct PIN is entered.
-        """
         dialog = PinDialog(self)
-        # .exec_() shows the dialog and waits until it's closed.
-        # It returns QDialog.Accepted if self.accept() was called inside the dialog.
         result = dialog.exec_()
 
         if result == QDialog.Accepted:
