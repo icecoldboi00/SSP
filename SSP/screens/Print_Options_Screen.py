@@ -1,17 +1,18 @@
-# screens/print_options_screen.py
-
 import os
 from PyQt5.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QLabel,
-    QSpinBox, QComboBox, QFrame, QGridLayout, QMessageBox
+    QFrame, QMessageBox, QStackedLayout, QSizePolicy
 )
 from PyQt5.QtCore import Qt, QThread, pyqtSignal
-from PyQt5.QtGui import QFont
+from PyQt5.QtGui import QPixmap
 
 import fitz
 import cv2
 import numpy as np
-from typing import List, Tuple, Dict
+from typing import List, Dict
+
+def get_base_dir():
+    return os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
 
 class PDFColorAnalyzer:
     def __init__(self, black_price: float, color_price: float):
@@ -93,64 +94,202 @@ class Print_Options_Screen(QWidget):
         self.selected_pdf = None
         self.selected_pages = None
 
-        ## FIX: Updated prices to match your new requirement.
         self.analyzer = PDFColorAnalyzer(black_price=3.0, color_price=5.0)
         self.analysis_thread = None
         self.analysis_results = None
 
+        self._copies = 1
+        self._color_mode = "Black and White"
+
         self.setup_ui()
 
     def setup_ui(self):
-        self.analysis_details_label = QLabel("Analysis details will appear here.")
-        self.analysis_details_label.setStyleSheet("color: #aaa; font-size: 14px; margin-top: 5px;")
-        layout = QVBoxLayout()
-        layout.setContentsMargins(20, 20, 20, 20)
-        title = QLabel("Printing Options")
-        title.setStyleSheet("color: white; font-size: 24px; font-weight: bold; margin-bottom: 20px;")
-        layout.addWidget(title)
-        options_frame = QFrame()
-        options_frame.setStyleSheet("background-color: #2a2a4a; border-radius: 10px; padding: 20px;")
-        options_layout = QGridLayout()
-        color_label = QLabel("Color Mode:")
-        color_label.setStyleSheet("color: white; font-size: 16px;")
-        self.color_combo = QComboBox()
-        self.color_combo.addItems(["Black & White", "Color"])
-        self.color_combo.setStyleSheet("QComboBox { ... }")
+        stacked_layout = QStackedLayout()
+        stacked_layout.setContentsMargins(0, 0, 0, 0)
+        stacked_layout.setStackingMode(QStackedLayout.StackAll)
+
+        background_label = QLabel()
+        base_dir = get_base_dir()
+        image_path = os.path.join(base_dir, 'assets', 'print_options_screen background.png')
+        if os.path.exists(image_path):
+            pixmap = QPixmap(image_path)
+            background_label.setPixmap(pixmap)
+            background_label.setScaledContents(True)
+        else:
+            print(f"WARNING: Background image not found at '{image_path}'.")
+            background_label.setStyleSheet("background-color: #1f1f38;")
+
+        foreground_widget = QWidget()
+        foreground_widget.setStyleSheet("background-color: transparent;")
+        layout = QVBoxLayout(foreground_widget)
+        layout.setContentsMargins(40, 40, 40, 40)
+        layout.setSpacing(0)
+
+        layout.addStretch(1)
+
+        # === Centered Container for Color Mode and Number of Copies ===
+        center_container = QWidget()
+        center_layout = QVBoxLayout(center_container)
+        center_layout.setContentsMargins(0, 0, 0, 0)
+        center_layout.setSpacing(24)
+        center_layout.setAlignment(Qt.AlignHCenter | Qt.AlignVCenter)
+
+        # ---- Number of Copies Row ----
+        copies_row = QHBoxLayout()
+        copies_row.setAlignment(Qt.AlignHCenter | Qt.AlignVCenter)
         copies_label = QLabel("Number of Copies:")
-        copies_label.setStyleSheet("color: white; font-size: 16px;")
-        self.copies_spin = QSpinBox()
-        self.copies_spin.setMinimum(1)
-        self.copies_spin.setMaximum(99)
-        self.copies_spin.setStyleSheet("QSpinBox { ... }")
-        options_layout.addWidget(color_label, 0, 0)
-        options_layout.addWidget(self.color_combo, 0, 1)
-        options_layout.addWidget(copies_label, 1, 0)
-        options_layout.addWidget(self.copies_spin, 1, 1)
-        options_frame.setLayout(options_layout)
-        layout.addWidget(options_frame)
+        copies_label.setStyleSheet("color: #36454F; font-size: 18px; font-weight: bold; background-color: transparent;")
+        copies_row.addWidget(copies_label)
+
+        copies_btn_style = """
+            QPushButton {
+                background-color: #1e440a; color: #fff; border: none; border-radius: 4px;
+                font-size: 22px; width: 44px; height: 44px; min-width: 44px; max-width: 44px; min-height: 44px; max-height: 44px;
+                padding: 0; font-weight: bold;
+            }
+            QPushButton:pressed, QPushButton:checked, QPushButton:hover { background-color: #2a5d1a; }
+        """
+        self.copies_minus_btn = QPushButton("−")
+        self.copies_plus_btn = QPushButton("+")
+        self.copies_minus_btn.setStyleSheet(copies_btn_style)
+        self.copies_plus_btn.setStyleSheet(copies_btn_style)
+        self.copies_minus_btn.setFixedSize(44, 44)
+        self.copies_plus_btn.setFixedSize(44, 44)
+        self.copies_minus_btn.clicked.connect(lambda: self.change_copies(-1))
+        self.copies_plus_btn.clicked.connect(lambda: self.change_copies(1))
+        copies_row.addSpacing(20)
+        copies_row.addWidget(self.copies_minus_btn)
+
+        self.copies_count_label = QLabel("1")
+        self.copies_count_label.setStyleSheet(
+            "QLabel { background-color: transparent; color: #36454F; font-size: 22px; min-width: 40px; max-width: 40px; border-radius: 3px; padding: 1px 4px; border: none; font-weight: bold; qproperty-alignment: AlignCenter; }"
+        )
+        self.copies_count_label.setAlignment(Qt.AlignCenter)
+        copies_row.addWidget(self.copies_count_label)
+        copies_row.addWidget(self.copies_plus_btn)
+        # Remember the left position for alignment
+        # To align the color buttons edge with the minus button, get the minus button's index
+        # minus_button_edge_index = copies_row.indexOf(self.copies_minus_btn)
+        # Now, add stretch at the end so the rightmost edge aligns.
+        copies_row.addStretch(1)
+        center_layout.addLayout(copies_row)
+
+        # ---- Color Mode Row (Label left, Buttons right-aligned with minus button) ----
+        color_row = QHBoxLayout()
+        color_row.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+        color_label = QLabel("Color Mode:")
+        color_label.setStyleSheet("color: #36454F; font-size: 18px; font-weight: bold; background-color: transparent;")
+        color_row.addWidget(color_label)
+        color_row.addStretch(1)  # Push the buttons to the right edge
+
+        color_btn_style = """
+            QPushButton {
+                color: white; font-size: 16px; font-weight: bold;
+                border: none; border-radius: 4px !important; height: 44px; min-width: 130px;
+                background-color: #1e440a;
+                padding-left: 12px; padding-right: 12px;
+            }
+            QPushButton:checked, QPushButton:hover { background-color: #2a5d1a; }
+        """
+        self.bw_btn = QPushButton("Black and White")
+        self.color_btn = QPushButton("Colored")
+        self.bw_btn.setCheckable(True)
+        self.color_btn.setCheckable(True)
+        self.bw_btn.setStyleSheet(color_btn_style)
+        self.color_btn.setStyleSheet(color_btn_style)
+        self.bw_btn.setChecked(True)
+        color_row.addWidget(self.bw_btn)
+        color_row.addSpacing(8)
+        color_row.addWidget(self.color_btn)
+        center_layout.addLayout(color_row)
+
+        # Add centered container to the main layout
+        layout.addWidget(center_container, 0, Qt.AlignHCenter)
+
+        # Add more space below the centered container before cost/details.
+        layout.addSpacing(60)
+
+        # ---- Cost and Details (placed lower and centered) ----
         self.cost_label = QLabel("Calculating cost...")
-        self.cost_label.setStyleSheet("color: #33cc33; font-size: 20px; font-weight: bold; margin: 20px 0 0 0;")
-        layout.addWidget(self.cost_label)
-        layout.addWidget(self.analysis_details_label)
+        self.cost_label.setAlignment(Qt.AlignCenter)
+        self.cost_label.setStyleSheet("color: #33cc33; font-size: 24px; font-weight: bold; margin: 0px 0 0 0;")
+        layout.addWidget(self.cost_label, 0, Qt.AlignHCenter)
+
+        self.analysis_details_label = QLabel("Analysis details will appear here.")
+        self.analysis_details_label.setAlignment(Qt.AlignCenter)
+        self.analysis_details_label.setStyleSheet("color: #36454F; font-size: 14px; margin-top: 5px;")
+        layout.addWidget(self.analysis_details_label, 0, Qt.AlignHCenter)
+
+        layout.addStretch(2)
+
+        # ---- Buttons ----
         buttons_layout = QHBoxLayout()
         back_btn = QPushButton("← Back to File Browser")
-        back_btn.clicked.connect(self.go_back)
-        back_btn.setStyleSheet("...")
+        back_btn.setMinimumHeight(50)
+        back_btn.setStyleSheet("""
+            QPushButton {
+                color: white; font-size: 12px; font-weight: bold;
+                border: none; border-radius: 4px; height: 40px;
+                background-color: #ff0000;
+                padding-left: 12px; padding-right: 12px;
+            }
+            QPushButton:hover { background-color: #ffb84d; }
+        """)
+
         self.continue_btn = QPushButton("Continue to Payment →")
+        self.continue_btn.setMinimumHeight(50)
+        self.continue_btn.setStyleSheet("""
+            QPushButton {
+                color: white; font-size: 12px; font-weight: bold;
+                border: none; border-radius: 4px !important; height: 40px;
+                background-color: #1e440a;
+                padding-left: 12px; padding-right: 12px;
+            }
+            QPushButton:checked, QPushButton:hover { background-color: #2a5d1a; }
+        """)
+
+        back_btn.clicked.connect(self.go_back)
         self.continue_btn.clicked.connect(self.continue_to_payment)
-        self.continue_btn.setStyleSheet("...")
-        self.color_combo.currentTextChanged.connect(self.trigger_analysis)
-        self.copies_spin.valueChanged.connect(self.update_cost_display)
+
         buttons_layout.addWidget(back_btn)
         buttons_layout.addStretch()
         buttons_layout.addWidget(self.continue_btn)
         layout.addLayout(buttons_layout)
-        self.setLayout(layout)
+
+        stacked_layout.addWidget(background_label)
+        stacked_layout.addWidget(foreground_widget)
+        self.setLayout(stacked_layout)
+
+        self.bw_btn.clicked.connect(self.set_bw_mode)
+        self.color_btn.clicked.connect(self.set_color_mode)
+
+    def set_bw_mode(self):
+        self._color_mode = "Black and White"
+        self.bw_btn.setChecked(True)
+        self.color_btn.setChecked(False)
+        self.trigger_analysis()
+
+    def set_color_mode(self):
+        self._color_mode = "Color"
+        self.bw_btn.setChecked(False)
+        self.color_btn.setChecked(True)
+        self.trigger_analysis()
+
+    def change_copies(self, delta):
+        new_copies = self._copies + delta
+        if new_copies < 1: new_copies = 1
+        if new_copies > 99: new_copies = 99
+        if new_copies != self._copies:
+            self._copies = new_copies
+            self.copies_count_label.setText(str(self._copies))
+            self.update_cost_display()
 
     def set_pdf_data(self, pdf_data, selected_pages):
         self.selected_pdf = pdf_data
         self.selected_pages = selected_pages
-        self.copies_spin.setValue(1)
+        self._copies = 1
+        self.copies_count_label.setText(str(self._copies))
+        self.set_bw_mode()
         self.trigger_analysis()
 
     def trigger_analysis(self):
@@ -163,7 +302,7 @@ class Print_Options_Screen(QWidget):
         self.continue_btn.setEnabled(False) 
         self.analysis_results = None
 
-        user_wants_color = (self.color_combo.currentText() == "Color")
+        user_wants_color = (self._color_mode == "Color")
 
         if user_wants_color:
             self.cost_label.setText("Analyzing pages and calculating cost...")
@@ -190,7 +329,6 @@ class Print_Options_Screen(QWidget):
             }
             self.on_analysis_finished(bw_results)
 
-
     def on_analysis_finished(self, results):
         if results.get('error'):
             self.cost_label.setText("Error during analysis!")
@@ -206,10 +344,11 @@ class Print_Options_Screen(QWidget):
         if not self.analysis_results:
             return
         
-        num_copies = self.copies_spin.value()
+        num_copies = self._copies
         base_cost = self.analysis_results['pricing']['base_cost']
         total_cost = base_cost * num_copies
 
+        self.copies_count_label.setText(str(num_copies))
         self.cost_label.setText(f"Total Cost: ₱{total_cost:.2f}")
 
         b_count = self.analysis_results['pricing']['black_pages_count']
@@ -231,12 +370,12 @@ class Print_Options_Screen(QWidget):
             QMessageBox.warning(self, "Please Wait", "Cost calculation is still in progress.")
             return
 
-        total_cost = self.analysis_results['pricing']['base_cost'] * self.copies_spin.value()
+        total_cost = self.analysis_results['pricing']['base_cost'] * self._copies
         payment_data = {
             'pdf_data': self.selected_pdf,
             'selected_pages': self.selected_pages,
-            'copies': self.copies_spin.value(),
-            'color_mode': self.color_combo.currentText(),
+            'copies': self._copies,
+            'color_mode': self._color_mode,
             'total_cost': total_cost,
             'analysis': self.analysis_results
         }
