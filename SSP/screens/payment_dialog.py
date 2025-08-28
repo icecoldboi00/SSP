@@ -10,6 +10,8 @@ import time
 
 # --- MODIFIED: Import the new hopper manager and related components ---
 from screens.hopper_manager import ChangeDispenser, DispenseThread, PIGPIO_AVAILABLE as HOPPER_GPIO_AVAILABLE
+# --- ADDED: Import the Database Manager ---
+from database.db_manager import DatabaseManager
 
 # Try to import pigpio for the payment acceptor, but continue without it if not available
 try:
@@ -130,10 +132,12 @@ class PaymentScreen(QWidget):
     def __init__(self, main_app):
         super().__init__()
         self.main_app = main_app
+        self.db_manager = DatabaseManager()  # ADDED: Database manager instance
         self.total_cost = 0
         self.payment_data = None
         self.payment_processing = False
         self.amount_received = 0
+        self.cash_received = {}  # ADDED: To track denominations received
         self.gpio_thread = None
         self.payment_ready = False
 
@@ -148,6 +152,7 @@ class PaymentScreen(QWidget):
         self.payment_data = payment_data
         self.total_cost = payment_data['total_cost']
         self.amount_received = 0
+        self.cash_received = {}  # ADDED: Reset cash received for new transaction
         self.disable_payment_mode()
         self.total_label.setText(f"Total Amount Due: ₱{self.total_cost:.2f}")
 
@@ -282,12 +287,14 @@ class PaymentScreen(QWidget):
     def on_coin_inserted(self, coin_value):
         if not self.payment_ready: return
         self.amount_received += coin_value
+        self.cash_received[coin_value] = self.cash_received.get(coin_value, 0) + 1  # ADDED: Track coin
         self.update_payment_status()
         self.payment_status_label.setText(f"₱{coin_value} coin received")
 
     def on_bill_inserted(self, bill_value):
         if not self.payment_ready: return
         self.amount_received += bill_value
+        self.cash_received[bill_value] = self.cash_received.get(bill_value, 0) + 1  # ADDED: Track bill
         self.update_payment_status()
         self.payment_status_label.setText(f"₱{bill_value} bill received")
 
@@ -311,8 +318,14 @@ class PaymentScreen(QWidget):
             self.payment_btn.setEnabled(False)
 
     def complete_payment(self):
-        """Handle payment, signal printing, and dispense change."""
+        """Handle payment, log to DB, signal printing, and dispense change."""
         if self.amount_received < self.total_cost:
+            # ADDED: Log payment error to database
+            self.db_manager.log_error(
+                "Payment Error",
+                "Insufficient payment amount",
+                "PaymentScreen"
+            )
             QMessageBox.warning(self, "Insufficient Payment", "Payment is not sufficient.")
             return
 
@@ -329,6 +342,29 @@ class PaymentScreen(QWidget):
                 "Please contact administrator to refill paper.")
             return
 
+        # --- ADDED: DATABASE LOGGING ---
+        # Log the transaction
+        transaction_data = {
+            'file_name': os.path.basename(self.payment_data['pdf_data']['path']),
+            'pages': len(self.payment_data['selected_pages']),
+            'copies': self.payment_data['copies'],
+            'color_mode': self.payment_data['color_mode'],
+            'total_cost': self.total_cost,
+            'amount_paid': self.amount_received,
+            'change_given': self.amount_received - self.total_cost,
+            'status': 'completed'
+        }
+        self.db_manager.log_transaction(transaction_data)
+        
+        # Update cash inventory
+        for denomination, count in self.cash_received.items():
+            self.db_manager.update_cash_inventory(
+                denomination=denomination,
+                count=count,
+                type='bill' if denomination >= 20 else 'coin'
+            )
+        # --- END OF DATABASE LOGGING ---
+        
         # Continue with existing payment completion code...
         change_amount = self.amount_received - self.total_cost
         payment_info = {
@@ -391,6 +427,7 @@ class PaymentScreen(QWidget):
         # Reset UI elements
         self.payment_ready = False
         self.amount_received = 0
+        self.cash_received = {}  # ADDED: Reset cash tracking on go back
         self.payment_data = None
         self.amount_received_label.setText("Amount Received: ₱0.00")
         self.change_label.setText("")

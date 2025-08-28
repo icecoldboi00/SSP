@@ -11,6 +11,7 @@ from screens.file_browser_screen import FileBrowserScreen
 from screens.payment_dialog import PaymentScreen
 from screens.Print_Options_Screen import Print_Options_Screen
 from screens.admin_screen import AdminScreen
+from database.models import init_db
 
 try:
     from screens.usb_file_manager import USBFileManager
@@ -104,12 +105,21 @@ class PrintingSystemApp(QMainWindow):
         # Add any additional payment processing logic here
 
 def main():
-    app = QApplication(sys.argv)
-    app.setApplicationName("Printing System GUI")
-    app.setApplicationVersion("1.0")
-    window = PrintingSystemApp()
-    window.show()
-    sys.exit(app.exec_())
+    try:
+        print("\n🔄 Initializing database...")
+        init_db()
+        print("✅ Database initialization successful\n")
+        
+        # Start application
+        app = QApplication(sys.argv)
+        app.setApplicationName("Printing System GUI")
+        app.setApplicationVersion("1.0")
+        window = PrintingSystemApp()
+        window.show()
+        sys.exit(app.exec_())
+    except Exception as e:
+        print(f"❌ Error during initialization: {str(e)}")
+        sys.exit(1)
 
 if __name__ == '__main__':
     main()
