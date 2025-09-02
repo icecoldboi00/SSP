@@ -26,7 +26,7 @@ class PrintingSystemApp(QMainWindow):
         self.setWindowTitle("Printing System GUI")
         # --- MODIFICATION: Changed default window size ---
         self.setGeometry(100, 100, 1024, 600)
-        self.setMinimumSize(1000, 700)
+        self.setMinimumSize(1024, 600)
 
         self.stacked_widget = QStackedWidget()
         self.setCentralWidget(self.stacked_widget)
