@@ -11,6 +11,7 @@ from screens.file_browser_screen import FileBrowserScreen
 from screens.payment_dialog import PaymentScreen
 from screens.Print_Options_Screen import Print_Options_Screen
 from screens.admin_screen import AdminScreen
+from screens.thank_you_screen import ThankYouScreen  # Import the new screen
 from database.models import init_db
 
 try:
@@ -23,7 +24,8 @@ class PrintingSystemApp(QMainWindow):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("Printing System GUI")
-        self.setGeometry(100, 100, 1200, 800)
+        # --- MODIFICATION: Changed default window size ---
+        self.setGeometry(100, 100, 1024, 600)
         self.setMinimumSize(1000, 700)
 
         self.stacked_widget = QStackedWidget()
@@ -37,7 +39,8 @@ class PrintingSystemApp(QMainWindow):
         self.file_browser_screen = FileBrowserScreen(self)
         self.printing_options_screen = Print_Options_Screen(self)
         self.payment_screen = PaymentScreen(self)
-        self.admin_screen = AdminScreen(self)  # Make sure this is initialized
+        self.admin_screen = AdminScreen(self)
+        self.thank_you_screen = ThankYouScreen(self) # Initialize the new screen
 
         # Add screens to the stack
         self.stacked_widget.addWidget(self.idle_screen)         # Index 0
@@ -46,17 +49,18 @@ class PrintingSystemApp(QMainWindow):
         self.stacked_widget.addWidget(self.printing_options_screen) # Index 3
         self.stacked_widget.addWidget(self.payment_screen)      # Index 4
         self.stacked_widget.addWidget(self.admin_screen)        # Index 5
+        self.stacked_widget.addWidget(self.thank_you_screen)    # Index 6
 
         ## FIX: Updated the print statement to be accurate.
         print(f"Stacked widget has {self.stacked_widget.count()} screens")
-        print(f"Screen index map: idle=0, usb=1, file_browser=2, printing_options=3, payment=4, admin=5")
+        print(f"Screen index map: idle=0, usb=1, file_browser=2, printing_options=3, payment=4, admin=5, thank_you=6")
 
         ## FIX: Set the initial screen to 'idle'.
         self.show_screen('idle')
 
         self.setStyleSheet("""
             QMainWindow {
-                background-color: #1e1e2e;
+                background-color: transparent;
             }
         """)
         print("Main app initialization complete")
@@ -68,14 +72,15 @@ class PrintingSystemApp(QMainWindow):
         """Switch between screens, calling on_leave and on_enter methods."""
         print(f"\n🔄 Attempting to show screen: {screen_name}")
 
-        ## FIX: The screen map is now correct and includes the admin screen.
+        ## FIX: The screen map is now correct and includes the admin and thank_you screens.
         screen_map = {
             'idle': 0,
             'usb': 1,
             'file_browser': 2,
             'printing_options': 3,
             'payment': 4,
-            'admin': 5
+            'admin': 5,
+            'thank_you': 6
         }
 
         if screen_name in screen_map:
@@ -115,7 +120,12 @@ def main():
         app.setApplicationName("Printing System GUI")
         app.setApplicationVersion("1.0")
         window = PrintingSystemApp()
-        window.show()
+
+        # --- MODIFICATION: Set to show normal window by default ---
+        # For deployment, comment out window.show() and uncomment window.showFullScreen()
+        # window.show()
+        window.showFullScreen()
+        
         sys.exit(app.exec_())
     except Exception as e:
         print(f"❌ Error during initialization: {str(e)}")

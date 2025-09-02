@@ -76,38 +76,43 @@ class PDFPageWidget(QFrame):
     def __init__(self, page_num=1, checked=True):
         super().__init__()
         self.page_num = page_num
-        self.setFixedSize(180, 260)
+        self.setFixedSize(150, 210)
         self.setup_ui(checked)
+        
     def setup_ui(self, checked):
-        self.setStyleSheet("QFrame { background-color: white; border: 2px solid #ddd; border-radius: 8px; margin: 5px; }")
+        self.setStyleSheet("QFrame { background-color: white; border: 2px solid #ddd; border-radius: 8px; margin: 4px; }")
         layout = QVBoxLayout(self)
         layout.setContentsMargins(5, 5, 5, 5)
-        layout.setSpacing(5)
+        layout.setSpacing(4)
         self.checkbox = QCheckBox(f"Page {self.page_num}")
         self.checkbox.setChecked(checked)
         self.checkbox.setStyleSheet("""
-            QCheckBox { color: #36454F; font-size: 14px; }
-            QCheckBox::indicator { width: 16px; height: 16px; }
+            QCheckBox { color: #36454F; font-size: 12px; }
+            QCheckBox::indicator { width: 14px; height: 14px; }
             QCheckBox::indicator:checked { background-color: #4CAF50; border: 2px solid #4CAF50; }
             QCheckBox::indicator:unchecked { background-color: white; border: 2px solid #ccc; }
         """)
         self.checkbox.clicked.connect(self.on_checkbox_clicked)
         self.preview_label = QLabel()
         self.preview_label.setAlignment(Qt.AlignCenter)
-        self.preview_label.setMinimumHeight(200)
+        self.preview_label.setMinimumHeight(160)
         self.preview_label.setStyleSheet("QLabel { background-color: #f9f9f9; border: 1px solid #ddd; border-radius: 4px; color: #36454F; font-size: 10px; }")
         self.preview_label.setText(f"Loading\nPage {self.page_num}...")
         layout.addWidget(self.checkbox)
         layout.addWidget(self.preview_label)
         self.setMouseTracking(True)
+        
     def mousePressEvent(self, event):
         if not self.checkbox.geometry().contains(event.pos()): self.page_selected.emit(self.page_num)
+        
     def on_checkbox_clicked(self, checked):
         self.page_checkbox_clicked.emit(self.page_num, checked)
-        if checked: self.setStyleSheet("QFrame { background-color: white; border: 3px solid #4CAF50; border-radius: 8px; margin: 5px; }")
-        else: self.setStyleSheet("QFrame { background-color: #f5f5f5; border: 2px solid #ccc; border-radius: 8px; margin: 5px; }")
+        if checked: self.setStyleSheet("QFrame { background-color: white; border: 3px solid #4CAF50; border-radius: 8px; margin: 4px; }")
+        else: self.setStyleSheet("QFrame { background-color: #f5f5f5; border: 2px solid #ccc; border-radius: 8px; margin: 4px; }")
+        
     def set_preview_image(self, pixmap):
         self.preview_label.clear(); self.preview_label.setAlignment(Qt.AlignCenter); self.preview_label.setPixmap(pixmap)
+        
     def set_error_message(self, error_msg):
         self.preview_label.setText(f"Page {self.page_num}\n\nError:\n{error_msg}")
         self.preview_label.setStyleSheet("QLabel { background-color: #ffeeee; border: 1px solid #ffaaaa; border-radius: 4px; color: #cc0000; font-size: 9px; }")
@@ -131,7 +136,7 @@ class PDFPreviewThread(QThread):
                     page = doc[page_num - 1]
                     pix = page.get_pixmap(matrix=fitz.Matrix(1.2, 1.2))
                     qimg = QImage.fromData(pix.tobytes("ppm"))
-                    pixmap = QPixmap.fromImage(qimg).scaled(160, 200, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+                    pixmap = QPixmap.fromImage(qimg).scaled(130, 170, Qt.KeepAspectRatio, Qt.SmoothTransformation)
                     self.preview_ready.emit(page_num, pixmap)
                 except Exception as e: self.error_occurred.emit(page_num, str(e))
             doc.close()
@@ -141,9 +146,9 @@ class PDFPreviewThread(QThread):
     def stop(self): self.running = False
 
 class FileBrowserScreen(QWidget):
-    SINGLE_PAGE_PREVIEW_WIDTH = 360
-    SINGLE_PAGE_PREVIEW_HEIGHT = 460
-    ITEMS_PER_GRID_PAGE = 8
+    SINGLE_PAGE_PREVIEW_WIDTH = 280
+    SINGLE_PAGE_PREVIEW_HEIGHT = 380
+    ITEMS_PER_GRID_PAGE = 6
 
     def __init__(self, main_app):
         super().__init__()
@@ -177,21 +182,20 @@ class FileBrowserScreen(QWidget):
         main_col.setContentsMargins(0, 0, 0, 0)
         main_col.setSpacing(0)
 
-        # ---- MAIN SPLIT: LEFT (file list), RIGHT (preview) ----
         split_row = QHBoxLayout()
         split_row.setContentsMargins(0, 0, 0, 0)
         split_row.setSpacing(0)
 
         # LEFT PANEL
         left_panel = QFrame()
-        left_panel.setFixedWidth(360)
+        left_panel.setFixedWidth(340) 
         left_panel.setStyleSheet("QFrame { background-color: transparent; border: none; }")
         left_layout = QVBoxLayout(left_panel)
         left_layout.setContentsMargins(10, 0, 10, 20)
-        left_layout.setSpacing(10) # between pdf files # and files
-        left_layout.addSpacing(94)  # Adjust this value to bring the label lower or higher
+        left_layout.setSpacing(10) 
+        left_layout.addSpacing(65) 
         self.file_header = QLabel("PDF Files (0 files)")
-        self.file_header.setStyleSheet("QLabel { color: #36454F; font-size: 16px; font-weight: bold; background-color: transparent; padding-left: 13px;  /* Move text right by x px */}")
+        self.file_header.setStyleSheet("QLabel { color: #36454F; font-size: 16px; font-weight: bold; background-color: transparent; padding-left: 13px;}")
         self.file_header.setFixedHeight(32)
         left_layout.addWidget(self.file_header, 0, Qt.AlignLeft)
         file_scroll = QScrollArea()
@@ -209,16 +213,16 @@ class FileBrowserScreen(QWidget):
         self.file_list_layout.addStretch()
         file_scroll.setWidget(self.file_list_widget)
         left_layout.addWidget(file_scroll)
-        split_row.addWidget(left_panel, 0)
+        split_row.addWidget(left_panel)
 
         # RIGHT PANEL
         right_panel = QFrame()
         right_panel.setStyleSheet("background-color: transparent;")
         right_panel_layout = QVBoxLayout(right_panel)
         right_panel_layout.setContentsMargins(0, 0, 20, 12)
-        right_panel_layout.setSpacing(0)
+        right_panel_layout.setSpacing(10)
 
-        right_panel_layout.addItem(QSpacerItem(20, 20, QSizePolicy.Minimum, QSizePolicy.Expanding))
+        right_panel_layout.addSpacing(65)
 
         header_row = QHBoxLayout()
         header_row.setSpacing(10)
@@ -229,7 +233,6 @@ class FileBrowserScreen(QWidget):
         self.preview_header.setFixedHeight(32)
         button_height = 40
 
-        # --- BUTTON STYLES ---
         all_button_style = f"""
             QPushButton {{
                 color: white; font-size: 12px; font-weight: bold;
@@ -240,18 +243,13 @@ class FileBrowserScreen(QWidget):
             QPushButton:checked, QPushButton:hover {{ background-color: #2a5d1a; }}
         """
 
-        # -- Apply styles to main action buttons --
         self.view_all_btn = QPushButton("All Pages View")
         self.view_single_btn = QPushButton("Single Page View")
-        self.view_all_btn.setCheckable(True)
-        self.view_single_btn.setCheckable(True)
+        self.view_all_btn.setCheckable(True); self.view_single_btn.setCheckable(True)
         self.view_all_btn.setChecked(True)
-        self.view_all_btn.setStyleSheet(all_button_style)
-        self.view_single_btn.setStyleSheet(all_button_style)
-        self.view_all_btn.setFixedHeight(button_height)
-        self.view_single_btn.setFixedHeight(button_height)
-        self.view_all_btn.clicked.connect(self.set_all_pages_view)
-        self.view_single_btn.clicked.connect(self.set_single_page_view)
+        self.view_all_btn.setStyleSheet(all_button_style); self.view_single_btn.setStyleSheet(all_button_style)
+        self.view_all_btn.setFixedHeight(button_height); self.view_single_btn.setFixedHeight(button_height)
+        self.view_all_btn.clicked.connect(self.set_all_pages_view); self.view_single_btn.clicked.connect(self.set_single_page_view)
 
         self.select_all_btn = QPushButton("Select All Pages")
         self.select_all_btn.setVisible(False)
@@ -259,15 +257,13 @@ class FileBrowserScreen(QWidget):
         self.select_all_btn.setFixedHeight(button_height)
         self.select_all_btn.clicked.connect(self.select_all_pages)
 
-        # --- Deselect All: LEAVE AS IS ---
         self.deselect_all_btn = QPushButton("Deselect All")
         self.deselect_all_btn.setVisible(False)
         self.deselect_all_btn.setStyleSheet("""
             QPushButton {
                 color: white; font-size: 12px; font-weight: bold;
                 border: none; border-radius: 4px; height: 40px;
-                background-color: #ff9800;
-                padding-left: 12px; padding-right: 12px;
+                background-color: #ff9800; padding-left: 12px; padding-right: 12px;
             }
             QPushButton:hover, QPushButton:checked { background-color: #f57c00; }
         """)
@@ -275,27 +271,25 @@ class FileBrowserScreen(QWidget):
         self.deselect_all_btn.clicked.connect(self.deselect_all_pages)
 
         header_row.addWidget(self.preview_header, 1, Qt.AlignLeft)
-        header_row.addWidget(self.view_all_btn)
-        header_row.addWidget(self.view_single_btn)
-        header_row.addWidget(self.select_all_btn)
-        header_row.addWidget(self.deselect_all_btn)
-        right_panel_layout.addLayout(header_row)
-        right_panel_layout.addSpacing(25)
-
-        # === CHANGED: set background-color of preview container ===
+        header_row.addWidget(self.view_all_btn); header_row.addWidget(self.view_single_btn)
+        header_row.addWidget(self.select_all_btn); header_row.addWidget(self.deselect_all_btn)
+        
+        # PREVIEW CONTAINER
         self.preview_container = QFrame()
-        self.preview_container.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
-        self.preview_container.setStyleSheet(
-            "QFrame { border: 2px solid #0f1f00; border-radius: 6px; background-color: #fffff; }"
-        )
-        self.preview_container.setFixedSize(800, 560)
+        self.preview_container.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        self.preview_container.setStyleSheet("QFrame { border: 2px solid #0f1f00; border-radius: 6px; background-color: #fffff; }")
+        
         self.preview_layout = QGridLayout(self.preview_container)
-        self.preview_layout.setSpacing(10)
-        self.preview_layout.setAlignment(Qt.AlignTop)
+        self.preview_layout.setSpacing(5)
+        # --- MODIFICATION: Set up stretches for horizontal and vertical centering ---
+        self.preview_layout.setColumnStretch(0, 1) # Left horizontal stretch
+        self.preview_layout.setColumnStretch(4, 1) # Right horizontal stretch
+        self.preview_layout.setRowStretch(0, 1)    # Top vertical stretch
+        self.preview_layout.setRowStretch(3, 1)    # Bottom vertical stretch
 
-        # === SINGLE PAGE VIEW CONTAINER ===
+        # SINGLE PAGE VIEW CONTAINER
         self.single_page_widget = QWidget()
-        self.single_page_widget.setStyleSheet("background-color: #fffdf7;")  # CHANGED
+        self.single_page_widget.setStyleSheet("background-color: #fffdf7;") 
         self.single_page_layout = QVBoxLayout(self.single_page_widget)
         self.single_page_layout.setSpacing(8)
         self.single_page_layout.setAlignment(Qt.AlignVCenter)
@@ -312,131 +306,79 @@ class FileBrowserScreen(QWidget):
         """
         self.prev_page_btn = QPushButton("←"); self.prev_page_btn.setStyleSheet(nav_btn_style)
         self.next_page_btn = QPushButton("→"); self.next_page_btn.setStyleSheet(nav_btn_style)
-        self.prev_page_btn.setFixedHeight(button_height)
-        self.next_page_btn.setFixedHeight(button_height)
-        # === CHANGED: page number and zoom labels, transparent bg and bold text ===
+        self.prev_page_btn.setFixedHeight(button_height); self.next_page_btn.setFixedHeight(button_height)
         self.page_input = QLabel("1")
-        self.page_input.setStyleSheet(
-            "QLabel { background-color: transparent; color: #36454F; font-size: 13px; min-width: 40px; max-width: 40px; border-radius: 3px; padding: 1px 4px; border: none; font-weight: bold; qproperty-alignment: AlignCenter; }"
-        )
+        self.page_input.setStyleSheet("QLabel { background-color: transparent; color: #36454F; font-size: 13px; min-width: 40px; max-width: 40px; border-radius: 3px; padding: 1px 4px; border: none; font-weight: bold; qproperty-alignment: AlignCenter; }")
         zoom_btn_style = nav_btn_style
         self.zoom_in_btn = QPushButton("+"); self.zoom_in_btn.setStyleSheet(zoom_btn_style); self.zoom_in_btn.setFixedHeight(button_height)
         self.zoom_out_btn = QPushButton("−"); self.zoom_out_btn.setStyleSheet(zoom_btn_style); self.zoom_out_btn.setFixedHeight(button_height)
         self.zoom_reset_btn = QPushButton("⌂"); self.zoom_reset_btn.setStyleSheet(zoom_btn_style); self.zoom_reset_btn.setFixedHeight(button_height)
-        # === CHANGED: zoom label, transparent bg and bold text ===
         self.zoom_label = QLabel("100%")
-        self.zoom_label.setStyleSheet(
-            "QLabel { background-color: transparent; color: #36454F; font-size: 12px; min-width: 45px; max-width: 45px; border-radius: 3px; padding: 2px 4px; border: none; font-weight: bold; qproperty-alignment: AlignCenter; margin: 0 5px; }"
-        )
-        nav_layout.addWidget(self.prev_page_btn)
-        nav_layout.addWidget(self.page_input)
-        nav_layout.addWidget(self.next_page_btn)
+        self.zoom_label.setStyleSheet("QLabel { background-color: transparent; color: #36454F; font-size: 12px; min-width: 45px; max-width: 45px; border-radius: 3px; padding: 2px 4px; border: none; font-weight: bold; qproperty-alignment: AlignCenter; margin: 0 5px; }")
+        nav_layout.addWidget(self.prev_page_btn); nav_layout.addWidget(self.page_input); nav_layout.addWidget(self.next_page_btn)
         nav_layout.addStretch()
-        zoom_label_container = QLabel("Zoom:")
-        zoom_label_container.setStyleSheet("background-color: transparent; color: #36454F; font-weight: bold;")
-        nav_layout.addWidget(zoom_label_container)
-        nav_layout.addWidget(self.zoom_out_btn)
-        nav_layout.addWidget(self.zoom_label)
-        nav_layout.addWidget(self.zoom_in_btn)
-        nav_layout.addWidget(self.zoom_reset_btn)
+        zoom_label_container = QLabel("Zoom:"); zoom_label_container.setStyleSheet("background-color: transparent; color: #36454F; font-weight: bold;")
+        nav_layout.addWidget(zoom_label_container); nav_layout.addWidget(self.zoom_out_btn); nav_layout.addWidget(self.zoom_label);
+        nav_layout.addWidget(self.zoom_in_btn); nav_layout.addWidget(self.zoom_reset_btn)
         self.prev_page_btn.clicked.connect(self.prev_single_page); self.next_page_btn.clicked.connect(self.next_single_page)
         self.zoom_in_btn.clicked.connect(self.zoom_in); self.zoom_out_btn.clicked.connect(self.zoom_out); self.zoom_reset_btn.clicked.connect(self.zoom_reset)
         self.single_page_layout.addLayout(nav_layout)
-        self.single_page_checkbox = QCheckBox("Select this page")
-        self.single_page_checkbox.setStyleSheet("QCheckBox { color: #36454F; font-size: 13px; background-color: transparent; }")
+        self.single_page_checkbox = QCheckBox("Select this page"); self.single_page_checkbox.setStyleSheet("QCheckBox { color: #36454F; font-size: 13px; background-color: transparent; }")
         self.single_page_checkbox.stateChanged.connect(self.single_page_checkbox_changed)
         self.single_page_layout.addWidget(self.single_page_checkbox)
-        self.single_page_preview = PDFPreviewWidget()
-        self.single_page_preview.setFixedSize(self.SINGLE_PAGE_PREVIEW_WIDTH, self.SINGLE_PAGE_PREVIEW_HEIGHT)
+        self.single_page_preview = PDFPreviewWidget(); self.single_page_preview.setFixedSize(self.SINGLE_PAGE_PREVIEW_WIDTH, self.SINGLE_PAGE_PREVIEW_HEIGHT)
         self.single_page_preview.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
         self.single_page_layout.addWidget(self.single_page_preview, 0, Qt.AlignHCenter)
 
-        # Pagination Controls
-        self.prev_grid_page_btn = QPushButton("<< Prev")
-        self.next_grid_page_btn = QPushButton("Next >>")
+        # PAGINATION CONTROLS
+        self.prev_grid_page_btn = QPushButton("<< Prev"); self.next_grid_page_btn = QPushButton("Next >>")
         pagination_style = f"""
             QPushButton {{
-                color: white; font-size: 12px; font-weight: bold;
-                border: none; border-radius: 4px; height: {button_height}px;
-                background-color: #1e440a;
-                padding-left: 12px; padding-right: 12px;
+                color: white; font-size: 12px; font-weight: bold; border: none; border-radius: 4px; height: {button_height}px;
+                background-color: #1e440a; padding-left: 12px; padding-right: 12px;
             }}
             QPushButton:hover, QPushButton:checked {{ background-color: #2a5d1a; }}
             QPushButton:disabled {{ background-color: #3e423a; color: #555; }}
         """
-        self.prev_grid_page_btn.setStyleSheet(pagination_style)
-        self.next_grid_page_btn.setStyleSheet(pagination_style)
-        self.prev_grid_page_btn.setFixedHeight(button_height)
-        self.next_grid_page_btn.setFixedHeight(button_height)
-        self.prev_grid_page_btn.clicked.connect(self.prev_grid_page)
-        self.next_grid_page_btn.clicked.connect(self.next_grid_page)
-        self.grid_page_label = QLabel("Page 1 / 1")
-        self.grid_page_label.setAlignment(Qt.AlignCenter)
+        self.prev_grid_page_btn.setStyleSheet(pagination_style); self.next_grid_page_btn.setStyleSheet(pagination_style)
+        self.prev_grid_page_btn.setFixedHeight(button_height); self.next_grid_page_btn.setFixedHeight(button_height)
+        self.prev_grid_page_btn.clicked.connect(self.prev_grid_page); self.next_grid_page_btn.clicked.connect(self.next_grid_page)
+        self.grid_page_label = QLabel("Page 1 / 1"); self.grid_page_label.setAlignment(Qt.AlignCenter)
         self.grid_page_label.setStyleSheet("color: #36454F; font-size: 14px; background-color: transparent;")
 
-        bottom_controls = QHBoxLayout()
-        bottom_controls.setSpacing(15)
-        # --- Back to USB: LEAVE AS IS ---
+        # BOTTOM CONTROLS
+        bottom_controls = QHBoxLayout(); bottom_controls.setSpacing(15)
         self.back_btn = QPushButton("← Back to USB")
-        self.back_btn.setStyleSheet(f"""
-            QPushButton {{
-                color: white; font-size: 12px; font-weight: bold;
-                border: none; border-radius: 4px; height: {button_height}px;
-                background-color: #ff0000;
-                padding-left: 12px; padding-right: 12px;
-            }}
-            QPushButton:hover {{ background-color: #ffb84d; }}
-        """)
-        self.back_btn.setFixedHeight(button_height)
-        self.back_btn.clicked.connect(self.go_back)
-        # Continue Button: Use main style
-        self.continue_btn = QPushButton("Set Print Options →")
-        self.continue_btn.setStyleSheet(all_button_style)
-        self.continue_btn.setFixedHeight(button_height)
-        self.continue_btn.clicked.connect(self.continue_to_print_options)
+        self.back_btn.setStyleSheet(f"QPushButton {{ color: white; font-size: 12px; font-weight: bold; border: none; border-radius: 4px; height: {button_height}px; background-color: #ff0000; padding-left: 12px; padding-right: 12px; }} QPushButton:hover {{ background-color: #ffb84d; }}")
+        self.back_btn.setFixedHeight(button_height); self.back_btn.clicked.connect(self.go_back)
+        self.continue_btn = QPushButton("Set Print Options →"); self.continue_btn.setStyleSheet(all_button_style)
+        self.continue_btn.setFixedHeight(button_height); self.continue_btn.clicked.connect(self.continue_to_print_options)
         self.continue_btn.setVisible(False)
+        self.page_info = QLabel("No PDF selected"); self.page_info.setStyleSheet("QLabel { color: #36454F; font-size: 14px; background-color: transparent; }")
+        self.selected_count_label = QLabel(""); self.selected_count_label.setStyleSheet("QLabel { color: #4CAF50; font-size: 14px; font-weight: bold; background-color: transparent; }")
+        pagination_controls = QHBoxLayout(); pagination_controls.setSpacing(6)
+        pagination_controls.addWidget(self.prev_grid_page_btn, 0, Qt.AlignCenter); pagination_controls.addWidget(self.grid_page_label, 0, Qt.AlignCenter); pagination_controls.addWidget(self.next_grid_page_btn, 0, Qt.AlignCenter)
+        bottom_controls.addWidget(self.back_btn, 0, Qt.AlignCenter); bottom_controls.addStretch(1); bottom_controls.addLayout(pagination_controls); bottom_controls.addStretch(1)
+        bottom_controls.addWidget(self.page_info, 0, Qt.AlignCenter); bottom_controls.addWidget(self.selected_count_label, 0, Qt.AlignCenter)
+        bottom_controls.addStretch(1); bottom_controls.addWidget(self.continue_btn, 0, Qt.AlignCenter)
 
-        self.page_info = QLabel("No PDF selected")
-        self.page_info.setStyleSheet("QLabel { color: #36454F; font-size: 14px; background-color: transparent; }")
-        self.selected_count_label = QLabel("")
-        self.selected_count_label.setStyleSheet("QLabel { color: #4CAF50; font-size: 14px; font-weight: bold; background-color: transparent; }")
-
-        pagination_controls = QHBoxLayout()
-        pagination_controls.setSpacing(6)
-        pagination_controls.addWidget(self.prev_grid_page_btn, 0, Qt.AlignCenter)
-        pagination_controls.addWidget(self.grid_page_label, 0, Qt.AlignCenter)
-        pagination_controls.addWidget(self.next_grid_page_btn, 0, Qt.AlignCenter)
-
-        bottom_controls.addWidget(self.back_btn, 0, Qt.AlignCenter)
-        bottom_controls.addStretch(1)
-        bottom_controls.addLayout(pagination_controls)
-        bottom_controls.addStretch(1)
-        bottom_controls.addWidget(self.page_info, 0, Qt.AlignCenter)
-        bottom_controls.addWidget(self.selected_count_label, 0, Qt.AlignCenter)
-        bottom_controls.addStretch(1)
-        bottom_controls.addWidget(self.continue_btn, 0, Qt.AlignCenter)
-
-        preview_area_layout = QStackedLayout()
-        preview_area_layout.setStackingMode(QStackedLayout.StackAll)
-        preview_area_layout.setContentsMargins(0, 0, 0, 0)
+        # STACKED LAYOUT FOR PREVIEW AREA
+        preview_area_layout = QStackedLayout(); preview_area_layout.setStackingMode(QStackedLayout.StackAll); preview_area_layout.setContentsMargins(0, 0, 0, 0)
         preview_area_layout.addWidget(self.preview_container)
         preview_area_layout.addWidget(self.single_page_widget)
         self.single_page_widget.hide()
 
-        right_panel_layout.addLayout(preview_area_layout)
-        right_panel_layout.addSpacing(30)
+        right_panel_layout.addLayout(header_row)
+        right_panel_layout.addLayout(preview_area_layout, 1)
         right_panel_layout.addLayout(bottom_controls)
-
+        
         split_row.addWidget(right_panel, 1)
         main_col.addLayout(split_row, 1)
-
         stacked_layout.addWidget(background_label)
         stacked_layout.addWidget(foreground_widget)
         self.setLayout(stacked_layout)
-
         self.prev_grid_page_btn.hide(); self.grid_page_label.hide(); self.next_grid_page_btn.hide()
 
-    # ---------- All your original methods below this line are unchanged ----------
     def show_pdf_preview(self):
         self.preview_container.show()
         self.single_page_widget.hide()
@@ -454,17 +396,36 @@ class FileBrowserScreen(QWidget):
         start_page = (self.current_grid_page - 1) * self.ITEMS_PER_GRID_PAGE + 1
         end_page = min(self.current_grid_page * self.ITEMS_PER_GRID_PAGE, total_doc_pages)
         pages_to_show = list(range(start_page, end_page + 1))
+        
         for i, page_num in enumerate(pages_to_show):
             page_widget = PDFPageWidget(page_num, checked=self.selected_pages.get(page_num, True))
             page_widget.page_selected.connect(self.on_page_widget_clicked); page_widget.page_checkbox_clicked.connect(self.on_page_selected)
             self.page_widgets.append(page_widget); self.page_widget_map[page_num] = page_widget
-            self.preview_layout.addWidget(page_widget, i // 4, i % 4)
+            # --- MODIFICATION: Add widgets to rows 1 and 2 to account for top stretch ---
+            self.preview_layout.addWidget(page_widget, (i // 3) + 1, (i % 3) + 1)
+            
         if PYMUPDF_AVAILABLE:
             self.preview_thread = PDFPreviewThread(self.selected_pdf['path'], pages_to_show)
             self.preview_thread.preview_ready.connect(self.on_preview_ready); self.preview_thread.error_occurred.connect(self.on_preview_error)
             self.preview_thread.start()
         else:
             for widget in self.page_widgets: widget.preview_label.setText(f"Page {widget.page_num}\n\nPDF Preview\nRequires PyMuPDF")
+
+    def clear_preview(self):
+        if self.preview_thread and self.preview_thread.isRunning(): self.preview_thread.stop(); self.preview_thread.wait()
+        
+        while self.preview_layout.count():
+            item = self.preview_layout.takeAt(0)
+            if item is not None:
+                widget = item.widget()
+                if widget is not None:
+                    widget.deleteLater()
+            
+        self.page_widgets.clear(); self.page_widget_map.clear()
+        self.select_all_btn.setVisible(False); self.deselect_all_btn.setVisible(False); self.continue_btn.setVisible(False)
+        self.selected_count_label.setText("")
+        
+    # ... (rest of the methods are unchanged) ...
 
     def show_single_page(self):
         self.preview_container.hide()
@@ -538,14 +499,7 @@ class FileBrowserScreen(QWidget):
         while self.file_list_layout.count() > 1:
             child = self.file_list_layout.takeAt(0)
             if child.widget(): child.widget().deleteLater()
-    def clear_preview(self):
-        if self.preview_thread and self.preview_thread.isRunning(): self.preview_thread.stop(); self.preview_thread.wait()
-        while self.preview_layout.count():
-            child = self.preview_layout.takeAt(0)
-            if child.widget(): child.widget().deleteLater()
-        self.page_widgets.clear(); self.page_widget_map.clear()
-        self.select_all_btn.setVisible(False); self.deselect_all_btn.setVisible(False); self.continue_btn.setVisible(False)
-        self.selected_count_label.setText("")
+    
     def select_pdf(self, pdf_data):
         if self.selected_pdf is not None and self.selected_pages is not None: self.pdf_page_selections[self.selected_pdf['path']] = self.selected_pages.copy()
         self.selected_pdf = pdf_data

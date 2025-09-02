@@ -36,7 +36,7 @@ class IdleScreen(QWidget):
         if os.path.exists(image_path):
             pixmap = QPixmap(image_path)
             background_label.setPixmap(pixmap)
-            background_label.setScaledContents(False) 
+            background_label.setScaledContents(True) 
             background_label.setAlignment(Qt.AlignCenter)
         else:
             print(f"WARNING: Background image not found at '{image_path}'.")
