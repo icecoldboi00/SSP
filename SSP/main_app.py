@@ -2,6 +2,9 @@
 
 import sys
 import os
+# This ensures that modules in subdirectories like 'printing' can be imported
+sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+
 from PyQt5.QtWidgets import QApplication, QMainWindow, QStackedWidget
 from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QIcon
@@ -11,8 +14,9 @@ from screens.file_browser_screen import FileBrowserScreen
 from screens.payment_dialog import PaymentScreen
 from screens.Print_Options_Screen import Print_Options_Screen
 from screens.admin_screen import AdminScreen
-from screens.thank_you_screen import ThankYouScreen  # Import the new screen
+from screens.thank_you_screen import ThankYouScreen
 from database.models import init_db
+from printing.printer_manager import PrinterManager  # Import the new manager
 
 try:
     from screens.usb_file_manager import USBFileManager
@@ -30,6 +34,11 @@ class PrintingSystemApp(QMainWindow):
 
         self.stacked_widget = QStackedWidget()
         self.setCentralWidget(self.stacked_widget)
+
+        # --- Initialize Printer Manager ---
+        print("Initializing printer manager...")
+        self.printer_manager = PrinterManager()
+        print("Printer manager initialized.")
 
         print("Initializing screens...")
 
@@ -65,8 +74,10 @@ class PrintingSystemApp(QMainWindow):
         """)
         print("Main app initialization complete")
 
-        # Connect payment signals
+        # Connect payment and printing signals
         self.payment_screen.payment_completed.connect(self.on_payment_completed)
+        self.printer_manager.print_job_successful.connect(self.on_print_successful)
+        self.printer_manager.print_job_failed.connect(self.on_print_failed)
 
     def show_screen(self, screen_name):
         """Switch between screens, calling on_leave and on_enter methods."""
@@ -105,9 +116,36 @@ class PrintingSystemApp(QMainWindow):
             print(f"❌ ERROR: Unknown screen name: {screen_name}")
 
     def on_payment_completed(self, payment_info):
-        """Handle successful payment and printing"""
-        print(f"Payment completed. Printing {payment_info['copies']} copies...")
-        # Add any additional payment processing logic here
+        """Handle successful payment and start the printing process."""
+        print(f"Payment completed. Starting print job for {payment_info['pdf_data']['filename']}...")
+        
+        # The transition to the thank_you_screen is handled by the payment_dialog after
+        # change is dispensed. We just need to kick off the printing here.
+        self.printer_manager.print_file(
+            file_path=payment_info['pdf_data']['path'],
+            copies=payment_info['copies'],
+            color_mode=payment_info['color_mode'],
+            selected_pages=payment_info['selected_pages']
+        )
+
+    def on_print_successful(self):
+        """Called when the print job is successfully sent to the printer queue."""
+        print("✅ Print job successfully spooled.")
+        # Tell the thank you screen to update its state to 'finished'
+        # Check if we are on the correct screen, as this signal is asynchronous
+        if self.stacked_widget.currentWidget() == self.thank_you_screen:
+            self.thank_you_screen.finish_printing()
+        else:
+            print("Warning: Print successful signal received, but not on thank you screen.")
+
+    def on_print_failed(self, error_message):
+        """Called when the print job fails."""
+        print(f"❌ Print job failed: {error_message}")
+        # Tell the thank you screen to show an error message
+        if self.stacked_widget.currentWidget() == self.thank_you_screen:
+            self.thank_you_screen.show_printing_error(error_message)
+        else:
+            print(f"Warning: Print failed signal received, but not on thank you screen. Error: {error_message}")
 
 def main():
     try:

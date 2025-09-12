@@ -50,7 +50,7 @@ class ThankYouScreen(QWidget):
         self.subtitle_label.setAlignment(Qt.AlignCenter)
         self.subtitle_label.setStyleSheet("color: #36454F; font-size: 24px;")
 
-        # --- Simulation Button (for testing) ---
+        # --- Simulation Button (Now hidden, kept for potential future testing) ---
         self.finish_button = QPushButton("Simulate Print Finished")
         self.finish_button.setMinimumHeight(50)
         self.finish_button.setMaximumWidth(400)
@@ -62,6 +62,7 @@ class ThankYouScreen(QWidget):
             QPushButton:hover { background-color: #2a5d1a; }
         """)
         self.finish_button.clicked.connect(self.finish_printing)
+        self.finish_button.hide() # Hide the button, printing is now automatic
 
         main_layout.addStretch(1)
         main_layout.addWidget(self.status_label)
@@ -76,23 +77,37 @@ class ThankYouScreen(QWidget):
 
     def on_enter(self):
         """Called when the screen is shown."""
-        # Reset to the initial state every time we enter
+        # Reset to the initial "printing in progress" state every time
         self.status_label.setText("FILE PRINTING IN PROGRESS...")
+        self.status_label.setStyleSheet("color: #36454F; font-size: 42px; font-weight: bold;")
         self.subtitle_label.setText("Please wait a moment.")
-        self.finish_button.show()
         self.redirect_timer.stop()
         
-        # In a real scenario, you would listen for a signal from the printer queue.
-        # For now, the user must click the simulation button.
-
     def finish_printing(self):
-        """Updates the UI to the finished state and starts the timer."""
+        """Updates the UI to the finished state and starts the timer to go idle."""
         self.status_label.setText("PRINTING HAS FINISHED")
         self.subtitle_label.setText("Kindly collect your documents. We hope to see you again!")
-        self.finish_button.hide() # Hide the button after use
         
         # Start the 5-second timer to go back to the idle screen
         self.redirect_timer.start(5000)
+
+    def show_printing_error(self, message: str):
+        """Updates the UI to show a printing error."""
+        self.status_label.setText("PRINTING FAILED")
+        self.status_label.setStyleSheet("color: #dc3545; font-size: 42px; font-weight: bold;") # Red color
+        
+        # Sanitize common, verbose CUPS errors for a better user display
+        if "client-error-document-format-not-supported" in message:
+            clean_message = "Document format is not supported by the printer."
+        elif "CUPS Error" in message:
+            clean_message = "Could not communicate with the printer."
+        else:
+            clean_message = "An unknown printing error occurred."
+
+        self.subtitle_label.setText(f"Error: {clean_message}\nPlease contact an administrator.")
+        
+        # Start a longer timer to allow the user to read the error
+        self.redirect_timer.start(15000)
 
     def go_to_idle(self):
         """Navigates back to the idle screen."""
@@ -100,6 +115,6 @@ class ThankYouScreen(QWidget):
 
     def on_leave(self):
         """Called when the screen is hidden."""
-        # Stop the timer if the user navigates away manually
+        # Stop the timer if the user navigates away manually (unlikely here)
         if self.redirect_timer.isActive():
             self.redirect_timer.stop()
