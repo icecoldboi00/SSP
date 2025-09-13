@@ -120,10 +120,15 @@ class GPIOPaymentThread(QThread):
             time.sleep(0.05)
 
     def stop(self):
+        """Stop the GPIO thread safely."""
+        print("Stopping GPIO payment thread...")
         self.running = False
         if self.gpio_available and self.pi:
-            self.set_acceptor_state(False)
-            self.pi.stop()
+            try:
+                self.set_acceptor_state(False)
+                self.pi.stop()
+            except Exception as e:
+                print(f"Error stopping GPIO: {e}")
 
 
 class PaymentScreen(QWidget):
@@ -442,16 +447,57 @@ class PaymentScreen(QWidget):
         self.main_app.show_screen('thank_you')
 
     def go_back(self):
-        if self.gpio_thread:
-            self.gpio_thread.stop()
-            self.gpio_thread.wait(1000)
-        try:
-            self.change_dispenser.cleanup()
-        except Exception:
-            pass
-        self.payment_ready, self.amount_received, self.cash_received, self.payment_data = False, 0, {}, None
+        """Go back to print options screen."""
+        print("Payment screen: going back to print options")
+        # Use the on_leave method to properly clean up
+        self.on_leave()
+        
+        # Reset payment data
+        self.payment_data = None
+        
+        if hasattr(self.main_app, 'show_screen'):
+            self.main_app.show_screen('printing_options')
+
+    def on_enter(self):
+        """Called when the payment screen is shown."""
+        print("Payment screen entered")
+        # Reset payment state when entering the screen
+        self.payment_ready = False
+        self.amount_received = 0
+        self.cash_received = {}
+        self.payment_processing = False
+        
+        # Update UI to reflect reset state
         self.amount_received_label.setText("Amount Received: ₱0.00")
         self.change_label.setText("")
         self.payment_status_label.setText("Click 'Enable Payment' to begin")
-        if hasattr(self.main_app, 'show_screen'):
-            self.main_app.show_screen('printing_options')
+        
+        # Re-enable buttons
+        self.back_btn.setEnabled(True)
+        self.enable_payment_btn.setEnabled(True)
+        self.payment_btn.setEnabled(False)
+
+    def on_leave(self):
+        """Called when leaving the payment screen."""
+        print("Payment screen leaving")
+        # Stop GPIO thread safely
+        if self.gpio_thread and self.gpio_thread.isRunning():
+            print("Stopping GPIO thread...")
+            self.gpio_thread.stop()
+            if not self.gpio_thread.wait(2000):  # Wait up to 2 seconds
+                print("Warning: GPIO thread did not stop gracefully")
+                self.gpio_thread.terminate()
+                self.gpio_thread.wait(1000)
+        
+        # Clean up change dispenser
+        try:
+            if hasattr(self, 'change_dispenser'):
+                self.change_dispenser.cleanup()
+        except Exception as e:
+            print(f"Error cleaning up change dispenser: {e}")
+        
+        # Stop any running dispense thread
+        if hasattr(self, 'dispense_thread') and self.dispense_thread and self.dispense_thread.isRunning():
+            print("Stopping dispense thread...")
+            self.dispense_thread.terminate()
+            self.dispense_thread.wait(1000)

@@ -360,9 +360,10 @@ class Print_Options_Screen(QWidget):
         self.analysis_details_label.setText(details_text)
         
     def go_back(self):
-        if self.analysis_thread and self.analysis_thread.isRunning():
-            self.analysis_thread.stop()
-            self.analysis_thread.wait()
+        """Go back to file browser screen."""
+        print("Print options screen: going back to file browser")
+        # Use the on_leave method to properly clean up
+        self.on_leave()
         self.main_app.show_screen('file_browser')
 
     def continue_to_payment(self):
@@ -381,3 +382,24 @@ class Print_Options_Screen(QWidget):
         }
         self.main_app.payment_screen.set_payment_data(payment_data)
         self.main_app.show_screen('payment')
+
+    def on_enter(self):
+        """Called when the print options screen is shown."""
+        print("Print options screen entered")
+        # Ensure analysis thread is not running from previous visits
+        if hasattr(self, 'analysis_thread') and self.analysis_thread and self.analysis_thread.isRunning():
+            print("Stopping previous analysis thread...")
+            self.analysis_thread.stop()
+            self.analysis_thread.wait(1000)
+
+    def on_leave(self):
+        """Called when leaving the print options screen."""
+        print("Print options screen leaving")
+        # Stop analysis thread if running
+        if hasattr(self, 'analysis_thread') and self.analysis_thread and self.analysis_thread.isRunning():
+            print("Stopping analysis thread...")
+            self.analysis_thread.stop()
+            if not self.analysis_thread.wait(2000):  # Wait up to 2 seconds
+                print("Warning: Analysis thread did not stop gracefully")
+                self.analysis_thread.terminate()
+                self.analysis_thread.wait(1000)
