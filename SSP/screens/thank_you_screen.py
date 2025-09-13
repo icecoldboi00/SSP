@@ -83,8 +83,16 @@ class ThankYouScreen(QWidget):
         self.subtitle_label.setText("Please wait while we process your print job.")
         self.redirect_timer.stop()
         
+        # Check if there's already a print job running
+        if hasattr(self.main_app, 'printer_manager') and self.main_app.printer_manager.print_thread:
+            print("Thank you screen: Print job already in progress")
+            # The print job is already running, so we'll wait for the signals
+        else:
+            print("Thank you screen: No print job detected, this might be an error")
+        
     def finish_printing(self):
         """Updates the UI to the finished state and starts the timer to go idle."""
+        print("Thank you screen: Finishing printing, starting 5-second timer")
         self.status_label.setText("PRINTING COMPLETED")
         self.status_label.setStyleSheet("color: #28a745; font-size: 42px; font-weight: bold;")  # Green color
         self.subtitle_label.setText("Kindly collect your documents. We hope to see you again!")
@@ -94,6 +102,7 @@ class ThankYouScreen(QWidget):
 
     def show_waiting_for_print(self):
         """Updates the UI to show that we're waiting for the actual printing to complete."""
+        print("Thank you screen: Showing waiting for print status")
         self.status_label.setText("PRINTING IN PROGRESS...")
         self.status_label.setStyleSheet("color: #ffc107; font-size: 42px; font-weight: bold;")  # Yellow color
         self.subtitle_label.setText("Please wait while your document is being printed.")

@@ -143,6 +143,8 @@ class PrinterThread(QThread):
                 result = subprocess.run(['lpstat', '-o', job_id], 
                                       capture_output=True, text=True)
                 
+                print(f"lpstat result for {job_id}: returncode={result.returncode}, stdout='{result.stdout.strip()}'")
+                
                 if result.returncode != 0 or not result.stdout.strip():
                     # Job is no longer in the queue, it's completed
                     print(f"Print job {job_id} completed after {elapsed_time} seconds")

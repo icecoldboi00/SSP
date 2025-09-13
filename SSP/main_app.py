@@ -130,23 +130,25 @@ class PrintingSystemApp(QMainWindow):
         )
 
     def on_print_successful(self):
-        """Called when the print job is successfully sent to the printer queue."""
-        print("✅ Print job successfully spooled.")
+        """Called when the print job is successfully completed."""
+        print("✅ Print job successfully completed.")
         # Tell the thank you screen to update its state to 'finished'
         # Check if we are on the correct screen, as this signal is asynchronous
         if self.stacked_widget.currentWidget() == self.thank_you_screen:
+            print("Thank you screen is active, calling finish_printing()")
             self.thank_you_screen.finish_printing()
         else:
-            print("Warning: Print successful signal received, but not on thank you screen.")
+            print(f"Warning: Print successful signal received, but not on thank you screen. Current screen: {type(self.stacked_widget.currentWidget()).__name__}")
 
     def on_print_waiting(self):
         """Called when the print job is sent and we're waiting for actual printing to complete."""
         print("⏳ Waiting for print job to complete...")
         # Tell the thank you screen to show waiting status
         if self.stacked_widget.currentWidget() == self.thank_you_screen:
+            print("Thank you screen is active, showing waiting status")
             self.thank_you_screen.show_waiting_for_print()
         else:
-            print("Warning: Print waiting signal received, but not on thank you screen.")
+            print(f"Warning: Print waiting signal received, but not on thank you screen. Current screen: {type(self.stacked_widget.currentWidget()).__name__}")
 
     def on_print_failed(self, error_message):
         """Called when the print job fails."""
