@@ -130,12 +130,21 @@ class PrinterManager(QObject):
         super().__init__()
         self.printer_name = PRINTER_NAME
         self.print_thread = None
+        self.check_printer_availability()
 
     def print_file(self, file_path, copies, color_mode, selected_pages):
         """
         Initiates a new print job in a background thread.
         """
         print(f"Received print request for {file_path}")
+        print(f"Printer name: {self.printer_name}")
+        print(f"Copies: {copies}, Color mode: {color_mode}, Pages: {selected_pages}")
+        
+        # Check if file exists
+        if not os.path.exists(file_path):
+            self.print_job_failed.emit(f"File not found: {file_path}")
+            return
+            
         self.print_thread = PrinterThread(
             file_path=file_path,
             copies=copies,
@@ -147,6 +156,31 @@ class PrinterManager(QObject):
         self.print_thread.print_failed.connect(self.print_job_failed.emit)
         self.print_thread.finished.connect(self.on_thread_finished)
         self.print_thread.start()
+
+    def check_printer_availability(self):
+        """Check if the configured printer is available."""
+        try:
+            # Check if lp command is available
+            result = subprocess.run(['which', 'lp'], capture_output=True, text=True)
+            if result.returncode != 0:
+                print("WARNING: 'lp' command not found. CUPS may not be installed.")
+                return False
+                
+            # Check if printer exists
+            result = subprocess.run(['lpstat', '-p', self.printer_name], 
+                                  capture_output=True, text=True)
+            if result.returncode != 0:
+                print(f"WARNING: Printer '{self.printer_name}' not found.")
+                print("Available printers:")
+                subprocess.run(['lpstat', '-p'], capture_output=False)
+                return False
+                
+            print(f"Printer '{self.printer_name}' is available.")
+            return True
+            
+        except Exception as e:
+            print(f"Error checking printer availability: {e}")
+            return False
 
     def on_thread_finished(self):
         print("Print thread has finished.")
