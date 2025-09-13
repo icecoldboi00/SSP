@@ -83,9 +83,10 @@ def test_print_job():
             f.write(test_content)
             test_file = f.name
         
-        # Try to print the test file
+        # Try to print the test file using the exact command format
         result = subprocess.run([
-            'lp', '-d', PRINTER_NAME, test_file
+            'lp', '-d', 'HP_Smart_Tank_580_590_series_5E0E1D_USB', 
+            '-o', 'print-color-mode=monochrome', test_file
         ], capture_output=True, text=True)
         
         # Clean up test file

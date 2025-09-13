@@ -43,7 +43,12 @@ class PrinterThread(QThread):
 
             # Step 2: Construct the CUPS lp command
             command = self.build_print_command()
+            mode_str = "color" if self.color_mode == "Color" else "monochrome"
             print(f"Executing print command: {' '.join(command)}")
+            print(f"Printing file: {self.temp_pdf_path}")
+            print(f"Printer: HP_Smart_Tank_580_590_series_5E0E1D_USB")
+            print(f"Color mode: {self.color_mode} -> {mode_str}")
+            print(f"Copies: {self.copies}")
 
             # Step 3: Execute the command and wait for it to complete
             process = subprocess.run(
@@ -101,13 +106,19 @@ class PrinterThread(QThread):
         """Constructs the list of arguments for the subprocess call."""
         mode_str = "color" if self.color_mode == "Color" else "monochrome"
         
+        # Use the exact command format specified for Raspberry Pi
         command = [
             "lp",
-            "-d", self.printer_name,
-            "-n", str(self.copies),
+            "-d", "HP_Smart_Tank_580_590_series_5E0E1D_USB",
             "-o", f"print-color-mode={mode_str}",
             self.temp_pdf_path
         ]
+        
+        # Add copies if more than 1
+        if self.copies > 1:
+            command.insert(-1, "-n")
+            command.insert(-1, str(self.copies))
+        
         return command
 
     def cleanup_temp_pdf(self):
