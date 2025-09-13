@@ -6,6 +6,7 @@ from PyQt5.QtWidgets import (
     QLineEdit, QMessageBox
 )
 from PyQt5.QtCore import Qt
+from PyQt5.QtGui import QIntValidator
 from database.db_manager import DatabaseManager
 from sms_manager import get_sms_manager, initialize_sms
 
@@ -190,7 +191,7 @@ class AdminScreen(QWidget):
                 border: 2px solid #007bff;
             }
         """)
-        self.paper_count_input.setValidator(Qt.QIntValidator(0, 100))
+        self.paper_count_input.setValidator(QIntValidator(0, 100))
         self.paper_count_input.returnPressed.connect(self.update_paper_count_from_input)
         self.paper_count_input.editingFinished.connect(self.update_paper_count_from_input)
         
