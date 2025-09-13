@@ -2,7 +2,8 @@
 
 from PyQt5.QtWidgets import (
     QWidget, QVBoxLayout, QLabel, QPushButton, QHBoxLayout, QFrame,
-    QDialog, QTabWidget, QTableWidget, QTableWidgetItem, QHeaderView
+    QDialog, QTabWidget, QTableWidget, QTableWidgetItem, QHeaderView,
+    QLineEdit, QMessageBox
 )
 from PyQt5.QtCore import Qt
 from database.db_manager import DatabaseManager
@@ -170,9 +171,40 @@ class AdminScreen(QWidget):
         paper_label = QLabel("Paper Count:")
         paper_label.setStyleSheet("color: white; font-size: 16px;")
         
-        self.paper_count_display = QLabel(f"{self.paper_count} sheets")
+        # Editable paper count input
+        self.paper_count_input = QLineEdit()
+        self.paper_count_input.setText(str(self.paper_count))
+        self.paper_count_input.setMaximumWidth(80)
+        self.paper_count_input.setStyleSheet("""
+            QLineEdit {
+                background-color: #1f1f38;
+                color: white;
+                font-size: 16px;
+                font-weight: bold;
+                border: 2px solid #4a4a6b;
+                border-radius: 5px;
+                padding: 5px 10px;
+                text-align: center;
+            }
+            QLineEdit:focus {
+                border: 2px solid #007bff;
+            }
+        """)
+        self.paper_count_input.setValidator(Qt.QIntValidator(0, 100))
+        self.paper_count_input.returnPressed.connect(self.update_paper_count_from_input)
+        self.paper_count_input.editingFinished.connect(self.update_paper_count_from_input)
         
-        reset_paper_btn = QPushButton("Reset Paper (500 sheets)") # CORRECTED
+        sheets_label = QLabel("sheets")
+        sheets_label.setStyleSheet("color: white; font-size: 16px;")
+        
+        update_paper_btn = QPushButton("Update")
+        update_paper_btn.setStyleSheet("""
+            QPushButton { background-color: #007bff; color: white; font-size: 14px; border: none; border-radius: 5px; padding: 8px 15px; }
+            QPushButton:hover { background-color: #0056b3; }
+        """)
+        update_paper_btn.clicked.connect(self.update_paper_count_from_input)
+        
+        reset_paper_btn = QPushButton("Reset to 100")
         reset_paper_btn.setStyleSheet("""
             QPushButton { background-color: #4CAF50; color: white; font-size: 14px; border: none; border-radius: 5px; padding: 8px 15px; }
             QPushButton:hover { background-color: #45a049; }
@@ -180,9 +212,12 @@ class AdminScreen(QWidget):
         reset_paper_btn.clicked.connect(self.reset_paper_count)
         
         paper_layout.addWidget(paper_label)
-        paper_layout.addWidget(self.paper_count_display)
-        paper_layout.addStretch()
+        paper_layout.addWidget(self.paper_count_input)
+        paper_layout.addWidget(sheets_label)
+        paper_layout.addSpacing(10)
+        paper_layout.addWidget(update_paper_btn)
         paper_layout.addWidget(reset_paper_btn)
+        paper_layout.addStretch()
         paper_section.setLayout(paper_layout)
         
         # Ink Level Section (Placeholder)
@@ -239,15 +274,15 @@ class AdminScreen(QWidget):
         
     def load_paper_count_from_db(self):
         """Loads the current paper count from the database."""
-        return self.db_manager.get_setting('paper_count', default=500)
+        return self.db_manager.get_setting('paper_count', default=100)
 
     def reset_paper_count(self):
-        """Reset paper count to 500 sheets and save to DB."""
-        self.paper_count = 500
+        """Reset paper count to 100 sheets and save to DB."""
+        self.paper_count = 100
         self.db_manager.update_setting('paper_count', self.paper_count)
         self.update_paper_display()
         self.sms_alert_sent = False  # Reset SMS alert flag when paper is refilled
-        print("DEBUG: Paper count reset to 500 sheets, SMS alert flag reset")
+        print("DEBUG: Paper count reset to 100 sheets, SMS alert flag reset")
 
     def update_paper_count(self, pages_to_print):
         """Update paper count and save to DB. Returns True if enough paper."""
@@ -265,8 +300,8 @@ class AdminScreen(QWidget):
         return False
 
     def update_paper_display(self):
-        """Update the paper count label and its color based on the amount."""
-        self.paper_count_display.setText(f"{self.paper_count} sheets")
+        """Update the paper count input field and its color based on the amount."""
+        self.paper_count_input.setText(str(self.paper_count))
         
         if self.paper_count <= 20:
             color = "#dc3545"  # Red for critical
@@ -275,16 +310,62 @@ class AdminScreen(QWidget):
         else:
             color = "#28a745"  # Green for good
             
-        self.paper_count_display.setStyleSheet(f"""
-            QLabel {{
-                color: white; font-size: 16px; padding: 5px 10px;
-                background-color: {color}; border: 2px solid #4a4a6b;
-                border-radius: 5px; min-width: 120px; qproperty-alignment: 'AlignCenter';
+        self.paper_count_input.setStyleSheet(f"""
+            QLineEdit {{
+                background-color: #1f1f38;
+                color: white;
+                font-size: 16px;
+                font-weight: bold;
+                border: 2px solid {color};
+                border-radius: 5px;
+                padding: 5px 10px;
+                text-align: center;
+            }}
+            QLineEdit:focus {{
+                border: 2px solid #007bff;
             }}
         """)
 
     def get_paper_count(self):
         return self.paper_count
+
+    def update_paper_count_from_input(self):
+        """Update paper count from the input field with validation."""
+        try:
+            new_count = int(self.paper_count_input.text())
+            
+            # Validate range (0-100)
+            if new_count < 0:
+                new_count = 0
+                QMessageBox.warning(self, "Invalid Input", "Paper count cannot be negative. Set to 0.")
+            elif new_count > 100:
+                new_count = 100
+                QMessageBox.warning(self, "Invalid Input", "Maximum paper count is 100 sheets. Set to 100.")
+            
+            # Update paper count
+            old_count = self.paper_count
+            self.paper_count = new_count
+            self.db_manager.update_setting('paper_count', self.paper_count)
+            self.update_paper_display()
+            
+            # Reset SMS alert flag if paper count increased
+            if new_count > old_count and new_count > 10:
+                self.sms_alert_sent = False
+                print("Paper count increased, SMS alert flag reset")
+            
+            # Check for low paper alert if count decreased
+            if new_count < old_count:
+                self.check_low_paper_alert()
+            
+            print(f"DEBUG: Paper count updated from {old_count} to {new_count} sheets")
+            
+        except ValueError:
+            # Invalid input, reset to current value
+            self.paper_count_input.setText(str(self.paper_count))
+            QMessageBox.warning(self, "Invalid Input", "Please enter a valid number between 0 and 100.")
+        except Exception as e:
+            print(f"Error updating paper count: {e}")
+            self.paper_count_input.setText(str(self.paper_count))
 
     def initialize_sms_system(self):
         """Initialize the SMS system for low paper alerts."""
