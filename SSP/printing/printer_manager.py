@@ -87,7 +87,10 @@ class PrinterThread(QThread):
             pages_0_indexed = [p - 1 for p in self.selected_pages]
             
             temp_doc = fitz.open()  # Create a new empty PDF
-            temp_doc.insert_pdf(original_doc, pages=pages_0_indexed)
+            
+            # Copy each selected page individually (compatible with older PyMuPDF versions)
+            for page_num in pages_0_indexed:
+                temp_doc.insert_pdf(original_doc, from_page=page_num, to_page=page_num)
             
             # Save to a temporary file
             fd, self.temp_pdf_path = tempfile.mkstemp(suffix=".pdf", prefix="printjob-")
