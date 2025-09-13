@@ -19,6 +19,7 @@ class PrinterThread(QThread):
     """
     print_success = pyqtSignal()
     print_failed = pyqtSignal(str)
+    print_waiting = pyqtSignal()
 
     def __init__(self, file_path, copies, color_mode, selected_pages, printer_name):
         super().__init__()
@@ -59,8 +60,30 @@ class PrinterThread(QThread):
                 timeout=180  # 3 minute timeout
             )
 
-            # Step 4: Check the result and emit signals
+            # Step 4: Check the result and wait for print job completion
             print(f"Print job sent to CUPS successfully. stdout: {process.stdout}")
+            
+            # Extract job ID from the output (format: "request id is HP_Smart_Tank_580_590_series_5E0E1D_USB-1 (1 file(s))")
+            job_id = None
+            if "request id is" in process.stdout:
+                try:
+                    job_id = process.stdout.split("request id is")[1].split()[0]
+                    print(f"Print job ID: {job_id}")
+                except:
+                    print("Could not extract job ID from output")
+            
+            # Wait for the print job to actually complete
+            if job_id:
+                # Signal that we're now waiting for actual printing to complete
+                self.print_waiting.emit()
+                self.wait_for_print_completion(job_id)
+            else:
+                # If we can't get job ID, wait a reasonable time for printing
+                print("Waiting 30 seconds for print job to complete...")
+                self.print_waiting.emit()
+                import time
+                time.sleep(30)
+            
             self.print_success.emit()
 
         except subprocess.TimeoutExpired:
@@ -105,6 +128,38 @@ class PrinterThread(QThread):
             self.print_failed.emit(error_msg)
             self.temp_pdf_path = None
 
+    def wait_for_print_completion(self, job_id):
+        """Wait for the print job to actually complete."""
+        import time
+        
+        print(f"Waiting for print job {job_id} to complete...")
+        max_wait_time = 300  # 5 minutes maximum wait
+        check_interval = 5   # Check every 5 seconds
+        elapsed_time = 0
+        
+        while elapsed_time < max_wait_time:
+            try:
+                # Check if the job is still in the queue
+                result = subprocess.run(['lpstat', '-o', job_id], 
+                                      capture_output=True, text=True)
+                
+                if result.returncode != 0 or not result.stdout.strip():
+                    # Job is no longer in the queue, it's completed
+                    print(f"Print job {job_id} completed after {elapsed_time} seconds")
+                    return True
+                else:
+                    print(f"Print job {job_id} still printing... ({elapsed_time}s elapsed)")
+                    time.sleep(check_interval)
+                    elapsed_time += check_interval
+                    
+            except Exception as e:
+                print(f"Error checking print job status: {e}")
+                time.sleep(check_interval)
+                elapsed_time += check_interval
+        
+        print(f"Print job {job_id} timed out after {max_wait_time} seconds")
+        return False
+
     def build_print_command(self):
         """Constructs the list of arguments for the subprocess call."""
         mode_str = "color" if self.color_mode == "Color" else "monochrome"
@@ -139,6 +194,7 @@ class PrinterManager(QObject):
     """
     print_job_successful = pyqtSignal()
     print_job_failed = pyqtSignal(str)
+    print_job_waiting = pyqtSignal()
 
     def __init__(self):
         super().__init__()
@@ -168,6 +224,7 @@ class PrinterManager(QObject):
         )
         self.print_thread.print_success.connect(self.print_job_successful.emit)
         self.print_thread.print_failed.connect(self.print_job_failed.emit)
+        self.print_thread.print_waiting.connect(self.print_job_waiting.emit)
         self.print_thread.finished.connect(self.on_thread_finished)
         self.print_thread.start()
 

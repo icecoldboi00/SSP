@@ -78,18 +78,25 @@ class ThankYouScreen(QWidget):
     def on_enter(self):
         """Called when the screen is shown."""
         # Reset to the initial "printing in progress" state every time
-        self.status_label.setText("FILE PRINTING IN PROGRESS...")
+        self.status_label.setText("SENDING TO PRINTER...")
         self.status_label.setStyleSheet("color: #36454F; font-size: 42px; font-weight: bold;")
-        self.subtitle_label.setText("Please wait a moment.")
+        self.subtitle_label.setText("Please wait while we process your print job.")
         self.redirect_timer.stop()
         
     def finish_printing(self):
         """Updates the UI to the finished state and starts the timer to go idle."""
-        self.status_label.setText("PRINTING HAS FINISHED")
+        self.status_label.setText("PRINTING COMPLETED")
+        self.status_label.setStyleSheet("color: #28a745; font-size: 42px; font-weight: bold;")  # Green color
         self.subtitle_label.setText("Kindly collect your documents. We hope to see you again!")
         
         # Start the 5-second timer to go back to the idle screen
         self.redirect_timer.start(5000)
+
+    def show_waiting_for_print(self):
+        """Updates the UI to show that we're waiting for the actual printing to complete."""
+        self.status_label.setText("PRINTING IN PROGRESS...")
+        self.status_label.setStyleSheet("color: #ffc107; font-size: 42px; font-weight: bold;")  # Yellow color
+        self.subtitle_label.setText("Please wait while your document is being printed.")
 
     def show_printing_error(self, message: str):
         """Updates the UI to show a printing error."""

@@ -78,6 +78,7 @@ class PrintingSystemApp(QMainWindow):
         self.payment_screen.payment_completed.connect(self.on_payment_completed)
         self.printer_manager.print_job_successful.connect(self.on_print_successful)
         self.printer_manager.print_job_failed.connect(self.on_print_failed)
+        self.printer_manager.print_job_waiting.connect(self.on_print_waiting)
 
     def show_screen(self, screen_name):
         """Switch between screens, calling on_leave and on_enter methods."""
@@ -137,6 +138,15 @@ class PrintingSystemApp(QMainWindow):
             self.thank_you_screen.finish_printing()
         else:
             print("Warning: Print successful signal received, but not on thank you screen.")
+
+    def on_print_waiting(self):
+        """Called when the print job is sent and we're waiting for actual printing to complete."""
+        print("⏳ Waiting for print job to complete...")
+        # Tell the thank you screen to show waiting status
+        if self.stacked_widget.currentWidget() == self.thank_you_screen:
+            self.thank_you_screen.show_waiting_for_print()
+        else:
+            print("Warning: Print waiting signal received, but not on thank you screen.")
 
     def on_print_failed(self, error_message):
         """Called when the print job fails."""
