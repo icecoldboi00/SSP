@@ -6,7 +6,7 @@
 ```bash
 sudo apt update
 sudo apt install python3-pip python3-pyqt5
-pip3 install PyMuPDF
+pip3 install PyMuPDF pyserial
 ```
 
 ### 2. Install and Configure CUPS (Printing System)
@@ -56,6 +56,17 @@ echo "Test print" | lp -d "HP_Smart_Tank_580_590_series"
 
 ### 5. Update Printer Name in Code
 Edit `printing/printer_manager.py` and update the `PRINTER_NAME` variable with your actual printer name from `lpstat -p`.
+
+### 6. Configure SMS System (Optional)
+If you want to receive low paper alerts via SMS:
+
+1. **Connect GSM Module**: Connect your GSM module to the Raspberry Pi's serial port (`/dev/serial0`)
+2. **Install SIM Card**: Insert a SIM card with SMS capability
+3. **Update Phone Number**: Edit `sms_manager.py` and update the `phone_number` variable with your phone number
+4. **Test SMS**: Run the test script:
+   ```bash
+   python3 test_sms.py
+   ```
 
 ## Running the Application
 

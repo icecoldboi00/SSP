@@ -17,6 +17,7 @@ from screens.admin_screen import AdminScreen
 from screens.thank_you_screen import ThankYouScreen
 from database.models import init_db
 from printing.printer_manager import PrinterManager  # Import the new manager
+from sms_manager import cleanup_sms
 
 try:
     from screens.usb_file_manager import USBFileManager
@@ -158,6 +159,20 @@ class PrintingSystemApp(QMainWindow):
             self.thank_you_screen.show_printing_error(error_message)
         else:
             print(f"Warning: Print failed signal received, but not on thank you screen. Error: {error_message}")
+
+    def cleanup(self):
+        """Clean up resources when the application is closing."""
+        print("Cleaning up application resources...")
+        try:
+            cleanup_sms()
+            print("SMS system cleaned up")
+        except Exception as e:
+            print(f"Error during cleanup: {e}")
+
+    def closeEvent(self, event):
+        """Handle application close event."""
+        self.cleanup()
+        event.accept()
 
 def main():
     try:

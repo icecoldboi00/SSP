@@ -6,6 +6,7 @@ from PyQt5.QtWidgets import (
 )
 from PyQt5.QtCore import Qt
 from database.db_manager import DatabaseManager
+from sms_manager import get_sms_manager, initialize_sms
 
 # --- Data Viewer Dialog Class ---
 # This class creates a pop-up window with tabs to show database information.
@@ -141,8 +142,10 @@ class AdminScreen(QWidget):
         self.main_app = main_app
         self.db_manager = DatabaseManager()
         self.paper_count = self.load_paper_count_from_db()
+        self.sms_alert_sent = False  # Track if low paper SMS has been sent
         self.setup_ui()
         self.update_paper_display() # Update display on first load
+        self.initialize_sms_system()
 
     def setup_ui(self):
         self.setStyleSheet("background-color: #1f1f38;")
@@ -243,7 +246,8 @@ class AdminScreen(QWidget):
         self.paper_count = 500
         self.db_manager.update_setting('paper_count', self.paper_count)
         self.update_paper_display()
-        print("DEBUG: Paper count reset to 500 sheets")
+        self.sms_alert_sent = False  # Reset SMS alert flag when paper is refilled
+        print("DEBUG: Paper count reset to 500 sheets, SMS alert flag reset")
 
     def update_paper_count(self, pages_to_print):
         """Update paper count and save to DB. Returns True if enough paper."""
@@ -252,6 +256,10 @@ class AdminScreen(QWidget):
             self.db_manager.update_setting('paper_count', self.paper_count)
             self.update_paper_display()
             print(f"DEBUG: Paper count updated to {self.paper_count} sheets")
+            
+            # Check for low paper and send SMS alert
+            self.check_low_paper_alert()
+            
             return True
         print(f"ERROR: Not enough paper. Required: {pages_to_print}, Available: {self.paper_count}")
         return False
@@ -277,6 +285,41 @@ class AdminScreen(QWidget):
 
     def get_paper_count(self):
         return self.paper_count
+
+    def initialize_sms_system(self):
+        """Initialize the SMS system for low paper alerts."""
+        try:
+            print("Initializing SMS system...")
+            sms_manager = get_sms_manager()
+            if sms_manager.initialize_modem():
+                print("SMS system initialized successfully")
+            else:
+                print("SMS system initialization failed - alerts will be disabled")
+        except Exception as e:
+            print(f"Error initializing SMS system: {e}")
+
+    def check_low_paper_alert(self):
+        """Check if paper count is low and send SMS alert if needed."""
+        if self.paper_count <= 10 and not self.sms_alert_sent:
+            print(f"Low paper detected: {self.paper_count} sheets remaining")
+            self.send_low_paper_sms()
+        elif self.paper_count > 10:
+            # Reset the alert flag when paper is refilled
+            self.sms_alert_sent = False
+            print("Paper count restored, SMS alert flag reset")
+
+    def send_low_paper_sms(self):
+        """Send low paper SMS alert."""
+        try:
+            print("Sending low paper SMS alert...")
+            sms_manager = get_sms_manager()
+            if sms_manager.send_low_paper_alert():
+                self.sms_alert_sent = True
+                print("Low paper SMS alert sent successfully")
+            else:
+                print("Failed to send low paper SMS alert")
+        except Exception as e:
+            print(f"Error sending low paper SMS: {e}")
 
     def show_data_viewer(self):
         """Create and show the data viewer dialog window."""
