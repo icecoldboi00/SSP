@@ -129,6 +129,8 @@ class GPIOPaymentThread(QThread):
                 self.pi.stop()
             except Exception as e:
                 print(f"Error stopping GPIO: {e}")
+            finally:
+                self.pi = None
 
 
 class PaymentScreen(QWidget):
@@ -145,7 +147,7 @@ class PaymentScreen(QWidget):
         self.gpio_thread, self.dispense_thread = None, None
         self.change_dispenser = ChangeDispenser()
         self.init_ui()
-        self.setup_gpio()
+        # self.setup_gpio() # <-- REMOVED from __init__
 
     def set_payment_data(self, payment_data):
         self.payment_data = payment_data
@@ -461,6 +463,11 @@ class PaymentScreen(QWidget):
     def on_enter(self):
         """Called when the payment screen is shown."""
         print("Payment screen entered")
+        
+        # Start a fresh GPIO thread every time the screen is entered to ensure
+        # the connection to the pigpio daemon is active.
+        self.setup_gpio()
+        
         # Reset payment state when entering the screen
         self.payment_ready = False
         self.amount_received = 0
