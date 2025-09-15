@@ -1,100 +1,34 @@
 # usb_screen.py
 
-import sys
 import os
-import shutil
+import sys
 import tempfile
-from PyQt5.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QFrame,
-    QSpacerItem, QSizePolicy, QDialog, QMessageBox, QListWidget
-)
-from PyQt5.QtCore import Qt, QTimer, QThread, pyqtSignal
 import threading
+from PyQt5.QtCore import Qt, QTimer, QThread, pyqtSignal
+from PyQt5.QtGui import QPixmap, QColor
+from PyQt5.QtWidgets import (
+    QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QStackedLayout,
+    QMessageBox, QDialog
+)
 
 try:
     from screens.usb_file_manager import USBFileManager
     print("✅ USBFileManager imported successfully in usb_screen.py")
-except Exception as e:
-    print(f"❌ Failed to import USBFileManager in usb_screen.py: {e}")
-    # Dummy fallback for development/testing
+except ImportError:
+    print("❌ Failed to import USBFileManager in usb_screen.py. Using fallback.")
     class USBFileManager:
         def __init__(self):
             self.destination_dir = os.path.join(tempfile.gettempdir(), "PrintingSystem", "DummySession")
-            self.supported_extensions = ['.pdf']
-            self.last_known_drives = set()
             os.makedirs(self.destination_dir, exist_ok=True)
             print(f"❗️ Using dummy USBFileManager. Destination: {self.destination_dir}")
+        def get_usb_drives(self): return []
+        def check_for_new_drives(self): return [], []
+        def scan_and_copy_pdf_files(self, source_dir): return []
+        def cleanup_all_temp_folders(self): pass
+        def cleanup_temp_files(self): pass
 
-        def get_usb_drives(self):
-            return []
-
-        def check_for_new_drives(self):
-            return [], []
-
-        def scan_and_copy_pdf_files(self, source_dir):
-            dummy_filename = "dummy_auto_detect.pdf"
-            dummy_path = os.path.join(self.destination_dir, dummy_filename)
-            try:
-                with open(dummy_path, 'wb') as f:
-                    f.write(b'%PDF-1.4\n1 0 obj<</Type/Page/Contents(Dummy)>>endobj\nxref\n0 2\n0000000000 00000 n\n0000000009 00000 n\ntrailer<</Size 2/Root 1 0 R>>startxref\n0\n%%EOF')
-                print(f"Dummy PDF created for auto-detection: {dummy_path}")
-            except Exception as e:
-                print(f"Error creating dummy PDF for auto-detect: {e}")
-                dummy_path = ""
-            return [{
-                'filename': dummy_filename,
-                'size': 1024 * 500 if os.path.exists(dummy_path) else 0,
-                'pages': 3,
-                'path': dummy_path,
-                'type': '.pdf'
-            }] if os.path.exists(dummy_path) else []
-
-        def cleanup_temp_files(self):
-            if os.path.exists(self.destination_dir):
-                shutil.rmtree(self.destination_dir)
-                os.makedirs(self.destination_dir, exist_ok=True)
-            print("Dummy cleanup_temp_files called.")
-
-        def cleanup_all_temp_folders(self):
-            temp_base_dir = os.path.join(tempfile.gettempdir(), "PrintingSystem")
-            if os.path.exists(temp_base_dir):
-                shutil.rmtree(temp_base_dir)
-            os.makedirs(temp_base_dir, exist_ok=True)
-            print("Dummy cleanup_all_temp_folders called.")
-
-        def get_temp_folder_info(self):
-            try:
-                if os.path.exists(self.destination_dir):
-                    files = os.listdir(self.destination_dir)
-                    total_size = sum(os.path.getsize(os.path.join(self.destination_dir, f))
-                                     for f in files if os.path.isfile(os.path.join(self.destination_dir, f)))
-                    return {
-                        'folder_path': self.destination_dir,
-                        'file_count': len(files),
-                        'total_size': total_size,
-                        'session_id': 'DummySession'
-                    }
-                return None
-            except Exception as e:
-                return None
-
-        def get_drive_info(self, drive_path):
-            try:
-                total, used, free = shutil.disk_usage(drive_path)
-                total_gb = total // (1024 ** 3)
-                used_gb = used // (1024 ** 3)
-                free_gb = free // (1024 ** 3)
-                return {
-                    'path': drive_path,
-                    'total_gb': total_gb,
-                    'used_gb': used_gb,
-                    'free_gb': free_gb,
-                    'is_removable': True,
-                    'filesystem': "Unknown"
-                }
-            except Exception as e:
-                print(f"Error getting drive info for {drive_path}: {e}")
-                return None
+def get_base_dir():
+    return os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
 
 class USBMonitorThread(QThread):
     usb_detected = pyqtSignal(str)
@@ -103,23 +37,20 @@ class USBMonitorThread(QThread):
     def __init__(self, usb_manager):
         super().__init__()
         self.usb_manager = usb_manager
-        self.monitoring = False
+        self.monitoring = True
 
     def run(self):
-        self.monitoring = True
         while self.monitoring:
             try:
                 new_drives, removed_drives = self.usb_manager.check_for_new_drives()
                 if new_drives:
-                    print(f"🔌 New USB drive detected: {new_drives[0]}")
                     self.usb_detected.emit(new_drives[0])
-                elif removed_drives:
-                    print(f"🔌 USB drive removed: {removed_drives[0]}")
+                if removed_drives:
                     self.usb_removed.emit(removed_drives[0])
                 self.msleep(2000)
             except Exception as e:
-                print(f"Error monitoring USB: {e}")
-                self.msleep(2000)
+                print(f"Error in USBMonitorThread: {e}")
+                self.msleep(5000)
 
     def stop_monitoring(self):
         self.monitoring = False
@@ -130,594 +61,319 @@ class USBScreen(QWidget):
         self.main_app = main_app
         self.usb_manager = USBFileManager()
         self.monitoring_thread = None
+        self.blink_timer = QTimer(self)
+
+        self.STATUS_COLORS = {
+            'monitoring': '#ff9900',  # Orange
+            'success': '#28a745',     # Green
+            'warning': '#ffc107',     # Yellow
+            'error': '#dc3545'        # Red
+        }
+        
         self.setup_ui()
-        self.setup_timers()
+        self.setup_timers_and_connections()
+        
         try:
             self.usb_manager.cleanup_all_temp_folders()
         except Exception as e:
-            print(f"Error cleaning up old temp folders: {e}")
+            print(f"Error during initial cleanup of old temp folders: {e}")
 
     def setup_ui(self):
-        layout = QVBoxLayout()
-        layout.setContentsMargins(0, 0, 0, 0)
+        """
+        Initializes the user interface using a flexible, layered layout.
+        """
+        # 1. Main Stacked Layout for Background/Foreground Layering
+        main_layout = QStackedLayout(self)
+        main_layout.setContentsMargins(0, 0, 0, 0)
+        # --- FIX: Set stacking mode to allow layering ---
+        main_layout.setStackingMode(QStackedLayout.StackAll)
+        self.setLayout(main_layout)
 
-        main_frame = QFrame()
-        main_frame.setStyleSheet("""
-            QFrame {
-                background-color: #0f0f1f;
-                border: none;
-            }
-        """)
-        frame_layout = QVBoxLayout(main_frame)
-        frame_layout.setContentsMargins(50, 50, 50, 50)
-        frame_layout.setSpacing(30)
+        # 2. Background Layer
+        background_label = QLabel()
+        base_dir = get_base_dir()
+        image_path = os.path.join(base_dir, 'assets', 'usb_screen background.png')
+        if os.path.exists(image_path):
+            pixmap = QPixmap(image_path)
+            background_label.setPixmap(pixmap)
+            background_label.setScaledContents(True)
+        else:
+            print(f"WARNING: Background image not found at '{image_path}'")
+            background_label.setStyleSheet("background-color: #e0e0e0;")
 
+        # 3. Foreground Layer (contains all UI controls)
+        foreground_widget = QWidget()
+        foreground_widget.setStyleSheet("background-color: transparent;")
+        
+        fg_layout = QVBoxLayout(foreground_widget)
+        fg_layout.setContentsMargins(40, 30, 40, 30)
+        fg_layout.setSpacing(15)
+
+        # --- UI Elements ---
         title = QLabel("INSERT USB FLASHDRIVE")
         title.setAlignment(Qt.AlignCenter)
-        title.setStyleSheet("""
-            QLabel {
-                color: white;
-                font-size: 42px;
-                font-weight: bold;
-                margin: 20px;
-            }
-        """)
+        title.setStyleSheet("color: #36454F; font-size: 38px; font-weight: bold;")
+        title.setWordWrap(True)
 
-        instruction = QLabel("Please insert your flash drive into the USB port below. The system will automatically check for the drive.")
+        instruction = QLabel("The system will automatically detect your drive. If it doesn't appear, you can try a manual scan.")
         instruction.setAlignment(Qt.AlignCenter)
         instruction.setWordWrap(True)
-        instruction.setStyleSheet("""
-            QLabel {
-                color: white;
-                font-size: 28px;
-                line-height: 1.4;
-                margin: 20px;
-            }
-        """)
+        instruction.setStyleSheet("color: #36454F; font-size: 22px; line-height: 1.4;")
+        instruction.setMaximumWidth(800)
 
-        nfd_label = QLabel("No flash drive found? Click the manual scan button.")
-        nfd_label.setAlignment(Qt.AlignCenter)
-        nfd_label.setWordWrap(True)
-        nfd_label.setStyleSheet("""
-            QLabel {
-                color: white;
-                font-size: 18px;
-                font-style: italic;
-                margin: 10px;
-            }
-        """)
-
-        self.status_indicator = QLabel("Monitoring for USB devices...")
+        self.status_indicator = QLabel("Initializing...")
         self.status_indicator.setAlignment(Qt.AlignCenter)
-        self.status_indicator.setStyleSheet("""
-            QLabel {
-                color: #ffff33;
-                font-size: 20px;
-                margin: 15px;
-                padding: 10px;
-                border: 2px solid #ffff33;
-                border-radius: 8px;
-                background-color: rgba(255, 255, 51, 0.1);
+        self.status_indicator.setMinimumHeight(55)
+        self.status_indicator.setStyleSheet(f"""
+            QLabel {{
+                color: #555; font-size: 18px; padding: 10px 20px;
+                border: 2px solid #ccc; border-radius: 8px;
+                background-color: rgba(255, 255, 255, 0.1);
+            }}""")
+
+        # Button Styles
+        action_button_style = """
+            QPushButton {
+                background-color: #1e440a; color: white; font-size: 15px;
+                font-weight: bold; border: none; border-radius: 8px; 
+                padding: 12px 24px;
             }
-        """)
-
-        self.temp_info_label = QLabel("")
-        self.temp_info_label.setAlignment(Qt.AlignCenter)
-        self.temp_info_label.setStyleSheet("""
-            QLabel {
-                color: #888888;
-                font-size: 12px;
-                margin: 5px;
+            QPushButton:hover { background-color: #2a5d1a; }
+            QPushButton:pressed { background-color: #142e07; }
+        """
+        back_button_style = """
+            QPushButton { 
+                background-color: #6c757d; color: white; font-size: 14px;
+                border: none; border-radius: 6px; padding: 10px 20px;
             }
-        """)
-        self.update_temp_info()
-
-        formats_label = QLabel("Supported format: PDF files only")
-        formats_label.setAlignment(Qt.AlignCenter)
-        formats_label.setStyleSheet("""
-            QLabel {
-                color: #b3b3b3;
-                font-size: 16px;
-                margin: 10px;
+            QPushButton:hover { background-color: #5a6268; }
+        """
+        cancel_button_style = """
+            QPushButton { 
+                background-color: #c82333; color: white; font-size: 14px;
+                border: none; border-radius: 6px; padding: 10px 20px;
             }
-        """)
+            QPushButton:hover { background-color: #a51c2a; }
+        """
 
-        buttons_layout = QHBoxLayout()
-        buttons_layout.setSpacing(20)
-
+        # Button Creation
         scan_button = QPushButton("Manual Scan")
-        scan_button.setMinimumHeight(50)
-        scan_button.setStyleSheet("""
-            QPushButton {
-                background-color: #2d5aa0;
-                color: white;
-                font-size: 18px;
-                font-weight: bold;
-                border: none;
-                border-radius: 8px;
-                padding: 12px 24px;
-            }
-            QPushButton:hover {
-                background-color: #3d6ab0;
-            }
-            QPushButton:pressed {
-                background-color: #1d4a90;
-            }
-        """)
-        scan_button.clicked.connect(self.manual_scan_usb_drives)
-
-        test_button = QPushButton("TEST: Simulate PDF Files Found")
-        test_button.setMinimumHeight(50)
-        test_button.setStyleSheet("""
-            QPushButton {
-                background-color: #2d5aa0;
-                color: white;
-                font-size: 18px;
-                font-weight: bold;
-                border: none;
-                border-radius: 8px;
-                padding: 12px 24px;
-            }
-            QPushButton:hover {
-                background-color: #3d6ab0;
-            }
-        """)
-        test_button.clicked.connect(self.test_simulate_files_found)
-
+        scan_button.setStyleSheet(action_button_style)
+        
+        test_button = QPushButton("TEST: Simulate PDF")
+        test_button.setStyleSheet(action_button_style)
+        
         clean_button = QPushButton("Clean Temp Files")
-        clean_button.setMinimumHeight(50)
-        clean_button.setStyleSheet("""
-            QPushButton {
-                background-color: #2d5aa0;
-                color: white;
-                font-size: 18px;
-                font-weight: bold;
-                border: none;
-                border-radius: 8px;
-                padding: 12px 24px;
-            }
-            QPushButton:hover {
-                background-color: #3d6ab0;
-            }
-            QPushButton:pressed {
-                background-color: #1d4a90;
-            }
-        """)
-        clean_button.clicked.connect(self.manual_cleanup)
+        clean_button.setStyleSheet(action_button_style)
 
-        buttons_layout.addWidget(scan_button)
-        buttons_layout.addWidget(test_button)
-        buttons_layout.addWidget(clean_button)
-
-        bottom_layout = QHBoxLayout()
-
-        back_button = QPushButton("← Back to Idle")
-        back_button.setMinimumHeight(40)
-        back_button.setStyleSheet("""
-            QPushButton {
-                background-color: #4d4d80;
-                color: white;
-                font-size: 18px;
-                border: none;
-                border-radius: 6px;
-                padding: 10px 20px;
-            }
-            QPushButton:hover {
-                background-color: #5d5d90;
-            }
-        """)
-        back_button.clicked.connect(self.go_back)
-
+        back_button = QPushButton("← Back to Main")
+        back_button.setStyleSheet(back_button_style)
+        
         cancel_button = QPushButton("Cancel")
-        cancel_button.setMinimumHeight(40)
-        cancel_button.setStyleSheet("""
-            QPushButton {
-                background-color: #cc4d4d;
-                color: white;
-                font-size: 18px;
-                border: none;
-                border-radius: 6px;
-                padding: 10px 20px;
-            }
-            QPushButton:hover {
-                background-color: #dc5d5d;
-            }
-        """)
-        cancel_button.clicked.connect(self.cancel_operation)
+        cancel_button.setStyleSheet(cancel_button_style)
+        
+        # --- Layout Assembly ---
+        fg_layout.addStretch(3)
+        fg_layout.addWidget(title, 0, Qt.AlignCenter)
+        fg_layout.addSpacing(10)
+        fg_layout.addWidget(instruction, 0, Qt.AlignCenter)
+        fg_layout.addStretch(1)
+        
+        status_layout = QHBoxLayout()
+        status_layout.addStretch()
+        status_layout.addWidget(self.status_indicator)
+        status_layout.addStretch()
+        fg_layout.addLayout(status_layout)
+        fg_layout.addSpacing(20)
 
-        bottom_layout.addWidget(back_button)
-        bottom_layout.addStretch()
-        bottom_layout.addWidget(cancel_button)
+        action_buttons_layout = QHBoxLayout()
+        action_buttons_layout.addStretch()
+        action_buttons_layout.addWidget(scan_button)
+        action_buttons_layout.addSpacing(20)
+        action_buttons_layout.addWidget(test_button)
+        action_buttons_layout.addSpacing(20)
+        action_buttons_layout.addWidget(clean_button)
+        action_buttons_layout.addStretch()
+        fg_layout.addLayout(action_buttons_layout)
+        fg_layout.addStretch(4)
 
-        frame_layout.addItem(QSpacerItem(20, 40, QSizePolicy.Minimum, QSizePolicy.Expanding))
-        frame_layout.addWidget(title)
-        frame_layout.addWidget(instruction)
-        frame_layout.addWidget(nfd_label)
-        frame_layout.addWidget(self.status_indicator)
-        frame_layout.addWidget(self.temp_info_label)
-        frame_layout.addWidget(formats_label)
-        frame_layout.addLayout(buttons_layout)
-        frame_layout.addItem(QSpacerItem(20, 40, QSizePolicy.Minimum, QSizePolicy.Expanding))
-        frame_layout.addLayout(bottom_layout)
+        nav_buttons_layout = QHBoxLayout()
+        nav_buttons_layout.addWidget(back_button, 0, Qt.AlignLeft)
+        nav_buttons_layout.addStretch()
+        nav_buttons_layout.addWidget(cancel_button, 0, Qt.AlignRight)
+        fg_layout.addLayout(nav_buttons_layout)
 
-        layout.addWidget(main_frame)
-        self.setLayout(layout)
+        # 4. Add Layers to Main Layout
+        main_layout.addWidget(background_label)
+        main_layout.addWidget(foreground_widget)
+        
+        # --- FIX: Explicitly set the foreground widget as the active one for interaction ---
+        main_layout.setCurrentWidget(foreground_widget)
 
-    def test_simulate_files_found(self):
-        print("\n=== TEST: Simulating PDF files found ===")
-        temp_storage_dir = self.usb_manager.destination_dir
-        os.makedirs(temp_storage_dir, exist_ok=True)
-        dummy_pdf_files_data = []
-        dummy_filenames = ["simulated_document_1.pdf", "simulated_report_2.pdf", "another_sim_pdf_3.pdf"]
-        for i, filename in enumerate(dummy_filenames):
-            dummy_path = os.path.join(temp_storage_dir, filename)
-            try:
-                pdf_content = b"%PDF-1.4\n1 0 obj<</Type/Page/Contents(Dummy PDF Content)>>endobj\nxref\n0 2\n0000000000 00000 n\n0000000009 00000 n\ntrailer<</Size 2/Root 1 0 R>>startxref\n0\n%%EOF"
-                with open(dummy_path, 'wb') as f:
-                    f.write(pdf_content)
-                dummy_size = os.path.getsize(dummy_path)
-                dummy_pages = i + 3
-                pdf_info = {
-                    'filename': filename,
-                    'size': dummy_size,
-                    'pages': dummy_pages,
-                    'path': dummy_path,
-                    'type': '.pdf'
-                }
-                dummy_pdf_files_data.append(pdf_info)
-                print(f"Created dummy file: {dummy_path}")
-            except Exception as e:
-                print(f"Error creating dummy file {dummy_path}: {e}")
-        if not dummy_pdf_files_data:
-            QMessageBox.warning(self, "Test Warning", "Failed to create dummy PDF files for simulation.")
-            return
-        self.processing_complete(dummy_pdf_files_data, None)
+        # Store buttons for connecting signals
+        self.scan_button = scan_button
+        self.test_button = test_button
+        self.clean_button = clean_button
+        self.back_button = back_button
+        self.cancel_button = cancel_button
 
-    def update_temp_info(self):
-        try:
-            temp_info = self.usb_manager.get_temp_folder_info()
-            if temp_info:
-                self.temp_info_label.setText(f"Session: {temp_info['session_id']}")
-            else:
-                self.temp_info_label.setText("Session: None")
-        except Exception as e:
-            self.temp_info_label.setText(f"Session: Error ({e})")
-
-    def setup_timers(self):
-        self.blink_timer = QTimer()
+    def setup_timers_and_connections(self):
+        """Connect all signals and timers for the screen."""
         self.blink_timer.timeout.connect(self.blink_status)
-        self.blink_state = True
-        self.temp_info_timer = QTimer()
-        self.temp_info_timer.timeout.connect(self.update_temp_info)
-        self.temp_info_timer.start(5000)
-
-    def blink_status(self):
-        if self.blink_state:
-            self.status_indicator.setStyleSheet("""
-                QLabel {
-                    color: #ffff33;
-                    font-size: 20px;
-                    margin: 15px;
-                    padding: 10px;
-                    border: 2px solid #ffff33;
-                    border-radius: 8px;
-                    background-color: rgba(255, 255, 51, 0.1);
-                }
-            """)
-        else:
-            self.status_indicator.setStyleSheet("""
-                QLabel {
-                    color: #ffff33;
-                    font-size: 20px;
-                    margin: 15px;
-                    padding: 10px;
-                    border: 2px solid #ffff33;
-                    border-radius: 8px;
-                    background-color: rgba(255, 255, 51, 0.05);
-                }
-            """)
-        self.blink_state = not self.blink_state
+        
+        self.scan_button.clicked.connect(self.manual_scan_usb_drives)
+        self.test_button.clicked.connect(self.test_simulate_files_found)
+        self.clean_button.clicked.connect(self.manual_cleanup)
+        self.back_button.clicked.connect(self.go_back)
+        self.cancel_button.clicked.connect(self.cancel_operation)
 
     def on_enter(self):
-        print("🔄 Entering USB screen")
-        self.start_usb_monitoring()
-        self.blink_timer.start(1000)
-        self.update_temp_info()
+        """Called when the screen becomes active."""
+        print("🔄 Entering USB screen, performing initial check...")
+        self.blink_timer.start(700)
+        
         try:
-            self.usb_manager.last_known_drives = set(self.usb_manager.get_usb_drives())
+            current_drives = self.usb_manager.get_usb_drives()
+            if current_drives:
+                self.handle_usb_scan_result(current_drives)
+            else:
+                self.start_usb_monitoring()
         except Exception as e:
-            print(f"Error initializing drives: {e}")
+            self._update_status_indicator("Error checking for USB drives.", 'error')
+            print(f"Error during on_enter USB check: {e}")
 
     def on_leave(self):
+        """Called when the screen becomes inactive."""
         print("⏹️ Leaving USB screen")
         self.stop_usb_monitoring()
         self.blink_timer.stop()
 
     def start_usb_monitoring(self):
+        """Starts the background thread to watch for USB insertions."""
         if not self.monitoring_thread or not self.monitoring_thread.isRunning():
+            self._update_status_indicator("Monitoring for USB devices...", 'monitoring')
             self.monitoring_thread = USBMonitorThread(self.usb_manager)
             self.monitoring_thread.usb_detected.connect(self.on_usb_detected)
             self.monitoring_thread.usb_removed.connect(self.on_usb_removed)
             self.monitoring_thread.start()
             print("✅ USB monitoring started")
-            self.status_indicator.setText("Monitoring for USB devices...")
-            self.status_indicator.setStyleSheet("""
-                QLabel {
-                    color: #ffff33;
-                    font-size: 20px;
-                    margin: 15px;
-                    padding: 10px;
-                    border: 2px solid #ffff33;
-                    border-radius: 8px;
-                    background-color: rgba(255, 255, 51, 0.1);
-                }
-            """)
 
     def stop_usb_monitoring(self):
+        """Stops the background USB monitoring thread."""
         if self.monitoring_thread and self.monitoring_thread.isRunning():
             self.monitoring_thread.stop_monitoring()
-            self.monitoring_thread.wait()
+            self.monitoring_thread.wait(2000)
+            self.monitoring_thread = None
             print("✅ USB monitoring stopped")
 
     def on_usb_detected(self, drive_path):
+        """Handles the signal when a new USB drive is detected."""
         print(f"🔌 USB drive detected: {drive_path}")
-        self.status_indicator.setText(f"USB drive detected: {drive_path}")
-        self.status_indicator.setStyleSheet("""
-            QLabel {
-                color: #33ff33;
-                font-size: 20px;
-                margin: 15px;
-                padding: 10px;
-                border: 2px solid #33ff33;
-                border-radius: 8px;
-                background-color: rgba(51, 255, 51, 0.1);
-            }
-        """)
-        QTimer.singleShot(1000, lambda: self.auto_process_drive(drive_path))
+        self.handle_usb_scan_result([drive_path])
 
     def on_usb_removed(self, drive_path):
+        """Handles the signal when a USB drive is removed."""
         print(f"🔌 USB drive removed: {drive_path}")
-        self.status_indicator.setText("USB drive removed. Insert drive to continue.")
-        self.status_indicator.setStyleSheet("""
-            QLabel {
-                color: #ff8033;
-                font-size: 20px;
-                margin: 15px;
-                padding: 10px;
-                border: 2px solid #ff8033;
-                border-radius: 8px;
-                background-color: rgba(255, 128, 51, 0.1);
-            }
-        """)
-        # Optionally: self.start_usb_monitoring()
-
-    def auto_process_drive(self, drive_path):
-        self.stop_usb_monitoring()
-        print(f"🔄 Auto-processing USB drive: {drive_path}")
-        try:
-            print(f"📂 Starting scan_and_copy_pdf_files for {drive_path}")
-            pdf_files = self.usb_manager.scan_and_copy_pdf_files(drive_path)
-            print(f"📋 Found {len(pdf_files)} PDF files")
-            if pdf_files:
-                self.status_indicator.setText(f"✅ Found {len(pdf_files)} PDF files! Loading preview...")
-                print("🔄 Calling processing_complete...")
-                self.processing_complete(pdf_files, None)
-            else:
-                self.status_indicator.setText("❌ No PDF files found on USB drive")
-                print("⚠️ No PDF files found, restarting monitoring")
-                self.start_usb_monitoring()
-        except Exception as e:
-            print(f"❌ Error processing USB drive: {str(e)}")
-            import traceback
-            traceback.print_exc()
-            self.processing_error(str(e), None)
-
-    def manual_scan_usb_drives(self):
-        print("🔍 Manual USB scan initiated")
-        self.status_indicator.setText("Scanning for USB drives...")
-        self.status_indicator.setStyleSheet("""
-            QLabel {
-                color: #ffff33;
-                font-size: 20px;
-                margin: 15px;
-                padding: 10px;
-                border: 2px solid #ffff33;
-                border-radius: 8px;
-                background-color: rgba(255, 255, 51, 0.1);
-            }
-        """)
-        def scan_thread():
-            usb_drives = self.usb_manager.get_usb_drives()
-            print(f"📋 Manual scan found {len(usb_drives)} drives: {usb_drives}")
-            QTimer.singleShot(0, lambda: self.handle_usb_scan_result(usb_drives))
-        threading.Thread(target=scan_thread, daemon=True).start()
-
-    def handle_usb_scan_result(self, usb_drives):
-        if usb_drives:
-            print(f"✅ Found {len(usb_drives)} USB drive(s)")
-            self.status_indicator.setText(f"Found {len(usb_drives)} USB drive(s)!")
-            self.status_indicator.setStyleSheet("""
-                QLabel {
-                    color: #33ff33;
-                    font-size: 20px;
-                    margin: 15px;
-                    padding: 10px;
-                    border: 2px solid #33ff33;
-                    border-radius: 8px;
-                    background-color: rgba(51, 255, 51, 0.1);
-                }
-            """)
-            if len(usb_drives) == 1:
-                QTimer.singleShot(1000, lambda: self.auto_process_drive(usb_drives[0]))
-            else:
-                self.show_usb_selection_dialog(usb_drives)
-        else:
-            print("❌ No USB drives detected")
-            self.status_indicator.setText("No USB drives detected. Please insert USB drive.")
-            self.status_indicator.setStyleSheet("""
-                QLabel {
-                    color: #ff8033;
-                    font-size: 20px;
-                    margin: 15px;
-                    padding: 10px;
-                    border: 2px solid #ff8033;
-                    border-radius: 8px;
-                    background-color: rgba(255, 128, 51, 0.1);
-                }
-            """)
-
-    def show_usb_selection_dialog(self, usb_drives):
-        dialog = QDialog(self)
-        dialog.setWindowTitle("USB Drive Selection")
-        dialog.setModal(True)
-        dialog.setFixedSize(600, 400)
-        dialog.setStyleSheet("QDialog { background-color: #2b2b2b; }")
-        layout = QVBoxLayout()
-
-        header = QLabel("Multiple USB drives detected. Select one:")
-        header.setStyleSheet("color: white; font-size: 16px; margin: 10px; font-weight: bold;")
-        layout.addWidget(header)
-
-        drive_list = QListWidget()
-        drive_list.setStyleSheet("""
-            QListWidget {
-                background-color: #333;
-                color: white;
-                border: 1px solid #555;
-                border-radius: 4px;
-                font-size: 13px;
-            }
-            QListWidget::item {
-                padding: 12px;
-                border-bottom: 1px solid #444;
-            }
-            QListWidget::item:selected {
-                background-color: #4CAF50;
-            }
-        """)
-        for drive in usb_drives:
-            try:
-                drive_info = self.usb_manager.get_drive_info(drive)
-                if drive_info:
-                    display_text = (f"🔌 {drive_info['path']}\n"
-                                    f"   💾 {drive_info['filesystem']} | "
-                                    f"📊 {drive_info['free_gb']:.1f}GB free / {drive_info['total_gb']:.1f}GB total")
-                else:
-                    display_text = f"🔌 {drive}\n   ❌ Drive info unavailable"
-                drive_list.addItem(display_text)
-            except Exception as e:
-                drive_list.addItem(f"🔌 {drive}\n   ❌ Error: {str(e)}")
-        layout.addWidget(drive_list)
-
-        button_layout = QHBoxLayout()
-        select_button = QPushButton("✅ Select Drive")
-        select_button.setStyleSheet("""
-            QPushButton {
-                background-color: #4CAF50;
-                color: white;
-                border: none;
-                padding: 8px 16px;
-                border-radius: 4px;
-                font-size: 14px;
-                font-weight: bold;
-            }
-        """)
-        cancel_button = QPushButton("❌ Cancel")
-        cancel_button.setStyleSheet("""
-            QPushButton {
-                background-color: #d32f2f;
-                color: white;
-                border: none;
-                padding: 8px 16px;
-                border-radius: 4px;
-                font-size: 14px;
-            }
-        """)
-        def on_select():
-            current_row = drive_list.currentRow()
-            if current_row >= 0:
-                selected_drive = usb_drives[current_row]
-                dialog.accept()
-                self.auto_process_drive(selected_drive)
-            else:
-                QMessageBox.warning(dialog, "No Selection", "Please select a USB drive first.")
-        select_button.clicked.connect(on_select)
-        cancel_button.clicked.connect(dialog.reject)
-
-        button_layout.addWidget(select_button)
-        button_layout.addWidget(cancel_button)
-        layout.addLayout(button_layout)
-
-        dialog.setLayout(layout)
-        dialog.exec_()
-
-    def processing_complete(self, pdf_files, dialog):
-        print("\n=== USB PROCESSING COMPLETE DEBUG ===")
-        print(f"📄 PDF files found: {len(pdf_files)}")
-        print(f"📋 File details: {[f['filename'] for f in pdf_files]}")
-        if pdf_files and len(pdf_files) > 0:
-            print("✅ Valid PDF files found, preparing transition...")
-            if not hasattr(self.main_app, 'file_browser_screen'):
-                print("❌ Error: file_browser_screen not found in main_app")
-                QMessageBox.critical(self, "Error", "System error: PDF preview screen not available")
-                return
-            try:
-                print("🛑 Stopping USB monitoring...")
-                self.stop_usb_monitoring()
-                print("📂 Loading files into browser...")
-                self.main_app.file_browser_screen.load_pdf_files(pdf_files)
-                print("🔄 Initiating screen transition...")
-                # FIX: Removed the flawed check. This call correctly initiates the transition.
-                self.main_app.show_screen('file_browser')
-            except Exception as e:
-                print(f"❌ Error during transition: {str(e)}")
-                import traceback
-                traceback.print_exc()
-                self.start_usb_monitoring()
-                QMessageBox.critical(self, "Error", f"Failed to load PDF preview:\n{str(e)}")
-        else:
-            print("❌ No valid PDF files found")
-            self.status_indicator.setText("No PDF files found on USB drive")
-            self.start_usb_monitoring()
-
-    def processing_error(self, error_message, dialog):
-        print(f"❌ Processing error: {error_message}")
-        if dialog:
-            dialog.accept()
-        self.status_indicator.setText(f"❌ Error: {error_message}")
-        self.status_indicator.setStyleSheet("""
-            QLabel {
-                color: #ff3333;
-                font-size: 20px;
-                margin: 15px;
-                padding: 10px;
-                border: 2px solid #ff3333;
-                border-radius: 8px;
-                background-color: rgba(255, 51, 51, 0.1);
-            }
-        """)
+        self._update_status_indicator("USB drive was removed.", 'warning')
         self.start_usb_monitoring()
 
+    def manual_scan_usb_drives(self):
+        """Initiates a manual scan for USB drives in a separate thread."""
+        self._update_status_indicator("Scanning for USB drives...", 'monitoring')
+        threading.Thread(
+            target=lambda: self.handle_usb_scan_result(self.usb_manager.get_usb_drives()),
+            daemon=True
+        ).start()
+
+    def handle_usb_scan_result(self, usb_drives):
+        """Processes the results of a USB scan."""
+        if not usb_drives:
+            self._update_status_indicator("No USB drives found. Please insert a drive.", 'warning')
+            self.start_usb_monitoring()
+            return
+
+        self.stop_usb_monitoring()
+        
+        if len(usb_drives) > 1:
+            self._update_status_indicator(f"Found {len(usb_drives)} drives. Please connect only one.", 'error')
+            return
+
+        drive_path = usb_drives[0]
+        self._update_status_indicator(f"USB drive found! Scanning for PDF files...", 'success')
+        
+        QTimer.singleShot(100, lambda: self.scan_files_from_drive(drive_path))
+
+    def scan_files_from_drive(self, drive_path):
+        """Scans the given drive for PDF files and transitions to the next screen."""
+        pdf_files = self.usb_manager.scan_and_copy_pdf_files(drive_path)
+        
+        if pdf_files:
+            self._update_status_indicator(f"Success! Found {len(pdf_files)} PDF file(s).", 'success')
+            self.main_app.file_browser_screen.load_pdf_files(pdf_files)
+            self.main_app.show_screen('file_browser')
+        else:
+            self._update_status_indicator("No PDF files were found on the USB drive.", 'error')
+            QTimer.singleShot(3000, self.start_usb_monitoring)
+
+    def test_simulate_files_found(self):
+        """Simulates finding dummy PDF files for testing purposes."""
+        print("\n=== TEST: Simulating PDF files found ===")
+        temp_dir = self.usb_manager.destination_dir
+        dummy_files = []
+        try:
+            for i, name in enumerate(["report.pdf", "presentation_notes.pdf"]):
+                path = os.path.join(temp_dir, name)
+                with open(path, 'wb') as f:
+                    f.write(b"%PDF-1.4\n1 0 obj<</Type/Page>>endobj\nxref\n0 2\n0000000000 65535 f \n0000000009 00000 n \ntrailer<</Size 2/Root 1 0 R>>\nstartxref\n24\n%%EOF")
+                dummy_files.append({'filename': name, 'size': 1024 * (50+i*20), 'pages': i + 2, 'path': path, 'type': '.pdf'})
+            
+            # This is a temporary override to inject the dummy files into the workflow
+            # It avoids needing a real USB drive for testing
+            self.scan_files_from_drive = lambda drive_path: self.processing_complete_simulation(dummy_files)
+            self.handle_usb_scan_result(["/mnt/simulated_usb"])
+            
+        except Exception as e:
+            QMessageBox.warning(self, "Test Error", f"Failed to create dummy files: {e}")
+
+    def processing_complete_simulation(self, dummy_files):
+        """Helper for the test simulation to bypass actual scanning."""
+        self._update_status_indicator(f"Success! Found {len(dummy_files)} PDF file(s).", 'success')
+        self.main_app.file_browser_screen.load_pdf_files(dummy_files)
+        self.main_app.show_screen('file_browser')
+        # Restore the original method after the simulation is complete
+        del self.scan_files_from_drive
+
     def manual_cleanup(self):
-        reply = QMessageBox.question(self, 'Clean Temporary Files',
-                                     'This will delete all copied PDF files from the temporary folder.\n\nAre you sure?',
-                                     QMessageBox.Yes | QMessageBox.No,
-                                     QMessageBox.No)
+        """Asks user for confirmation before cleaning temporary files."""
+        reply = QMessageBox.question(self, 'Confirm Cleanup', 
+                                     'This will delete all copied temporary files. Are you sure?',
+                                     QMessageBox.Yes | QMessageBox.No, QMessageBox.No)
         if reply == QMessageBox.Yes:
-            try:
-                self.usb_manager.cleanup_temp_files()
-                self.update_temp_info()
-                QMessageBox.information(self, "Cleanup Complete", "Temporary files have been deleted.")
-            except Exception as e:
-                QMessageBox.warning(self, "Cleanup Error", f"Error during cleanup: {e}")
+            self.usb_manager.cleanup_temp_files()
+            QMessageBox.information(self, "Cleanup", "Temporary files have been cleaned.")
+
+    def _update_status_indicator(self, text, style_key):
+        """Updates the text and style of the status indicator label."""
+        color_hex = self.STATUS_COLORS.get(style_key, '#ffffff')
+        self.status_indicator.setText(text)
+        self.status_indicator.setStyleSheet(f"""
+            QLabel {{
+                color: {color_hex}; font-size: 18px; font-weight: bold;
+                padding: 10px 20px; border: 2px solid {color_hex}; border-radius: 8px;
+                background-color: rgba({QColor(color_hex).red()}, {QColor(color_hex).green()}, {QColor(color_hex).blue()}, 0.1);
+            }}""")
+        
+    def blink_status(self):
+        """Toggles the opacity of the status indicator for a blinking effect."""
+        current_style = self.status_indicator.styleSheet()
+        if "0.1" in current_style:
+            new_style = current_style.replace("0.1", "0.05")
+        else:
+            new_style = current_style.replace("0.05", "0.1")
+        self.status_indicator.setStyleSheet(new_style)
 
     def go_back(self):
         self.main_app.show_screen('idle')
 
     def cancel_operation(self):
-        reply = QMessageBox.question(self, 'Cancel Operation',
-                                     'Are you sure you want to cancel?',
-                                     QMessageBox.Yes | QMessageBox.No,
-                                     QMessageBox.No)
-        if reply == QMessageBox.Yes:
-            self.main_app.show_screen('idle')
+        self.main_app.show_screen('idle')
