@@ -11,7 +11,7 @@ class SMSManager(QObject):
     sms_sent = pyqtSignal(str)  # Signal emitted when SMS is sent successfully
     sms_failed = pyqtSignal(str)  # Signal emitted when SMS fails
     
-    def __init__(self, phone_number="09279069792", serial_port="/dev/serial0", baudrate=9600):
+    def __init__(self, phone_number="09762912863", serial_port="/dev/serial0", baudrate=9600):
         super().__init__()
         self.phone_number = phone_number
         self.serial_port = serial_port
