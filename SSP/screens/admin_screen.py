@@ -3,267 +3,218 @@
 from PyQt5.QtWidgets import (
     QWidget, QVBoxLayout, QLabel, QPushButton, QHBoxLayout, QFrame,
     QDialog, QTabWidget, QTableWidget, QTableWidgetItem, QHeaderView,
-    QLineEdit, QMessageBox
+    QLineEdit, QMessageBox, QGroupBox
 )
 from PyQt5.QtCore import Qt
-from PyQt5.QtGui import QIntValidator
+from PyQt5.QtGui import QIntValidator, QPixmap, QPainter
 from database.db_manager import DatabaseManager
 from sms_manager import get_sms_manager, initialize_sms
+from .data_viewer_screen import DataViewerScreen  # <-- New import statement
 
-# --- Data Viewer Dialog Class ---
-# This class creates a pop-up window with tabs to show database information.
-class DataViewerDialog(QDialog):
-    def __init__(self, db_manager, parent=None):
-        super().__init__(parent)
-        self.db_manager = db_manager
-        self.setWindowTitle("Data Viewer")
-        self.setMinimumSize(800, 600)
-        self.setStyleSheet("background-color: #2c2c4f;")
-
-        layout = QVBoxLayout(self)
-
-        tab_widget = QTabWidget()
-        tab_widget.setStyleSheet("""
-            QTabWidget::pane { border: 1px solid #4a4a6b; }
-            QTabBar::tab {
-                background-color: #1f1f38;
-                color: white;
-                padding: 10px 20px;
-                margin: 2px;
-                border-top-left-radius: 5px;
-                border-top-right-radius: 5px;
-                border: 1px solid #4a4a6b;
-                border-bottom: none;
-            }
-            QTabBar::tab:selected {
-                background-color: #3f51b5;
-                color: white;
-            }
-        """)
-
-        # Add tabs for different data views
-        tab_widget.addTab(self.create_transactions_tab(), "Transactions")
-        tab_widget.addTab(self.create_cash_inventory_tab(), "Cash Inventory")
-        tab_widget.addTab(self.create_error_log_tab(), "Error Log")
-
-        layout.addWidget(tab_widget)
-        self.setLayout(layout)
-
-    def create_tab_widget(self, refresh_function):
-        """Generic helper to create a tab with a table and a refresh button."""
-        widget = QWidget()
-        layout = QVBoxLayout(widget)
-
-        table = QTableWidget()
-        table.setStyleSheet(self.get_table_style())
-        
-        refresh_btn = QPushButton("Refresh Data")
-        refresh_btn.setStyleSheet(self.get_button_style())
-        refresh_btn.clicked.connect(lambda: refresh_function(table))
-
-        layout.addWidget(table)
-        layout.addWidget(refresh_btn, 0, Qt.AlignRight)
-        
-        # Initial data load
-        refresh_function(table)
-        return widget
-
-    def create_transactions_tab(self):
-        return self.create_tab_widget(self.refresh_transactions_table)
-
-    def create_cash_inventory_tab(self):
-        return self.create_tab_widget(self.refresh_cash_inventory_table)
-        
-    def create_error_log_tab(self):
-        return self.create_tab_widget(self.refresh_error_log_table)
-
-    def refresh_transactions_table(self, table: QTableWidget):
-        table.clear()
-        table.setColumnCount(9)
-        table.setHorizontalHeaderLabels([
-            "ID", "Date/Time", "File Name", "Pages", "Copies",
-            "Color Mode", "Total Cost", "Amount Paid", "Status"
-        ])
-        transactions = self.db_manager.get_transaction_history()
-        table.setRowCount(len(transactions))
-        for i, trans in enumerate(transactions): # Already sorted by DB query
-            table.setItem(i, 0, QTableWidgetItem(str(trans['id'])))
-            table.setItem(i, 1, QTableWidgetItem(str(trans['timestamp'])))
-            table.setItem(i, 2, QTableWidgetItem(trans['file_name']))
-            table.setItem(i, 3, QTableWidgetItem(str(trans['pages'])))
-            table.setItem(i, 4, QTableWidgetItem(str(trans['copies'])))
-            table.setItem(i, 5, QTableWidgetItem(trans['color_mode']))
-            table.setItem(i, 6, QTableWidgetItem(f"₱{trans['total_cost']:.2f}"))
-            table.setItem(i, 7, QTableWidgetItem(f"₱{trans['amount_paid']:.2f}"))
-            table.setItem(i, 8, QTableWidgetItem(trans['status']))
-        table.resizeColumnsToContents()
-
-    def refresh_cash_inventory_table(self, table: QTableWidget):
-        table.clear()
-        table.setColumnCount(4)
-        table.setHorizontalHeaderLabels(["Denomination", "Count", "Type", "Last Updated"])
-        inventory = self.db_manager.get_cash_inventory()
-        table.setRowCount(len(inventory))
-        for i, item in enumerate(inventory):
-            table.setItem(i, 0, QTableWidgetItem(f"₱{item['denomination']}"))
-            table.setItem(i, 1, QTableWidgetItem(str(item['count'])))
-            table.setItem(i, 2, QTableWidgetItem(item['type']))
-            table.setItem(i, 3, QTableWidgetItem(str(item['last_updated'])))
-        table.resizeColumnsToContents()
-
-    def refresh_error_log_table(self, table: QTableWidget):
-        table.clear()
-        table.setColumnCount(4)
-        table.setHorizontalHeaderLabels(["Date/Time", "Error Type", "Message", "Context"])
-        errors = self.db_manager.get_error_log()
-        table.setRowCount(len(errors))
-        for i, error in enumerate(errors): # Already sorted by DB query
-            table.setItem(i, 0, QTableWidgetItem(str(error['timestamp'])))
-            table.setItem(i, 1, QTableWidgetItem(error['error_type']))
-            table.setItem(i, 2, QTableWidgetItem(error['message']))
-            table.setItem(i, 3, QTableWidgetItem(error['context']))
-        table.resizeColumnsToContents()
-
-    def get_table_style(self):
-        return """
-            QTableWidget { background-color: #1f1f38; color: white; gridline-color: #3f3f5f; border: none; }
-            QHeaderView::section { background-color: #3f51b5; color: white; padding: 5px; border: 1px solid #3f3f5f; }
-            QTableWidget::item { border-bottom: 1px solid #3f3f5f; padding: 5px; }
-        """
-
-    def get_button_style(self):
-        return """
-            QPushButton { background-color: #4CAF50; color: white; padding: 8px 15px; border-radius: 5px; font-size: 14px; border: none; }
-            QPushButton:hover { background-color: #45a049; }
-        """
-
+# The DataViewerScreen class has been moved to data_viewer_screen.py
+# and is now imported above. The AdminScreen class remains here.
 
 class AdminScreen(QWidget):
-    def __init__(self, main_app):
+    def __init__(self, main_app, background_image_path=None):
         super().__init__()
         self.main_app = main_app
         self.db_manager = DatabaseManager()
         self.paper_count = self.load_paper_count_from_db()
         self.sms_alert_sent = False  # Track if low paper SMS has been sent
+
+        self.background_pixmap = None
+        if background_image_path:
+            self.background_pixmap = QPixmap(background_image_path)
+
         self.setup_ui()
         self.update_paper_display() # Update display on first load
         self.initialize_sms_system()
 
+    def paintEvent(self, event):
+        """Draws the background image."""
+        painter = QPainter(self)
+        if self.background_pixmap:
+            painter.drawPixmap(self.rect(), self.background_pixmap)
+        else:
+            # Fallback background color if no image is provided
+            painter.fillRect(self.rect(), Qt.GlobalColor.black) # Use a color from the theme, e.g., #1f1f38
+        super().paintEvent(event)
+
+    def resizeEvent(self, event):
+        """Ensures the background is redrawn on resize."""
+        self.update()
+        super().resizeEvent(event)
+
     def setup_ui(self):
-        self.setStyleSheet("background-color: #1f1f38;")
-        
-        layout = QVBoxLayout()
-        layout.setContentsMargins(40, 40, 40, 40)
-        layout.setSpacing(30)
-        
+        # The main layout
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(50, 30, 50, 30)
+        layout.setSpacing(20)
+
+        # --- Title ---
         title = QLabel("Admin Panel")
         title.setAlignment(Qt.AlignCenter)
-        title.setStyleSheet("QLabel { color: white; font-size: 36px; font-weight: bold; }")
-        
-        admin_container = QFrame()
-        admin_container.setStyleSheet("QFrame { background-color: #2c2c4f; border-radius: 15px; padding: 20px; }")
-        
-        admin_layout = QVBoxLayout()
-        
-        # Paper Level Section
-        paper_section = QFrame()
-        paper_layout = QHBoxLayout()
-        
-        paper_label = QLabel("Paper Count:")
-        paper_label.setStyleSheet("color: white; font-size: 16px;")
-        
-        # Editable paper count input
-        self.paper_count_input = QLineEdit()
-        self.paper_count_input.setText(str(self.paper_count))
-        self.paper_count_input.setMaximumWidth(80)
-        self.paper_count_input.setStyleSheet("""
-            QLineEdit {
-                background-color: #1f1f38;
-                color: white;
-                font-size: 16px;
-                font-weight: bold;
-                border: 2px solid #4a4a6b;
-                border-radius: 5px;
-                padding: 5px 10px;
-                text-align: center;
-            }
-            QLineEdit:focus {
-                border: 2px solid #007bff;
+        title.setStyleSheet("color: white; font-size: 48px; font-weight: bold; text-shadow: 2px 2px 4px #000000;")
+
+        # --- Main Content Container ---
+        content_frame = QFrame()
+        content_frame.setObjectName("contentFrame")
+        content_frame.setStyleSheet("""
+            #contentFrame {
+                background-color: rgba(15, 31, 0, 0.85); /* Semi-transparent dark green */
+                border: 1px solid rgba(42, 93, 26, 0.9);
+                border-radius: 20px;
             }
         """)
-        self.paper_count_input.setValidator(QIntValidator(0, 100))
-        self.paper_count_input.returnPressed.connect(self.update_paper_count_from_input)
-        self.paper_count_input.editingFinished.connect(self.update_paper_count_from_input)
-        
-        sheets_label = QLabel("sheets")
-        sheets_label.setStyleSheet("color: white; font-size: 16px;")
-        
-        update_paper_btn = QPushButton("Update")
-        update_paper_btn.setStyleSheet("""
-            QPushButton { background-color: #007bff; color: white; font-size: 14px; border: none; border-radius: 5px; padding: 8px 15px; }
-            QPushButton:hover { background-color: #0056b3; }
-        """)
-        update_paper_btn.clicked.connect(self.update_paper_count_from_input)
-        
-        reset_paper_btn = QPushButton("Reset to 100")
-        reset_paper_btn.setStyleSheet("""
-            QPushButton { background-color: #4CAF50; color: white; font-size: 14px; border: none; border-radius: 5px; padding: 8px 15px; }
-            QPushButton:hover { background-color: #45a049; }
-        """)
-        reset_paper_btn.clicked.connect(self.reset_paper_count)
-        
-        paper_layout.addWidget(paper_label)
-        paper_layout.addWidget(self.paper_count_input)
-        paper_layout.addWidget(sheets_label)
-        paper_layout.addSpacing(10)
-        paper_layout.addWidget(update_paper_btn)
-        paper_layout.addWidget(reset_paper_btn)
-        paper_layout.addStretch()
-        paper_section.setLayout(paper_layout)
-        
-        # Ink Level Section (Placeholder)
-        ink_section = QFrame()
-        ink_layout = QHBoxLayout()
-        
-        ink_label = QLabel("Ink Level:")
-        ink_label.setStyleSheet("color: white; font-size: 16px;")
-        ink_placeholder = QLabel("Coming Soon")
-        ink_placeholder.setStyleSheet("color: #cccccc; font-style: italic;")
-        
-        ink_layout.addWidget(ink_label)
-        ink_layout.addWidget(ink_placeholder)
-        ink_section.setLayout(ink_layout)
-        
-        # Data Viewer Button
-        transaction_btn = QPushButton("View System Data")
-        transaction_btn.setStyleSheet("""
-            QPushButton { background-color: #3f51b5; color: white; font-size: 16px; font-weight: bold; border: none; border-radius: 8px; padding: 15px; }
-            QPushButton:hover { background-color: #303f9f; }
-        """)
-        transaction_btn.clicked.connect(self.show_data_viewer)
-        
-        admin_layout.addWidget(paper_section)
-        admin_layout.addWidget(ink_section)
-        admin_layout.addSpacing(20)
-        admin_layout.addWidget(transaction_btn)
-        admin_container.setLayout(admin_layout)
-        
-        layout.addWidget(title)
-        layout.addStretch(1)
-        layout.addWidget(admin_container)
-        layout.addStretch(2)
-        
+        content_layout = QVBoxLayout(content_frame)
+        content_layout.setContentsMargins(30, 30, 30, 30)
+        content_layout.setSpacing(25)
+
+        # --- Paper Management Section ---
+        paper_group = self.create_paper_management_group()
+
+        # --- Data & System Section ---
+        system_group = self.create_system_data_group()
+
+        # Add widgets to content layout
+        content_layout.addWidget(paper_group)
+        content_layout.addWidget(system_group)
+
+        # --- Back Button ---
         back_button = QPushButton("← Back to Main Screen")
-        back_button.setMinimumHeight(50)
+        back_button.setMinimumHeight(60)
+        back_button.setCursor(Qt.PointingHandCursor)
         back_button.setStyleSheet("""
-            QPushButton { background-color: #804d4d; color: white; font-size: 16px; font-weight: bold; border: none; border-radius: 8px; padding: 10px; }
-            QPushButton:hover { background-color: #905d5d; }
+            QPushButton {
+                background-color: #c83c3c; /* Reddish color */
+                color: white;
+                font-size: 20px;
+                font-weight: bold;
+                border: 1px solid #d85050;
+                border-radius: 10px;
+                padding: 10px;
+            }
+            QPushButton:hover {
+                background-color: #e05a5a;
+            }
         """)
         back_button.clicked.connect(self.go_back)
-        
+
+        # Add main widgets to the screen layout
+        layout.addWidget(title)
+        layout.addWidget(content_frame, 1) # Add stretch factor
         layout.addWidget(back_button)
+
         self.setLayout(layout)
-        
+
+    def create_paper_management_group(self):
+        """Creates the 'Paper Management' group box."""
+        group = QGroupBox("Paper Management")
+        group.setStyleSheet(self.get_groupbox_style())
+        layout = QVBoxLayout(group)
+        layout.setSpacing(15)
+
+        # Paper count display and input
+        count_layout = QHBoxLayout()
+        paper_label = QLabel("Current Paper Count:")
+        paper_label.setStyleSheet("color: #e0e0e0; font-size: 18px;")
+
+        self.paper_count_input = QLineEdit()
+        self.paper_count_input.setText(str(self.paper_count))
+        self.paper_count_input.setValidator(QIntValidator(0, 100))
+        self.paper_count_input.setAlignment(Qt.AlignCenter)
+        self.paper_count_input.setFixedWidth(100)
+        self.paper_count_input.returnPressed.connect(self.update_paper_count_from_input)
+        self.paper_count_input.editingFinished.connect(self.update_paper_count_from_input)
+
+        count_layout.addWidget(paper_label)
+        count_layout.addStretch()
+        count_layout.addWidget(self.paper_count_input)
+
+        # Action buttons
+        button_layout = QHBoxLayout()
+        button_layout.setSpacing(15)
+
+        update_paper_btn = QPushButton("Update Count")
+        update_paper_btn.setStyleSheet(self.get_button_style("#ff9800", "#f57c00")) # Orange theme
+        update_paper_btn.clicked.connect(self.update_paper_count_from_input)
+
+        reset_paper_btn = QPushButton("Refill (Reset to 100)")
+        reset_paper_btn.setStyleSheet(self.get_button_style("#1e440a", "#2a5d1a")) # Green theme
+        reset_paper_btn.clicked.connect(self.reset_paper_count)
+
+        button_layout.addStretch()
+        button_layout.addWidget(update_paper_btn)
+        button_layout.addWidget(reset_paper_btn)
+        button_layout.addStretch()
+
+        layout.addLayout(count_layout)
+        layout.addLayout(button_layout)
+        return group
+
+    def create_system_data_group(self):
+        """Creates the 'System & Data' group box."""
+        group = QGroupBox("System & Data")
+        group.setStyleSheet(self.get_groupbox_style())
+        layout = QVBoxLayout(group)
+        layout.setSpacing(15)
+
+        # Data Viewer Button
+        transaction_btn = QPushButton("View System Data Logs")
+        transaction_btn.setMinimumHeight(50)
+        transaction_btn.setStyleSheet(self.get_button_style("#1e440a", "#2a5d1a", font_size="18px")) # Green theme
+        transaction_btn.clicked.connect(self.show_data_viewer)
+
+        # Ink Level (Placeholder)
+        ink_layout = QHBoxLayout()
+        ink_label = QLabel("Ink Level Status:")
+        ink_label.setStyleSheet("color: #e0e0e0; font-size: 18px;")
+        ink_placeholder = QLabel("Monitoring Not Implemented")
+        ink_placeholder.setStyleSheet("color: #999999; font-size: 18px; font-style: italic;")
+        ink_layout.addWidget(ink_label)
+        ink_layout.addStretch()
+        ink_layout.addWidget(ink_placeholder)
+
+        layout.addWidget(transaction_btn)
+        layout.addLayout(ink_layout)
+        return group
+
+    def get_groupbox_style(self):
+        return """
+            QGroupBox {
+                font-size: 22px;
+                font-weight: bold;
+                color: white;
+                border: 1px solid #2a5d1a;
+                border-radius: 10px;
+                margin-top: 10px;
+                background-color: rgba(30, 68, 10, 0.6); /* Semi-transparent green */
+            }
+            QGroupBox::title {
+                subcontrol-origin: margin;
+                subcontrol-position: top center;
+                padding: 5px 15px;
+                background-color: #1e440a; /* Dark Green theme for title */
+                border-radius: 5px;
+            }
+        """
+
+    def get_button_style(self, bg_color, hover_color, font_size="16px"):
+        return f"""
+            QPushButton {{
+                background-color: {bg_color};
+                color: white;
+                font-size: {font_size};
+                font-weight: bold;
+                border: none;
+                border-radius: 8px;
+                padding: 12px 25px;
+            }}
+            QPushButton:hover {{
+                background-color: {hover_color};
+            }}
+        """
+
     def go_back(self):
         self.main_app.show_screen('idle')
 
@@ -315,15 +266,14 @@ class AdminScreen(QWidget):
             QLineEdit {{
                 background-color: #1f1f38;
                 color: white;
-                font-size: 16px;
+                font-size: 18px;
                 font-weight: bold;
-                border: 2px solid {color};
-                border-radius: 5px;
+                border: 3px solid {color};
+                border-radius: 8px;
                 padding: 5px 10px;
-                text-align: center;
             }}
             QLineEdit:focus {{
-                border: 2px solid #007bff;
+                border: 3px solid #ff9800; /* Orange theme for focus */
             }}
         """)
 
@@ -391,20 +341,22 @@ class AdminScreen(QWidget):
             print("Paper count restored, SMS alert flag reset")
 
     def send_low_paper_sms(self):
-        """Send low paper SMS alert."""
+        """Send SMS alert for low paper count."""
         try:
-            print("Sending low paper SMS alert...")
             sms_manager = get_sms_manager()
-            if sms_manager.send_low_paper_alert():
+            message = f"ALERT: Paper is low ({self.paper_count} sheets left) in the printing machine. Please refill soon."
+            # Replace with the actual admin phone number or fetch from settings
+            admin_phone = self.db_manager.get_setting('admin_phone', default=None)
+            if admin_phone:
+                sms_manager.send_sms(admin_phone, message)
                 self.sms_alert_sent = True
-                print("Low paper SMS alert sent successfully")
+                print(f"Low paper SMS sent to {admin_phone}")
             else:
-                print("Failed to send low paper SMS alert")
+                print("Admin phone number not set. SMS not sent.")
         except Exception as e:
             print(f"Error sending low paper SMS: {e}")
+        
 
     def show_data_viewer(self):
-        """Create and show the data viewer dialog window."""
-        print("DEBUG: System data viewer button clicked")
-        dialog = DataViewerDialog(self.db_manager, self)
-        dialog.exec_()
+        """Switches to the data viewer screen."""
+        self.main_app.show_screen('data_viewer')

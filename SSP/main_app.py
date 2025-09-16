@@ -13,7 +13,7 @@ from screens.usb_screen import USBScreen
 from screens.file_browser_screen import FileBrowserScreen
 from screens.payment_dialog import PaymentScreen
 from screens.Print_Options_Screen import Print_Options_Screen
-from screens.admin_screen import AdminScreen
+from screens.admin_screen import AdminScreen, DataViewerScreen
 from screens.thank_you_screen import ThankYouScreen
 from database.models import init_db
 from printing.printer_manager import PrinterManager  # Import the new manager
@@ -50,6 +50,7 @@ class PrintingSystemApp(QMainWindow):
         self.printing_options_screen = Print_Options_Screen(self)
         self.payment_screen = PaymentScreen(self)
         self.admin_screen = AdminScreen(self)
+        self.data_viewer_screen = DataViewerScreen(self, self.admin_screen.db_manager)
         self.thank_you_screen = ThankYouScreen(self) # Initialize the new screen
 
         # Add screens to the stack
@@ -59,11 +60,12 @@ class PrintingSystemApp(QMainWindow):
         self.stacked_widget.addWidget(self.printing_options_screen) # Index 3
         self.stacked_widget.addWidget(self.payment_screen)      # Index 4
         self.stacked_widget.addWidget(self.admin_screen)        # Index 5
-        self.stacked_widget.addWidget(self.thank_you_screen)    # Index 6
+        self.stacked_widget.addWidget(self.data_viewer_screen)  # Index 6
+        self.stacked_widget.addWidget(self.thank_you_screen)    # Index 7
 
         ## FIX: Updated the print statement to be accurate.
         print(f"Stacked widget has {self.stacked_widget.count()} screens")
-        print(f"Screen index map: idle=0, usb=1, file_browser=2, printing_options=3, payment=4, admin=5, thank_you=6")
+        print(f"Screen index map: idle=0, usb=1, file_browser=2, printing_options=3, payment=4, admin=5, data_viewer=6, thank_you=7")
 
         ## FIX: Set the initial screen to 'idle'.
         self.show_screen('idle')
@@ -93,7 +95,8 @@ class PrintingSystemApp(QMainWindow):
             'printing_options': 3,
             'payment': 4,
             'admin': 5,
-            'thank_you': 6
+            'data_viewer': 6,
+            'thank_you': 7
         }
 
         if screen_name in screen_map:
