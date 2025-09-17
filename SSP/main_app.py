@@ -17,11 +17,11 @@ from screens.admin import AdminController as AdminScreen
 from screens.data_viewer_screen import DataViewerScreen
 from screens.thank_you_screen import ThankYouScreen
 from database.models import init_db
-from printing.printer_manager import PrinterManager  # Import the new manager
-from sms_manager import cleanup_sms
+from managers.printer_manager import PrinterManager  # Import the new manager
+from managers.sms_manager import cleanup_sms
 
 try:
-    from screens.usb_file_manager import USBFileManager
+    from managers.usb_file_manager import USBFileManager
     print("✅ USBFileManager imported successfully in main_app.py")
 except Exception as e:
     print(f"❌ Failed to import USBFileManager in main_app.py: {e}")

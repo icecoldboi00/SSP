@@ -15,7 +15,7 @@ except ImportError:
     print("PyMuPDF not available - PDF preview will be limited")
 
 try:
-    from screens.usb_file_manager import USBFileManager
+    from managers.usb_file_manager import USBFileManager
 except ImportError:
     class USBFileManager:
         def __init__(self): pass

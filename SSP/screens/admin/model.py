@@ -2,7 +2,7 @@
 
 from PyQt5.QtCore import QObject, pyqtSignal
 from database.db_manager import DatabaseManager
-from sms_manager import get_sms_manager
+from managers.sms_manager import get_sms_manager
 
 class AdminModel(QObject):
     """Handles the data and business logic for the admin screen."""

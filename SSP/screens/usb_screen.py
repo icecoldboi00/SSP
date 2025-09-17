@@ -12,7 +12,7 @@ from PyQt5.QtWidgets import (
 )
 
 try:
-    from screens.usb_file_manager import USBFileManager
+    from managers.usb_file_manager import USBFileManager
     print("✅ USBFileManager imported successfully in usb_screen.py")
 except ImportError:
     print("❌ Failed to import USBFileManager in usb_screen.py. Using fallback.")
