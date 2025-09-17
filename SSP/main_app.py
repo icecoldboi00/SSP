@@ -10,7 +10,7 @@ from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QIcon
 from screens.idle import IdleController
 from screens.usb import USBController
-from screens.file_browser_screen import FileBrowserScreen
+from screens.file_browser import FileBrowserController
 from screens.payment import PaymentController
 from screens.print_options import PrintOptionsController
 from screens.admin import AdminController as AdminScreen
@@ -47,7 +47,7 @@ class PrintingSystemApp(QMainWindow):
         # Create all screen instances
         self.idle_screen = IdleController(self)
         self.usb_screen = USBController(self)
-        self.file_browser_screen = FileBrowserScreen(self)
+        self.file_browser_screen = FileBrowserController(self)
         self.printing_options_screen = PrintOptionsController(self)
         self.payment_screen = PaymentController(self)
         self.admin_screen = AdminScreen(self)

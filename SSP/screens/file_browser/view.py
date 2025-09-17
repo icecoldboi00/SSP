@@ -5,7 +5,7 @@ from PyQt5.QtWidgets import (
 )
 from PyQt5.QtCore import Qt, pyqtSignal, QThread
 from PyQt5.QtGui import QPixmap, QImage
-from screens.pdf_preview_widget import PDFPreviewWidget
+from .pdf_preview_widget import PDFPreviewWidget
 
 try:
     import fitz  # PyMuPDF
@@ -14,20 +14,8 @@ except ImportError:
     PYMUPDF_AVAILABLE = False
     print("PyMuPDF not available - PDF preview will be limited")
 
-try:
-    from managers.usb_file_manager import USBFileManager
-except ImportError:
-    class USBFileManager:
-        def __init__(self): pass
-
-try:
-    from screens.payment import PaymentController as PaymentScreen
-except ImportError:
-    class PaymentScreen:
-        def __init__(self, main_app, pdf_data): pass
-
 def get_base_dir():
-    return os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+    return os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
 
 class PDFButton(QPushButton):
     pdf_selected = pyqtSignal(dict)
@@ -64,11 +52,15 @@ class PDFButton(QPushButton):
             }
         """
 
-    def on_click(self): self.pdf_selected.emit(self.pdf_data)
+    def on_click(self): 
+        self.pdf_selected.emit(self.pdf_data)
+    
     def set_selected(self, selected):
         self.is_selected = selected
-        if selected: self.setStyleSheet(self.get_selected_style())
-        else: self.setStyleSheet(self.get_normal_style())
+        if selected: 
+            self.setStyleSheet(self.get_selected_style())
+        else: 
+            self.setStyleSheet(self.get_normal_style())
 
 class PDFPageWidget(QFrame):
     page_selected = pyqtSignal(int)
@@ -103,15 +95,20 @@ class PDFPageWidget(QFrame):
         self.setMouseTracking(True)
         
     def mousePressEvent(self, event):
-        if not self.checkbox.geometry().contains(event.pos()): self.page_selected.emit(self.page_num)
+        if not self.checkbox.geometry().contains(event.pos()): 
+            self.page_selected.emit(self.page_num)
         
     def on_checkbox_clicked(self, checked):
         self.page_checkbox_clicked.emit(self.page_num, checked)
-        if checked: self.setStyleSheet("QFrame { background-color: white; border: 3px solid #4CAF50; border-radius: 8px; margin: 4px; }")
-        else: self.setStyleSheet("QFrame { background-color: #f5f5f5; border: 2px solid #ccc; border-radius: 8px; margin: 4px; }")
+        if checked: 
+            self.setStyleSheet("QFrame { background-color: white; border: 3px solid #4CAF50; border-radius: 8px; margin: 4px; }")
+        else: 
+            self.setStyleSheet("QFrame { background-color: #f5f5f5; border: 2px solid #ccc; border-radius: 8px; margin: 4px; }")
         
     def set_preview_image(self, pixmap):
-        self.preview_label.clear(); self.preview_label.setAlignment(Qt.AlignCenter); self.preview_label.setPixmap(pixmap)
+        self.preview_label.clear()
+        self.preview_label.setAlignment(Qt.AlignCenter)
+        self.preview_label.setPixmap(pixmap)
         
     def set_error_message(self, error_msg):
         self.preview_label.setText(f"Page {self.page_num}\n\nError:\n{error_msg}")
@@ -121,47 +118,82 @@ class PDFPreviewThread(QThread):
     preview_ready = pyqtSignal(int, QPixmap)
     error_occurred = pyqtSignal(int, str)
     def __init__(self, pdf_path, pages_to_render: list):
-        super().__init__(); self.pdf_path = pdf_path; self.pages_to_render = pages_to_render; self.running = True
+        super().__init__()
+        self.pdf_path = pdf_path
+        self.pages_to_render = pages_to_render
+        self.running = True
+        
     def run(self):
         if not PYMUPDF_AVAILABLE:
             for page_num in self.pages_to_render:
-                if not self.running: break
+                if not self.running: 
+                    break
                 self.error_occurred.emit(page_num, "PyMuPDF not available")
             return
         try:
             doc = fitz.open(self.pdf_path)
             for page_num in self.pages_to_render:
-                if not self.running: break
+                if not self.running: 
+                    break
                 try:
                     page = doc[page_num - 1]
                     pix = page.get_pixmap(matrix=fitz.Matrix(1.2, 1.2))
                     qimg = QImage.fromData(pix.tobytes("ppm"))
                     pixmap = QPixmap.fromImage(qimg).scaled(130, 170, Qt.KeepAspectRatio, Qt.SmoothTransformation)
                     self.preview_ready.emit(page_num, pixmap)
-                except Exception as e: self.error_occurred.emit(page_num, str(e))
+                except Exception as e: 
+                    self.error_occurred.emit(page_num, str(e))
             doc.close()
         except Exception as e:
             err_page = self.pages_to_render[0] if self.pages_to_render else 1
             self.error_occurred.emit(err_page, f"Failed to open PDF: {str(e)}")
-    def stop(self): self.running = False
+            
+    def stop(self): 
+        self.running = False
 
-class FileBrowserScreen(QWidget):
+class FileBrowserView(QWidget):
+    """View for the File Browser screen - handles UI components and presentation."""
+    
     SINGLE_PAGE_PREVIEW_WIDTH = 280
     SINGLE_PAGE_PREVIEW_HEIGHT = 380
     ITEMS_PER_GRID_PAGE = 6
 
-    def __init__(self, main_app):
-        super().__init__()
-        self.main_app = main_app
-        try: self.usb_manager = main_app.usb_screen.usb_manager
-        except Exception: self.usb_manager = USBFileManager()
-        self.pdf_files_data = []; self.selected_pdf = None; self.pdf_buttons = []
-        self.page_widgets = []; self.page_widget_map = {}; self.selected_pages = None
-        self.pdf_page_selections = {}; self.preview_thread = None; self.restore_payment_data = None
-        self.view_mode = 'all'; self.single_page_index = 1; self.current_grid_page = 1
+    # Signals for user interactions
+    back_button_clicked = pyqtSignal()
+    continue_button_clicked = pyqtSignal()
+    pdf_button_clicked = pyqtSignal(dict)  # pdf_data
+    zoom_in_clicked = pyqtSignal()
+    zoom_out_clicked = pyqtSignal()
+    zoom_reset_clicked = pyqtSignal()
+    single_page_clicked = pyqtSignal()
+    multipage_clicked = pyqtSignal()
+    select_all_clicked = pyqtSignal()
+    deselect_all_clicked = pyqtSignal()
+    prev_page_clicked = pyqtSignal()
+    next_page_clicked = pyqtSignal()
+    prev_grid_page_clicked = pyqtSignal()
+    next_grid_page_clicked = pyqtSignal()
+    page_widget_clicked = pyqtSignal(int)
+    page_checkbox_clicked = pyqtSignal(int, bool)
+    single_page_checkbox_clicked = pyqtSignal(bool)
+    
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.pdf_files_data = []
+        self.selected_pdf = None
+        self.pdf_buttons = []
+        self.page_widgets = []
+        self.page_widget_map = {}
+        self.selected_pages = None
+        self.pdf_page_selections = {}
+        self.preview_thread = None
+        self.view_mode = 'all'
+        self.single_page_index = 1
+        self.current_grid_page = 1
         self.setup_ui()
 
     def setup_ui(self):
+        """Sets up the user interface for the screen."""
         stacked_layout = QStackedLayout()
         stacked_layout.setContentsMargins(0, 0, 0, 0)
         stacked_layout.setStackingMode(QStackedLayout.StackAll)
@@ -245,17 +277,21 @@ class FileBrowserScreen(QWidget):
 
         self.view_all_btn = QPushButton("All Pages View")
         self.view_single_btn = QPushButton("Single Page View")
-        self.view_all_btn.setCheckable(True); self.view_single_btn.setCheckable(True)
+        self.view_all_btn.setCheckable(True)
+        self.view_single_btn.setCheckable(True)
         self.view_all_btn.setChecked(True)
-        self.view_all_btn.setStyleSheet(all_button_style); self.view_single_btn.setStyleSheet(all_button_style)
-        self.view_all_btn.setFixedHeight(button_height); self.view_single_btn.setFixedHeight(button_height)
-        self.view_all_btn.clicked.connect(self.set_all_pages_view); self.view_single_btn.clicked.connect(self.set_single_page_view)
+        self.view_all_btn.setStyleSheet(all_button_style)
+        self.view_single_btn.setStyleSheet(all_button_style)
+        self.view_all_btn.setFixedHeight(button_height)
+        self.view_single_btn.setFixedHeight(button_height)
+        self.view_all_btn.clicked.connect(self.multipage_clicked.emit)
+        self.view_single_btn.clicked.connect(self.single_page_clicked.emit)
 
         self.select_all_btn = QPushButton("Select All Pages")
         self.select_all_btn.setVisible(False)
         self.select_all_btn.setStyleSheet(all_button_style)
         self.select_all_btn.setFixedHeight(button_height)
-        self.select_all_btn.clicked.connect(self.select_all_pages)
+        self.select_all_btn.clicked.connect(self.select_all_clicked.emit)
 
         self.deselect_all_btn = QPushButton("Deselect All")
         self.deselect_all_btn.setVisible(False)
@@ -268,11 +304,13 @@ class FileBrowserScreen(QWidget):
             QPushButton:hover, QPushButton:checked { background-color: #f57c00; }
         """)
         self.deselect_all_btn.setFixedHeight(button_height)
-        self.deselect_all_btn.clicked.connect(self.deselect_all_pages)
+        self.deselect_all_btn.clicked.connect(self.deselect_all_clicked.emit)
 
         header_row.addWidget(self.preview_header, 1, Qt.AlignLeft)
-        header_row.addWidget(self.view_all_btn); header_row.addWidget(self.view_single_btn)
-        header_row.addWidget(self.select_all_btn); header_row.addWidget(self.deselect_all_btn)
+        header_row.addWidget(self.view_all_btn)
+        header_row.addWidget(self.view_single_btn)
+        header_row.addWidget(self.select_all_btn)
+        header_row.addWidget(self.deselect_all_btn)
         
         # PREVIEW CONTAINER
         self.preview_container = QFrame()
@@ -281,7 +319,7 @@ class FileBrowserScreen(QWidget):
         
         self.preview_layout = QGridLayout(self.preview_container)
         self.preview_layout.setSpacing(5)
-        # --- MODIFICATION: Set up stretches for horizontal and vertical centering ---
+        # Set up stretches for horizontal and vertical centering
         self.preview_layout.setColumnStretch(0, 1) # Left horizontal stretch
         self.preview_layout.setColumnStretch(4, 1) # Right horizontal stretch
         self.preview_layout.setRowStretch(0, 1)    # Top vertical stretch
@@ -304,34 +342,55 @@ class FileBrowserScreen(QWidget):
             }}
             QPushButton:pressed, QPushButton:checked, QPushButton:hover {{ background-color: #2a5d1a; }}
         """
-        self.prev_page_btn = QPushButton("←"); self.prev_page_btn.setStyleSheet(nav_btn_style)
-        self.next_page_btn = QPushButton("→"); self.next_page_btn.setStyleSheet(nav_btn_style)
-        self.prev_page_btn.setFixedHeight(button_height); self.next_page_btn.setFixedHeight(button_height)
+        self.prev_page_btn = QPushButton("←")
+        self.prev_page_btn.setStyleSheet(nav_btn_style)
+        self.next_page_btn = QPushButton("→")
+        self.next_page_btn.setStyleSheet(nav_btn_style)
+        self.prev_page_btn.setFixedHeight(button_height)
+        self.next_page_btn.setFixedHeight(button_height)
         self.page_input = QLabel("1")
         self.page_input.setStyleSheet("QLabel { background-color: transparent; color: #36454F; font-size: 13px; min-width: 40px; max-width: 40px; border-radius: 3px; padding: 1px 4px; border: none; font-weight: bold; qproperty-alignment: AlignCenter; }")
         zoom_btn_style = nav_btn_style
-        self.zoom_in_btn = QPushButton("+"); self.zoom_in_btn.setStyleSheet(zoom_btn_style); self.zoom_in_btn.setFixedHeight(button_height)
-        self.zoom_out_btn = QPushButton("−"); self.zoom_out_btn.setStyleSheet(zoom_btn_style); self.zoom_out_btn.setFixedHeight(button_height)
-        self.zoom_reset_btn = QPushButton("⌂"); self.zoom_reset_btn.setStyleSheet(zoom_btn_style); self.zoom_reset_btn.setFixedHeight(button_height)
+        self.zoom_in_btn = QPushButton("+")
+        self.zoom_in_btn.setStyleSheet(zoom_btn_style)
+        self.zoom_in_btn.setFixedHeight(button_height)
+        self.zoom_out_btn = QPushButton("−")
+        self.zoom_out_btn.setStyleSheet(zoom_btn_style)
+        self.zoom_out_btn.setFixedHeight(button_height)
+        self.zoom_reset_btn = QPushButton("⌂")
+        self.zoom_reset_btn.setStyleSheet(zoom_btn_style)
+        self.zoom_reset_btn.setFixedHeight(button_height)
         self.zoom_label = QLabel("100%")
         self.zoom_label.setStyleSheet("QLabel { background-color: transparent; color: #36454F; font-size: 12px; min-width: 45px; max-width: 45px; border-radius: 3px; padding: 2px 4px; border: none; font-weight: bold; qproperty-alignment: AlignCenter; margin: 0 5px; }")
-        nav_layout.addWidget(self.prev_page_btn); nav_layout.addWidget(self.page_input); nav_layout.addWidget(self.next_page_btn)
+        nav_layout.addWidget(self.prev_page_btn)
+        nav_layout.addWidget(self.page_input)
+        nav_layout.addWidget(self.next_page_btn)
         nav_layout.addStretch()
-        zoom_label_container = QLabel("Zoom:"); zoom_label_container.setStyleSheet("background-color: transparent; color: #36454F; font-weight: bold;")
-        nav_layout.addWidget(zoom_label_container); nav_layout.addWidget(self.zoom_out_btn); nav_layout.addWidget(self.zoom_label);
-        nav_layout.addWidget(self.zoom_in_btn); nav_layout.addWidget(self.zoom_reset_btn)
-        self.prev_page_btn.clicked.connect(self.prev_single_page); self.next_page_btn.clicked.connect(self.next_single_page)
-        self.zoom_in_btn.clicked.connect(self.zoom_in); self.zoom_out_btn.clicked.connect(self.zoom_out); self.zoom_reset_btn.clicked.connect(self.zoom_reset)
+        zoom_label_container = QLabel("Zoom:")
+        zoom_label_container.setStyleSheet("background-color: transparent; color: #36454F; font-weight: bold;")
+        nav_layout.addWidget(zoom_label_container)
+        nav_layout.addWidget(self.zoom_out_btn)
+        nav_layout.addWidget(self.zoom_label)
+        nav_layout.addWidget(self.zoom_in_btn)
+        nav_layout.addWidget(self.zoom_reset_btn)
+        self.prev_page_btn.clicked.connect(self.prev_page_clicked.emit)
+        self.next_page_btn.clicked.connect(self.next_page_clicked.emit)
+        self.zoom_in_btn.clicked.connect(self.zoom_in_clicked.emit)
+        self.zoom_out_btn.clicked.connect(self.zoom_out_clicked.emit)
+        self.zoom_reset_btn.clicked.connect(self.zoom_reset_clicked.emit)
         self.single_page_layout.addLayout(nav_layout)
-        self.single_page_checkbox = QCheckBox("Select this page"); self.single_page_checkbox.setStyleSheet("QCheckBox { color: #36454F; font-size: 13px; background-color: transparent; }")
-        self.single_page_checkbox.stateChanged.connect(self.single_page_checkbox_changed)
+        self.single_page_checkbox = QCheckBox("Select this page")
+        self.single_page_checkbox.setStyleSheet("QCheckBox { color: #36454F; font-size: 13px; background-color: transparent; }")
+        self.single_page_checkbox.stateChanged.connect(lambda state: self.single_page_checkbox_clicked.emit(state == Qt.Checked))
         self.single_page_layout.addWidget(self.single_page_checkbox)
-        self.single_page_preview = PDFPreviewWidget(); self.single_page_preview.setFixedSize(self.SINGLE_PAGE_PREVIEW_WIDTH, self.SINGLE_PAGE_PREVIEW_HEIGHT)
+        self.single_page_preview = PDFPreviewWidget()
+        self.single_page_preview.setFixedSize(self.SINGLE_PAGE_PREVIEW_WIDTH, self.SINGLE_PAGE_PREVIEW_HEIGHT)
         self.single_page_preview.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
         self.single_page_layout.addWidget(self.single_page_preview, 0, Qt.AlignHCenter)
 
         # PAGINATION CONTROLS
-        self.prev_grid_page_btn = QPushButton("<< Prev"); self.next_grid_page_btn = QPushButton("Next >>")
+        self.prev_grid_page_btn = QPushButton("<< Prev")
+        self.next_grid_page_btn = QPushButton("Next >>")
         pagination_style = f"""
             QPushButton {{
                 color: white; font-size: 12px; font-weight: bold; border: none; border-radius: 4px; height: {button_height}px;
@@ -340,30 +399,50 @@ class FileBrowserScreen(QWidget):
             QPushButton:hover, QPushButton:checked {{ background-color: #2a5d1a; }}
             QPushButton:disabled {{ background-color: #3e423a; color: #555; }}
         """
-        self.prev_grid_page_btn.setStyleSheet(pagination_style); self.next_grid_page_btn.setStyleSheet(pagination_style)
-        self.prev_grid_page_btn.setFixedHeight(button_height); self.next_grid_page_btn.setFixedHeight(button_height)
-        self.prev_grid_page_btn.clicked.connect(self.prev_grid_page); self.next_grid_page_btn.clicked.connect(self.next_grid_page)
-        self.grid_page_label = QLabel("Page 1 / 1"); self.grid_page_label.setAlignment(Qt.AlignCenter)
+        self.prev_grid_page_btn.setStyleSheet(pagination_style)
+        self.next_grid_page_btn.setStyleSheet(pagination_style)
+        self.prev_grid_page_btn.setFixedHeight(button_height)
+        self.next_grid_page_btn.setFixedHeight(button_height)
+        self.prev_grid_page_btn.clicked.connect(self.prev_grid_page_clicked.emit)
+        self.next_grid_page_btn.clicked.connect(self.next_grid_page_clicked.emit)
+        self.grid_page_label = QLabel("Page 1 / 1")
+        self.grid_page_label.setAlignment(Qt.AlignCenter)
         self.grid_page_label.setStyleSheet("color: #36454F; font-size: 14px; background-color: transparent;")
 
         # BOTTOM CONTROLS
-        bottom_controls = QHBoxLayout(); bottom_controls.setSpacing(15)
+        bottom_controls = QHBoxLayout()
+        bottom_controls.setSpacing(15)
         self.back_btn = QPushButton("← Back to USB")
         self.back_btn.setStyleSheet(f"QPushButton {{ color: white; font-size: 12px; font-weight: bold; border: none; border-radius: 4px; height: {button_height}px; background-color: #ff0000; padding-left: 12px; padding-right: 12px; }} QPushButton:hover {{ background-color: #ffb84d; }}")
-        self.back_btn.setFixedHeight(button_height); self.back_btn.clicked.connect(self.go_back)
-        self.continue_btn = QPushButton("Set Print Options →"); self.continue_btn.setStyleSheet(all_button_style)
-        self.continue_btn.setFixedHeight(button_height); self.continue_btn.clicked.connect(self.continue_to_print_options)
+        self.back_btn.setFixedHeight(button_height)
+        self.back_btn.clicked.connect(self.back_button_clicked.emit)
+        self.continue_btn = QPushButton("Set Print Options →")
+        self.continue_btn.setStyleSheet(all_button_style)
+        self.continue_btn.setFixedHeight(button_height)
+        self.continue_btn.clicked.connect(self.continue_button_clicked.emit)
         self.continue_btn.setVisible(False)
-        self.page_info = QLabel("No PDF selected"); self.page_info.setStyleSheet("QLabel { color: #36454F; font-size: 14px; background-color: transparent; }")
-        self.selected_count_label = QLabel(""); self.selected_count_label.setStyleSheet("QLabel { color: #4CAF50; font-size: 14px; font-weight: bold; background-color: transparent; }")
-        pagination_controls = QHBoxLayout(); pagination_controls.setSpacing(6)
-        pagination_controls.addWidget(self.prev_grid_page_btn, 0, Qt.AlignCenter); pagination_controls.addWidget(self.grid_page_label, 0, Qt.AlignCenter); pagination_controls.addWidget(self.next_grid_page_btn, 0, Qt.AlignCenter)
-        bottom_controls.addWidget(self.back_btn, 0, Qt.AlignCenter); bottom_controls.addStretch(1); bottom_controls.addLayout(pagination_controls); bottom_controls.addStretch(1)
-        bottom_controls.addWidget(self.page_info, 0, Qt.AlignCenter); bottom_controls.addWidget(self.selected_count_label, 0, Qt.AlignCenter)
-        bottom_controls.addStretch(1); bottom_controls.addWidget(self.continue_btn, 0, Qt.AlignCenter)
+        self.page_info = QLabel("No PDF selected")
+        self.page_info.setStyleSheet("QLabel { color: #36454F; font-size: 14px; background-color: transparent; }")
+        self.selected_count_label = QLabel("")
+        self.selected_count_label.setStyleSheet("QLabel { color: #4CAF50; font-size: 14px; font-weight: bold; background-color: transparent; }")
+        pagination_controls = QHBoxLayout()
+        pagination_controls.setSpacing(6)
+        pagination_controls.addWidget(self.prev_grid_page_btn, 0, Qt.AlignCenter)
+        pagination_controls.addWidget(self.grid_page_label, 0, Qt.AlignCenter)
+        pagination_controls.addWidget(self.next_grid_page_btn, 0, Qt.AlignCenter)
+        bottom_controls.addWidget(self.back_btn, 0, Qt.AlignCenter)
+        bottom_controls.addStretch(1)
+        bottom_controls.addLayout(pagination_controls)
+        bottom_controls.addStretch(1)
+        bottom_controls.addWidget(self.page_info, 0, Qt.AlignCenter)
+        bottom_controls.addWidget(self.selected_count_label, 0, Qt.AlignCenter)
+        bottom_controls.addStretch(1)
+        bottom_controls.addWidget(self.continue_btn, 0, Qt.AlignCenter)
 
         # STACKED LAYOUT FOR PREVIEW AREA
-        preview_area_layout = QStackedLayout(); preview_area_layout.setStackingMode(QStackedLayout.StackAll); preview_area_layout.setContentsMargins(0, 0, 0, 0)
+        preview_area_layout = QStackedLayout()
+        preview_area_layout.setStackingMode(QStackedLayout.StackAll)
+        preview_area_layout.setContentsMargins(0, 0, 0, 0)
         preview_area_layout.addWidget(self.preview_container)
         preview_area_layout.addWidget(self.single_page_widget)
         self.single_page_widget.hide()
@@ -376,43 +455,121 @@ class FileBrowserScreen(QWidget):
         main_col.addLayout(split_row, 1)
         stacked_layout.addWidget(background_label)
         stacked_layout.addWidget(foreground_widget)
-        self.setLayout(stacked_layout)
-        self.prev_grid_page_btn.hide(); self.grid_page_label.hide(); self.next_grid_page_btn.hide()
+        
+        # Don't set layout here - let the controller handle it
+        self.main_layout = stacked_layout
+        self.prev_grid_page_btn.hide()
+        self.grid_page_label.hide()
+        self.next_grid_page_btn.hide()
+
+    def load_pdf_files(self, pdf_files):
+        """Loads PDF files into the list."""
+        print(f"📁 Loading {len(pdf_files)} PDF files into view")
+        self.pdf_files_data = []
+        self.pdf_page_selections = {}
+        for pdf_info in pdf_files: 
+            self.pdf_files_data.append({
+                'filename': pdf_info['filename'], 
+                'type': 'pdf', 
+                'pages': pdf_info.get('pages', 1), 
+                'size': pdf_info['size'], 
+                'path': pdf_info['path']
+            })
+        self.file_header.setText(f"PDF Files ({len(self.pdf_files_data)} files)")
+        self.clear_file_list()
+        self.pdf_buttons = []
+        for pdf_data in self.pdf_files_data:
+            pdf_btn = PDFButton(pdf_data)
+            pdf_btn.pdf_selected.connect(self.pdf_button_clicked.emit)
+            self.pdf_buttons.append(pdf_btn)
+            self.file_list_layout.insertWidget(self.file_list_layout.count() - 1, pdf_btn)
+        self.selected_pdf = None
+        self.selected_pages = None
+        self.clear_preview()
+        self.page_info.setText("Select a PDF to preview pages")
+        self.preview_header.setText("Select a PDF file to preview pages")
+        self.prev_grid_page_btn.hide()
+        self.grid_page_label.hide()
+        self.next_grid_page_btn.hide()
+        if self.pdf_files_data: 
+            self.select_pdf(self.pdf_files_data[0])
+
+    def clear_file_list(self):
+        """Clears the file list."""
+        while self.file_list_layout.count() > 1:
+            child = self.file_list_layout.takeAt(0)
+            if child.widget(): 
+                child.widget().deleteLater()
+
+    def select_pdf(self, pdf_data):
+        """Selects a PDF file and updates the UI."""
+        print(f"📄 Selecting PDF: {pdf_data['filename']}")
+        if self.selected_pdf is not None and self.selected_pages is not None: 
+            self.pdf_page_selections[self.selected_pdf['path']] = self.selected_pages.copy()
+        self.selected_pdf = pdf_data
+        if pdf_data['path'] in self.pdf_page_selections: 
+            self.selected_pages = self.pdf_page_selections[self.selected_pdf['path']].copy()
+        else: 
+            self.selected_pages = {i: True for i in range(1, pdf_data['pages'] + 1)}
+        for btn in self.pdf_buttons: 
+            btn.set_selected(btn.pdf_data == pdf_data)
+        self.preview_header.setText(f"{pdf_data['filename']}")
+        self.view_mode = 'all'
+        self.update_view_mode_buttons()
+        self.current_grid_page = 1
+        self.single_page_index = 1
+        self.show_pdf_preview()
 
     def show_pdf_preview(self):
+        """Shows the PDF preview in grid mode."""
         self.preview_container.show()
         self.single_page_widget.hide()
-        self.prev_grid_page_btn.show(); self.grid_page_label.show(); self.next_grid_page_btn.show()
+        self.prev_grid_page_btn.show()
+        self.grid_page_label.show()
+        self.next_grid_page_btn.show()
         if not self.selected_pdf:
-            self.prev_grid_page_btn.hide(); self.grid_page_label.hide(); self.next_grid_page_btn.hide()
+            self.prev_grid_page_btn.hide()
+            self.grid_page_label.hide()
+            self.next_grid_page_btn.hide()
             return
         self.clear_preview()
         total_doc_pages = self.selected_pdf['pages']
-        self.page_info.setText(""); self.update_selected_count()
-        self.select_all_btn.setVisible(True); self.deselect_all_btn.setVisible(True); self.continue_btn.setVisible(True)
+        self.page_info.setText("")
+        self.update_selected_count()
+        self.select_all_btn.setVisible(True)
+        self.deselect_all_btn.setVisible(True)
+        self.continue_btn.setVisible(True)
         total_grid_pages = (total_doc_pages + self.ITEMS_PER_GRID_PAGE - 1) // self.ITEMS_PER_GRID_PAGE
         self.grid_page_label.setText(f"{self.current_grid_page} / {total_grid_pages}")
-        self.prev_grid_page_btn.setEnabled(self.current_grid_page > 1); self.next_grid_page_btn.setEnabled(self.current_grid_page < total_grid_pages)
+        self.prev_grid_page_btn.setEnabled(self.current_grid_page > 1)
+        self.next_grid_page_btn.setEnabled(self.current_grid_page < total_grid_pages)
         start_page = (self.current_grid_page - 1) * self.ITEMS_PER_GRID_PAGE + 1
         end_page = min(self.current_grid_page * self.ITEMS_PER_GRID_PAGE, total_doc_pages)
         pages_to_show = list(range(start_page, end_page + 1))
         
         for i, page_num in enumerate(pages_to_show):
             page_widget = PDFPageWidget(page_num, checked=self.selected_pages.get(page_num, True))
-            page_widget.page_selected.connect(self.on_page_widget_clicked); page_widget.page_checkbox_clicked.connect(self.on_page_selected)
-            self.page_widgets.append(page_widget); self.page_widget_map[page_num] = page_widget
-            # --- MODIFICATION: Add widgets to rows 1 and 2 to account for top stretch ---
+            page_widget.page_selected.connect(self.page_widget_clicked.emit)
+            page_widget.page_checkbox_clicked.connect(self.page_checkbox_clicked.emit)
+            self.page_widgets.append(page_widget)
+            self.page_widget_map[page_num] = page_widget
+            # Add widgets to rows 1 and 2 to account for top stretch
             self.preview_layout.addWidget(page_widget, (i // 3) + 1, (i % 3) + 1)
             
         if PYMUPDF_AVAILABLE:
             self.preview_thread = PDFPreviewThread(self.selected_pdf['path'], pages_to_show)
-            self.preview_thread.preview_ready.connect(self.on_preview_ready); self.preview_thread.error_occurred.connect(self.on_preview_error)
+            self.preview_thread.preview_ready.connect(self.on_preview_ready)
+            self.preview_thread.error_occurred.connect(self.on_preview_error)
             self.preview_thread.start()
         else:
-            for widget in self.page_widgets: widget.preview_label.setText(f"Page {widget.page_num}\n\nPDF Preview\nRequires PyMuPDF")
+            for widget in self.page_widgets: 
+                widget.preview_label.setText(f"Page {widget.page_num}\n\nPDF Preview\nRequires PyMuPDF")
 
     def clear_preview(self):
-        if self.preview_thread and self.preview_thread.isRunning(): self.preview_thread.stop(); self.preview_thread.wait()
+        """Clears the preview area."""
+        if self.preview_thread and self.preview_thread.isRunning(): 
+            self.preview_thread.stop()
+            self.preview_thread.wait()
         
         while self.preview_layout.count():
             item = self.preview_layout.takeAt(0)
@@ -421,23 +578,34 @@ class FileBrowserScreen(QWidget):
                 if widget is not None:
                     widget.deleteLater()
             
-        self.page_widgets.clear(); self.page_widget_map.clear()
-        self.select_all_btn.setVisible(False); self.deselect_all_btn.setVisible(False); self.continue_btn.setVisible(False)
+        self.page_widgets.clear()
+        self.page_widget_map.clear()
+        self.select_all_btn.setVisible(False)
+        self.deselect_all_btn.setVisible(False)
+        self.continue_btn.setVisible(False)
         self.selected_count_label.setText("")
-        
-    # ... (rest of the methods are unchanged) ...
 
     def show_single_page(self):
+        """Shows the single page view."""
         self.preview_container.hide()
         self.single_page_widget.show()
-        self.prev_grid_page_btn.hide(); self.grid_page_label.hide(); self.next_grid_page_btn.hide()
-        if not self.selected_pdf: return
+        self.prev_grid_page_btn.hide()
+        self.grid_page_label.hide()
+        self.next_grid_page_btn.hide()
+        if not self.selected_pdf: 
+            return
         self.single_page_preview.setBorderless(True)
         total_pages = self.selected_pdf['pages']
-        if not (1 <= self.single_page_index <= total_pages): self.single_page_index = 1
-        page_num = self.single_page_index; self.page_info.setText(f"Page {page_num} of {total_pages}"); self.page_input.setText(f"{page_num}")
-        self.single_page_checkbox.blockSignals(True); self.single_page_checkbox.setChecked(self.selected_pages.get(page_num, False)); self.single_page_checkbox.blockSignals(False)
-        self.update_zoom_label(); self.single_page_preview.clear()
+        if not (1 <= self.single_page_index <= total_pages): 
+            self.single_page_index = 1
+        page_num = self.single_page_index
+        self.page_info.setText(f"Page {page_num} of {total_pages}")
+        self.page_input.setText(f"{page_num}")
+        self.single_page_checkbox.blockSignals(True)
+        self.single_page_checkbox.setChecked(self.selected_pages.get(page_num, False))
+        self.single_page_checkbox.blockSignals(False)
+        self.update_zoom_label()
+        self.single_page_preview.clear()
         if PYMUPDF_AVAILABLE:
             try:
                 doc = fitz.open(self.selected_pdf['path'])
@@ -447,118 +615,103 @@ class FileBrowserScreen(QWidget):
                     qimg = QImage(pix.samples, pix.width, pix.height, pix.stride, QImage.Format_RGB888)
                     self.single_page_preview.setPixmap(QPixmap.fromImage(qimg))
                 doc.close()
-            except Exception as e: print(f"Error rendering page {page_num}: {e}"); self.single_page_preview.clear()
-        else: self.single_page_preview.clear()
+            except Exception as e: 
+                print(f"Error rendering page {page_num}: {e}")
+                self.single_page_preview.clear()
+        else: 
+            self.single_page_preview.clear()
 
-    def _set_view_mode_buttons_style(self): pass
-    def update_view_mode_buttons(self): self.view_all_btn.setChecked(self.view_mode == 'all'); self.view_single_btn.setChecked(self.view_mode == 'single')
-    def set_all_pages_view(self): self.view_mode = 'all'; self.update_view_mode_buttons(); self.show_pdf_preview()
-    def set_single_page_view(self):
-        self.view_mode = 'single'; self.update_view_mode_buttons()
-        if self.selected_pdf and not (1 <= self.single_page_index <= self.selected_pdf['pages']): self.single_page_index = 1
-        self.show_single_page()
-    def prev_grid_page(self):
-        if self.current_grid_page > 1: self.current_grid_page -= 1; self.show_pdf_preview()
-    def next_grid_page(self):
-        if not self.selected_pdf: return
-        total_doc_pages = self.selected_pdf['pages']
-        total_grid_pages = (total_doc_pages + self.ITEMS_PER_GRID_PAGE - 1) // self.ITEMS_PER_GRID_PAGE
-        if self.current_grid_page < total_grid_pages: self.current_grid_page += 1; self.show_pdf_preview()
-    def prev_single_page(self):
-        if self.single_page_index > 1: self.single_page_index -= 1; self.show_single_page()
-    def next_single_page(self):
-        if self.selected_pdf and self.single_page_index < self.selected_pdf['pages']: self.single_page_index += 1; self.show_single_page()
-    def single_page_checkbox_changed(self, state):
-        if self.selected_pdf: self.selected_pages[self.single_page_index] = (state == Qt.Checked); self.pdf_page_selections[self.selected_pdf['path']] = self.selected_pages.copy(); self.update_selected_count()
-    def on_page_widget_clicked(self, page_num): self.single_page_index = page_num; self.set_single_page_view()
-    def on_page_selected(self, page_num, selected):
-        self.selected_pages[page_num] = selected
-        if self.selected_pdf: self.pdf_page_selections[self.selected_pdf['path']] = self.selected_pages.copy()
-        self.update_selected_count()
-        if self.view_mode == 'single' and page_num == self.single_page_index:
-            self.single_page_checkbox.blockSignals(True); self.single_page_checkbox.setChecked(selected); self.single_page_checkbox.blockSignals(False)
-    def load_pdf_files(self, pdf_files):
-        self.pdf_files_data = []
-        self.pdf_page_selections = {}
-        for pdf_info in pdf_files: self.pdf_files_data.append({'filename': pdf_info['filename'], 'type': 'pdf', 'pages': pdf_info.get('pages', 1), 'size': pdf_info['size'], 'path': pdf_info['path']})
-        self.file_header.setText(f"PDF Files ({len(self.pdf_files_data)} files)")
-        self.clear_file_list()
-        self.pdf_buttons = []
-        for pdf_data in self.pdf_files_data:
-            pdf_btn = PDFButton(pdf_data)
-            pdf_btn.pdf_selected.connect(self.select_pdf)
-            self.pdf_buttons.append(pdf_btn)
-            self.file_list_layout.insertWidget(self.file_list_layout.count() - 1, pdf_btn)
-        self.selected_pdf = None; self.selected_pages = None
-        self.clear_preview()
-        self.page_info.setText("Select a PDF to preview pages")
-        self.preview_header.setText("Select a PDF file to preview pages")
-        self.prev_grid_page_btn.hide(); self.grid_page_label.hide(); self.next_grid_page_btn.hide()
-        if self.pdf_files_data: self.select_pdf(self.pdf_files_data[0])
-    def clear_file_list(self):
-        while self.file_list_layout.count() > 1:
-            child = self.file_list_layout.takeAt(0)
-            if child.widget(): child.widget().deleteLater()
-    
-    def select_pdf(self, pdf_data):
-        if self.selected_pdf is not None and self.selected_pages is not None: self.pdf_page_selections[self.selected_pdf['path']] = self.selected_pages.copy()
-        self.selected_pdf = pdf_data
-        if pdf_data['path'] in self.pdf_page_selections: self.selected_pages = self.pdf_page_selections[self.selected_pdf['path']].copy()
-        else: self.selected_pages = {i: True for i in range(1, pdf_data['pages'] + 1)}
-        for btn in self.pdf_buttons: btn.set_selected(btn.pdf_data == pdf_data)
-        self.preview_header.setText(f"{pdf_data['filename']}")
-        self.view_mode = 'all'; self.update_view_mode_buttons()
-        self.current_grid_page = 1; self.single_page_index = 1
+    def update_view_mode_buttons(self):
+        """Updates the view mode buttons."""
+        self.view_all_btn.setChecked(self.view_mode == 'all')
+        self.view_single_btn.setChecked(self.view_mode == 'single')
+
+    def set_all_pages_view(self):
+        """Sets the view to all pages mode."""
+        self.view_mode = 'all'
+        self.update_view_mode_buttons()
         self.show_pdf_preview()
+
+    def set_single_page_view(self):
+        """Sets the view to single page mode."""
+        self.view_mode = 'single'
+        self.update_view_mode_buttons()
+        if self.selected_pdf and not (1 <= self.single_page_index <= self.selected_pdf['pages']): 
+            self.single_page_index = 1
+        self.show_single_page()
+
     def update_selected_count(self):
-        if not self.selected_pages: return
+        """Updates the selected count display."""
+        if not self.selected_pages: 
+            return
         selected_count = sum(1 for selected in self.selected_pages.values() if selected)
         self.selected_count_label.setText(f"Selected: {selected_count}/{len(self.selected_pages)} pages")
         self.continue_btn.setEnabled(selected_count > 0)
+
     def select_all_pages(self):
-        if not self.selected_pages: return
-        for page_num in self.selected_pages: self.selected_pages[page_num] = True
-        if self.selected_pdf: self.pdf_page_selections[self.selected_pdf['path']] = self.selected_pages.copy()
-        for widget in self.page_widgets: widget.checkbox.setChecked(True)
+        """Selects all pages."""
+        if not self.selected_pages: 
+            return
+        for page_num in self.selected_pages: 
+            self.selected_pages[page_num] = True
+        if self.selected_pdf: 
+            self.pdf_page_selections[self.selected_pdf['path']] = self.selected_pages.copy()
+        for widget in self.page_widgets: 
+            widget.checkbox.setChecked(True)
         self.update_selected_count()
-        if self.view_mode == 'single': self.single_page_checkbox.blockSignals(True); self.single_page_checkbox.setChecked(True); self.single_page_checkbox.blockSignals(False)
+        if self.view_mode == 'single': 
+            self.single_page_checkbox.blockSignals(True)
+            self.single_page_checkbox.setChecked(True)
+            self.single_page_checkbox.blockSignals(False)
+
     def deselect_all_pages(self):
-        if not self.selected_pages: return
-        for page_num in self.selected_pages: self.selected_pages[page_num] = False
-        if self.selected_pdf: self.pdf_page_selections[self.selected_pdf['path']] = self.selected_pages.copy()
-        for widget in self.page_widgets: widget.checkbox.setChecked(False)
+        """Deselects all pages."""
+        if not self.selected_pages: 
+            return
+        for page_num in self.selected_pages: 
+            self.selected_pages[page_num] = False
+        if self.selected_pdf: 
+            self.pdf_page_selections[self.selected_pdf['path']] = self.selected_pages.copy()
+        for widget in self.page_widgets: 
+            widget.checkbox.setChecked(False)
         self.update_selected_count()
-        if self.view_mode == 'single': self.single_page_checkbox.blockSignals(True); self.single_page_checkbox.setChecked(False); self.single_page_checkbox.blockSignals(False)
-    def continue_to_print_options(self):
-        if not self.selected_pdf: QMessageBox.warning(self, "No PDF Selected", "Please select a PDF file."); return
-        selected_pages_list = [page for page, selected in self.selected_pages.items() if selected]
-        if not selected_pages_list: QMessageBox.warning(self, "No Pages Selected", "Please select at least one page to print."); return
-        options_screen = self.main_app.printing_options_screen
-        options_screen.set_pdf_data(self.selected_pdf, selected_pages_list)
-        self.main_app.show_screen('printing_options')
+        if self.view_mode == 'single': 
+            self.single_page_checkbox.blockSignals(True)
+            self.single_page_checkbox.setChecked(False)
+            self.single_page_checkbox.blockSignals(False)
+
     def on_preview_ready(self, page_num, pixmap):
+        """Handles when a preview is ready."""
         if self.view_mode == 'all':
             widget = self.page_widget_map.get(page_num)
-            if widget: widget.set_preview_image(pixmap)
-        elif self.view_mode == 'single' and page_num == self.single_page_index: self.single_page_preview.setPixmap(pixmap)
+            if widget: 
+                widget.set_preview_image(pixmap)
+        elif self.view_mode == 'single' and page_num == self.single_page_index: 
+            self.single_page_preview.setPixmap(pixmap)
+
     def on_preview_error(self, page_num, error_msg):
+        """Handles when a preview error occurs."""
         if self.view_mode == 'all':
             widget = self.page_widget_map.get(page_num)
-            if widget: widget.set_error_message(error_msg)
-        elif self.view_mode == 'single' and page_num == self.single_page_index: self.single_page_preview.clear()
-    def go_back(self): self.main_app.show_screen('usb')
-    def on_enter(self):
-        if self.restore_payment_data: self.restore_payment_data = None
-        elif self.pdf_files_data and not self.selected_pdf: self.select_pdf(self.pdf_files_data[0])
-    def on_leave(self):
-        if self.preview_thread and self.preview_thread.isRunning(): self.preview_thread.stop(); self.preview_thread.wait()
-    def zoom_in(self):
-        if self.single_page_preview: self.single_page_preview.zoomIn(); self.update_zoom_label()
-    def zoom_out(self):
-        if self.single_page_preview: self.single_page_preview.zoomOut(); self.update_zoom_label()
-    def zoom_reset(self):
-        if self.single_page_preview: self.single_page_preview.resetZoom(); self.update_zoom_label()
+            if widget: 
+                widget.set_error_message(error_msg)
+        elif self.view_mode == 'single' and page_num == self.single_page_index: 
+            self.single_page_preview.clear()
+
     def update_zoom_label(self):
+        """Updates the zoom label."""
         if self.single_page_preview:
             zoom_factor = self.single_page_preview.getZoomFactor()
             self.zoom_label.setText(f"{int(zoom_factor * 100)}%")
+
+    def set_continue_button_enabled(self, enabled):
+        """Enables or disables the continue button."""
+        self.continue_btn.setEnabled(enabled)
+
+    def show_analysis_loading(self, filename):
+        """Shows loading state for analysis."""
+        pass  # Not used in this view
+
+    def update_analysis_info(self, analysis_data):
+        """Updates the analysis information display."""
+        pass  # Not used in this view
