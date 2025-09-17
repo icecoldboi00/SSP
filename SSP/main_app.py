@@ -14,7 +14,7 @@ from screens.file_browser_screen import FileBrowserScreen
 from screens.payment_dialog import PaymentScreen
 from screens.Print_Options_Screen import Print_Options_Screen
 from screens.admin import AdminController as AdminScreen
-from screens.data_viewer_screen import DataViewerScreen
+from screens.data_viewer import DataViewerController
 from screens.thank_you_screen import ThankYouScreen
 from database.models import init_db
 from managers.printer_manager import PrinterManager  # Import the new manager
@@ -51,7 +51,7 @@ class PrintingSystemApp(QMainWindow):
         self.printing_options_screen = Print_Options_Screen(self)
         self.payment_screen = PaymentScreen(self)
         self.admin_screen = AdminScreen(self)
-        self.data_viewer_screen = DataViewerScreen(self, self.admin_screen.db_manager)
+        self.data_viewer_screen = DataViewerController(self, self.admin_screen.db_manager)
         self.thank_you_screen = ThankYouScreen(self) # Initialize the new screen
 
         # Add screens to the stack
