@@ -12,10 +12,10 @@ from screens.idle import IdleController
 from screens.usb import USBController
 from screens.file_browser_screen import FileBrowserScreen
 from screens.payment_dialog import PaymentScreen
-from screens.Print_Options_Screen import Print_Options_Screen
+from screens.print_options import PrintOptionsController
 from screens.admin import AdminController as AdminScreen
 from screens.data_viewer import DataViewerController
-from screens.thank_you_screen import ThankYouScreen
+from screens.thank_you import ThankYouController
 from database.models import init_db
 from managers.printer_manager import PrinterManager  # Import the new manager
 from managers.sms_manager import cleanup_sms
@@ -48,11 +48,11 @@ class PrintingSystemApp(QMainWindow):
         self.idle_screen = IdleController(self)
         self.usb_screen = USBController(self)
         self.file_browser_screen = FileBrowserScreen(self)
-        self.printing_options_screen = Print_Options_Screen(self)
+        self.printing_options_screen = PrintOptionsController(self)
         self.payment_screen = PaymentScreen(self)
         self.admin_screen = AdminScreen(self)
         self.data_viewer_screen = DataViewerController(self, self.admin_screen.db_manager)
-        self.thank_you_screen = ThankYouScreen(self) # Initialize the new screen
+        self.thank_you_screen = ThankYouController(self) # Initialize the new screen
 
         # Add screens to the stack
         self.stacked_widget.addWidget(self.idle_screen)         # Index 0

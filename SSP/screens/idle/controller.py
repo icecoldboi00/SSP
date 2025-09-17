@@ -5,7 +5,7 @@ from PyQt5.QtCore import Qt
 
 from .model import IdleModel
 from .view import IdleScreenView
-from screens.pin_dialog import PinDialog
+from screens.dialogs.pin_dialog import PinDialogController as PinDialog
 
 class IdleController(QWidget):
     """Manages the Idle screen's logic and UI."""
