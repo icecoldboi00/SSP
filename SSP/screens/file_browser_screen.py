@@ -21,7 +21,7 @@ except ImportError:
         def __init__(self): pass
 
 try:
-    from screens.payment_dialog import PaymentScreen
+    from screens.payment import PaymentController as PaymentScreen
 except ImportError:
     class PaymentScreen:
         def __init__(self, main_app, pdf_data): pass

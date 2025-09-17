@@ -11,7 +11,7 @@ from PyQt5.QtGui import QIcon
 from screens.idle import IdleController
 from screens.usb import USBController
 from screens.file_browser_screen import FileBrowserScreen
-from screens.payment_dialog import PaymentScreen
+from screens.payment import PaymentController
 from screens.print_options import PrintOptionsController
 from screens.admin import AdminController as AdminScreen
 from screens.data_viewer import DataViewerController
@@ -49,7 +49,7 @@ class PrintingSystemApp(QMainWindow):
         self.usb_screen = USBController(self)
         self.file_browser_screen = FileBrowserScreen(self)
         self.printing_options_screen = PrintOptionsController(self)
-        self.payment_screen = PaymentScreen(self)
+        self.payment_screen = PaymentController(self)
         self.admin_screen = AdminScreen(self)
         self.data_viewer_screen = DataViewerController(self, self.admin_screen.db_manager)
         self.thank_you_screen = ThankYouController(self) # Initialize the new screen
