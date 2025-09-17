@@ -8,7 +8,7 @@ sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 from PyQt5.QtWidgets import QApplication, QMainWindow, QStackedWidget
 from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QIcon
-from screens.idle_screen import IdleScreen
+from screens.idle import IdleController
 from screens.usb_screen import USBScreen
 from screens.file_browser_screen import FileBrowserScreen
 from screens.payment_dialog import PaymentScreen
@@ -45,7 +45,7 @@ class PrintingSystemApp(QMainWindow):
         print("Initializing screens...")
 
         # Create all screen instances
-        self.idle_screen = IdleScreen(self)
+        self.idle_screen = IdleController(self)
         self.usb_screen = USBScreen(self)
         self.file_browser_screen = FileBrowserScreen(self)
         self.printing_options_screen = Print_Options_Screen(self)
