@@ -13,7 +13,8 @@ from screens.usb_screen import USBScreen
 from screens.file_browser_screen import FileBrowserScreen
 from screens.payment_dialog import PaymentScreen
 from screens.Print_Options_Screen import Print_Options_Screen
-from screens.admin_screen import AdminScreen, DataViewerScreen
+from screens.admin import AdminController as AdminScreen
+from screens.data_viewer_screen import DataViewerScreen
 from screens.thank_you_screen import ThankYouScreen
 from database.models import init_db
 from printing.printer_manager import PrinterManager  # Import the new manager
