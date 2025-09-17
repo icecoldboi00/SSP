@@ -9,7 +9,7 @@ from PyQt5.QtWidgets import QApplication, QMainWindow, QStackedWidget
 from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QIcon
 from screens.idle import IdleController
-from screens.usb_screen import USBScreen
+from screens.usb import USBController
 from screens.file_browser_screen import FileBrowserScreen
 from screens.payment_dialog import PaymentScreen
 from screens.Print_Options_Screen import Print_Options_Screen
@@ -46,7 +46,7 @@ class PrintingSystemApp(QMainWindow):
 
         # Create all screen instances
         self.idle_screen = IdleController(self)
-        self.usb_screen = USBScreen(self)
+        self.usb_screen = USBController(self)
         self.file_browser_screen = FileBrowserScreen(self)
         self.printing_options_screen = Print_Options_Screen(self)
         self.payment_screen = PaymentScreen(self)
