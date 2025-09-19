@@ -24,7 +24,7 @@ RETRY_DELAY = 0.5        # Delay between retry attempts
 # Hopper B dispenses 5-peso coins
 HOPPER_CONFIGS = {
     'A': {
-        'signal_pin': 21,  # Coin pulse input for Hopper A
+        'signal_pin': 21,  # Coin pulse input for Hopper A  1 Peso
         'enable_pin': 16   # Hopper enable control for Hopper A
     },
     'B': {
@@ -183,7 +183,7 @@ class ChangeDispenser:
                 time.sleep(1.5) # Simulate dispense time
                 success = True
             else:
-                success = self.hoppers['5P'].dispense_single_coin()
+                success = self.hoppers['B'].dispense_single_coin()
 
             if not success:
                 error_msg = "CRITICAL: Failed to dispense ₱5 coin. Please contact admin."
@@ -200,7 +200,7 @@ class ChangeDispenser:
                 time.sleep(1.5)
                 success = True
             else:
-                success = self.hoppers['1P'].dispense_single_coin()
+                success = self.hoppers['A'].dispense_single_coin()
 
             if not success:
                 error_msg = "CRITICAL: Failed to dispense ₱1 coin. Please contact admin."
