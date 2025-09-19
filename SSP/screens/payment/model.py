@@ -35,7 +35,7 @@ class GPIOPaymentThread(QThread):
         self.bill_last_pulse_time = time.time()
         self.COIN_TIMEOUT = 0.5
         self.PULSE_TIMEOUT = 0.5
-        self.DEBOUNCE_TIME = 0.1
+        self.DEBOUNCE_TIME = 0.2  # Increased debounce time to filter noise
 
     def setup_gpio(self):
         try:
@@ -70,6 +70,7 @@ class GPIOPaymentThread(QThread):
         if current_time - self.coin_last_pulse_time > self.DEBOUNCE_TIME:
             self.coin_pulse_count += 1
             self.coin_last_pulse_time = current_time
+            print(f"Coin pulse detected: count={self.coin_pulse_count}, time={current_time}")  # Debug logging
 
     def bill_pulse_detected(self, gpio, level, tick):
         current_time = time.time()
@@ -101,10 +102,13 @@ class GPIOPaymentThread(QThread):
         while self.running:
             now = time.time()
             if self.gpio_available:
-                if self.coin_pulse_count > 0 and (now - self.coin_last_pulse_time > self.COIN_TIMEOUT):
+                if self.coin_pulse_count > 0 and (now - self.coin_last_pulse_time > self.PULSE_TIMEOUT):
                     coin_value = self.get_coin_value(self.coin_pulse_count)
                     if coin_value > 0:
+                        print(f"Coin value calculated: {coin_value} pesos from {self.coin_pulse_count} pulses")  # Debug logging
                         self.coin_inserted.emit(coin_value)
+                    else:
+                        print(f"Ignoring invalid coin pulse count: {self.coin_pulse_count} pulses")  # Debug logging
                     self.coin_pulse_count = 0
                 if self.bill_pulse_count > 0 and (now - self.bill_last_pulse_time > self.PULSE_TIMEOUT):
                     bill_value = self.get_bill_value(self.bill_pulse_count)
