@@ -23,15 +23,13 @@ RETRY_DELAY = 0.5        # Delay between retry attempts
 # Hopper A dispenses 1-peso coins
 # Hopper B dispenses 5-peso coins
 HOPPER_CONFIGS = {
-    '1P': {
-        'value': 1,
-        'signal_pin': 21,
-        'enable_pin': 16,
+    'A': {
+        'signal_pin': 21,  # Coin pulse input for Hopper A
+        'enable_pin': 16   # Hopper enable control for Hopper A
     },
-    '5P': {
-        'value': 5,
-        'signal_pin': 6,
-        'enable_pin': 26,
+    'B': {
+        'signal_pin': 6,   # Coin pulse input for Hopper B
+        'enable_pin': 26   # Hopper enable control for Hopper B
     }
 }
 
@@ -53,10 +51,15 @@ class HopperController:
         self.last_sensor_change = 0
 
         if PIGPIO_AVAILABLE and self.pi.connected:
+            # Setup GPIO exactly like working code
             self.pi.set_mode(self.signal_pin, pigpio.INPUT)
             self.pi.set_pull_up_down(self.signal_pin, pigpio.PUD_UP)
             self.pi.set_mode(self.enable_pin, pigpio.OUTPUT)
+            
+            # Monitor both rising and falling edges to track coin passage
             self.callback = self.pi.callback(self.signal_pin, pigpio.EITHER_EDGE, self._sensor_callback)
+            
+            # Start with hopper disabled
             self._disable_hopper()
         else:
             self.callback = None
@@ -72,19 +75,22 @@ class HopperController:
 
     def _sensor_callback(self, gpio, level, tick):
         current_time = self.pi.get_current_tick()
-        if level == 0:
+
+        if level == 0:  # Falling edge - coin detected
             if not self.sensor_active:
                 self.sensor_active = True
                 self.last_sensor_change = current_time
-        else:
+                print(f"[{self.name}] SENSOR: Coin entering sensor")
+        else:  # Rising edge - coin cleared
             if self.sensor_active:
                 self.sensor_active = False
+                # pigpio tick is a 32-bit unsigned int, handle wraparound
                 elapsed = pigpio.tickDiff(self.last_sensor_change, current_time) / 1000000.0
-                if elapsed > 0.01:
+                if elapsed > 0.01:  # Debounce: Minimum time for valid coin passage (10ms)
                     self.coin_passage_count += 1
-                    print(f"[{self.name}] SENSOR: Coin passage complete. Total: {self.coin_passage_count}")
+                    print(f"[{self.name}] SENSOR: Coin passage complete (took {elapsed:.3f}s). Total passages in this cycle: {self.coin_passage_count}")
                 else:
-                    print(f"[{self.name}] SENSOR: False trigger (pulse too short)")
+                    print(f"[{self.name}] SENSOR: False trigger (pulse too short: {elapsed:.3f}s)")
 
     def _wait_for_coin_passage(self):
         self.coin_passage_count = 0
@@ -144,6 +150,7 @@ class ChangeDispenser:
                 
                 # Create a controller for each hopper defined in config
                 for name, config in HOPPER_CONFIGS.items():
+                    print(f"Initializing Hopper '{name}' on Signal={config['signal_pin']}, Enable={config['enable_pin']}")
                     self.hoppers[name] = HopperController(
                         pi_instance=self.pi,
                         name=name,
