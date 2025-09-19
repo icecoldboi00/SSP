@@ -45,12 +45,22 @@ class GPIOPaymentThread(QThread):
             self.COIN_PIN, self.BILL_PIN, self.INHIBIT_PIN = 17, 18, 23
             self.pi.set_mode(self.COIN_PIN, pigpio.INPUT)
             self.pi.set_pull_up_down(self.COIN_PIN, pigpio.PUD_UP)
+            # Add glitch filter to reduce noise (5000 microseconds = 5ms)
+            self.pi.set_glitch_filter(self.COIN_PIN, 5000)
             self.pi.callback(self.COIN_PIN, pigpio.FALLING_EDGE, self.coin_pulse_detected)
             self.pi.set_mode(self.BILL_PIN, pigpio.INPUT)
             self.pi.set_pull_up_down(self.BILL_PIN, pigpio.PUD_UP)
+            # Add glitch filter to reduce noise (5000 microseconds = 5ms)
+            self.pi.set_glitch_filter(self.BILL_PIN, 5000)
             self.pi.callback(self.BILL_PIN, pigpio.FALLING_EDGE, self.bill_pulse_detected)
             self.pi.set_mode(self.INHIBIT_PIN, pigpio.OUTPUT)
             self.set_acceptor_state(False)
+            
+            # Debug: Check initial GPIO pin states
+            coin_state = self.pi.read(self.COIN_PIN)
+            bill_state = self.pi.read(self.BILL_PIN)
+            print(f"GPIO Setup Complete - Coin Pin {self.COIN_PIN}: {coin_state}, Bill Pin {self.BILL_PIN}: {bill_state}")
+            
             self.payment_status.emit("Payment system ready - Bill acceptor disabled")
         except Exception as e:
             self.payment_status.emit(f"GPIO Error: {str(e)}")
@@ -77,6 +87,7 @@ class GPIOPaymentThread(QThread):
         if current_time - self.bill_last_pulse_time > self.DEBOUNCE_TIME:
             self.bill_pulse_count += 1
             self.bill_last_pulse_time = current_time
+            print(f"Bill pulse detected: count={self.bill_pulse_count}, time={current_time}")  # Debug logging
 
     def get_coin_value(self, pulses):
         if pulses == 1:
@@ -102,7 +113,7 @@ class GPIOPaymentThread(QThread):
         while self.running:
             now = time.time()
             if self.gpio_available:
-                if self.coin_pulse_count > 0 and (now - self.coin_last_pulse_time > self.PULSE_TIMEOUT):
+                if self.coin_pulse_count > 0 and (now - self.coin_last_pulse_time > self.COIN_TIMEOUT):
                     coin_value = self.get_coin_value(self.coin_pulse_count)
                     if coin_value > 0:
                         print(f"Coin value calculated: {coin_value} pesos from {self.coin_pulse_count} pulses")  # Debug logging
@@ -113,7 +124,10 @@ class GPIOPaymentThread(QThread):
                 if self.bill_pulse_count > 0 and (now - self.bill_last_pulse_time > self.PULSE_TIMEOUT):
                     bill_value = self.get_bill_value(self.bill_pulse_count)
                     if bill_value > 0:
+                        print(f"Bill value calculated: {bill_value} pesos from {self.bill_pulse_count} pulses")  # Debug logging
                         self.bill_inserted.emit(bill_value)
+                    else:
+                        print(f"Ignoring invalid bill pulse count: {self.bill_pulse_count} pulses")  # Debug logging
                     self.bill_pulse_count = 0
             time.sleep(0.05)
 
