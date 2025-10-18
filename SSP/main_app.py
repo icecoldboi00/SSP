@@ -559,9 +559,23 @@ class PrintingSystemApp(QMainWindow):
             if hasattr(self, 'admin_screen') and self.admin_screen:
                 print("DEBUG: Refreshing admin screen coin counts after inventory update")
                 self.admin_screen.model.load_coin_counts()
+                print("DEBUG: Admin screen coin counts refreshed")
+            else:
+                print("DEBUG: Admin screen not available for coin count refresh")
                     
         except Exception as e:
             print(f"❌ Error updating coin inventory items: {e}")
+    
+    def test_coin_inventory_update(self):
+        """Test method to manually update coin inventory for debugging."""
+        print("DEBUG: Testing coin inventory update...")
+        try:
+            # Test updating 1 peso coin count
+            test_items = {1: 1}  # Add 1 peso coin
+            self._update_coin_inventory_items(test_items, add=True)
+            print("DEBUG: Test coin inventory update completed")
+        except Exception as e:
+            print(f"DEBUG: Test coin inventory update failed: {e}")
 
     def _log_transaction_after_print_success(self):
         """Log transaction to database after successful printing."""
@@ -602,6 +616,9 @@ class PrintingSystemApp(QMainWindow):
                         print("DEBUG: Refreshing data viewer after transaction logging")
                         self.data_viewer_screen.model.load_transactions()
                         self.data_viewer_screen.model.load_cash_inventory()
+                        print("DEBUG: Data viewer refreshed with new transaction and inventory data")
+                    else:
+                        print("DEBUG: Data viewer not available for refresh")
                 else:
                     print("⚠️ No admin screen available for transaction logging")
             else:

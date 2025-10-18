@@ -87,6 +87,7 @@ class AdminController(QWidget):
             # Debug: Show what paper count is loaded
             print(f"Admin on_enter: Paper count loaded as {self.model.paper_count}")
             print(f"Admin on_enter: Fresh DB value: {self.model.db_manager.get_setting('paper_count', default=100)}")
+            print("Admin on_enter: All data refreshed successfully")
         except Exception as e:
             print(f"Error in admin screen on_enter: {e}")
             import traceback
