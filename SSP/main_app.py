@@ -573,7 +573,7 @@ class PrintingSystemApp(QMainWindow):
             print("DEBUG: Starting transaction logging...")
             
             # Try to get transaction data from payment screen first
-            if hasattr(self, 'payment_screen') and self.payment_screen and hasattr(self.payment_screen.model, 'transaction_data'):
+            if hasattr(self, 'payment_screen') and self.payment_screen and hasattr(self.payment_screen.model, 'transaction_data') and self.payment_screen.model.transaction_data:
                 print("DEBUG: Logging transaction from payment screen")
                 self.payment_screen.model.log_transaction_after_print_success()
                 return
@@ -583,9 +583,14 @@ class PrintingSystemApp(QMainWindow):
                 print("DEBUG: Logging transaction from stored payment info")
                 print(f"DEBUG: current_payment_info: {self.current_payment_info}")
                 
+                # Extract data safely with proper fallbacks
+                pdf_data = self.current_payment_info.get('pdf_data', {})
+                file_path = pdf_data.get('path', 'unknown.pdf')
+                selected_pages = self.current_payment_info.get('selected_pages', [])
+                
                 transaction_data = {
-                    'file_name': os.path.basename(self.current_payment_info.get('pdf_data', {}).get('path', 'unknown.pdf')),
-                    'pages': len(self.current_payment_info.get('selected_pages', [])),
+                    'file_name': os.path.basename(file_path),
+                    'pages': len(selected_pages),
                     'copies': self.current_payment_info.get('copies', 1),
                     'color_mode': self.current_payment_info.get('color_mode', 'Color'),
                     'total_cost': self.current_payment_info.get('total_cost', 0),
@@ -621,6 +626,25 @@ class PrintingSystemApp(QMainWindow):
             print(f"❌ Error logging transaction: {e}")
             import traceback
             traceback.print_exc()
+            
+            # Fallback: Try to log a basic transaction record
+            try:
+                print("DEBUG: Attempting fallback transaction logging...")
+                if hasattr(self, 'admin_screen') and self.admin_screen:
+                    fallback_data = {
+                        'file_name': 'unknown.pdf',
+                        'pages': 1,
+                        'copies': 1,
+                        'color_mode': 'Color',
+                        'total_cost': 0,
+                        'amount_paid': 0,
+                        'change_given': 0,
+                        'status': 'completed'
+                    }
+                    self.admin_screen.model.db_manager.log_transaction(fallback_data)
+                    print("✅ Fallback transaction logged successfully")
+            except Exception as fallback_error:
+                print(f"❌ Fallback transaction logging also failed: {fallback_error}")
 
     def on_print_waiting(self):
         """
