@@ -554,16 +554,9 @@ class PaymentModel(QObject):
                 self.change_dispensed = {1: coins_1, 5: coins_5}
                 print(f"DEBUG: Stored dispensed change data: {self.change_dispensed}")
                 
-                # Update database with actual coins dispensed
-                if hasattr(self, 'main_app') and self.main_app and hasattr(self.main_app, 'db_threader') and self.main_app.db_threader:
-                    print("DEBUG: Updating coin inventory in database...")
-                    self.main_app.db_threader.update_coin_inventory(
-                        coins_1, coins_5, 
-                        callback=self._on_coin_inventory_updated
-                    )
-                else:
-                    print("DEBUG: No database thread manager available, proceeding to print")
-                    self._start_printing()
+                # Database update will be handled after successful printing
+                print("DEBUG: Change dispensing completed, proceeding to print")
+                self._start_printing()
             else:
                 # Fallback for old boolean format
                 print(f"DEBUG: Old format result: {result}")
@@ -598,30 +591,6 @@ class PaymentModel(QObject):
         except Exception as e:
             print(f"DEBUG: Error cleaning up dispense thread: {e}")
     
-    def _on_coin_inventory_updated(self, operation):
-        """Handles the completion of coin inventory update."""
-        print(f"DEBUG: Coin inventory updated: {operation.result}")
-        if operation.error:
-            print(f"ERROR: Failed to update coin inventory: {operation.error}")
-            self.payment_status_updated.emit("Inventory update failed, but continuing...")
-        else:
-            print("DEBUG: Coin inventory successfully updated")
-            self.payment_status_updated.emit("Inventory updated successfully!")
-        
-        # Store print job details in main app for thank you screen to access
-        if hasattr(self, 'main_app') and hasattr(self, 'print_file_path'):
-            print("DEBUG: Storing print job details in main app...")
-            self.main_app.current_print_job = {
-                'file_path': self.print_file_path,
-                'selected_pages': self.selected_pages,
-                'copies': self.copies,
-                'color_mode': self.color_mode
-            }
-            print(f"DEBUG: Print job details stored: {self.main_app.current_print_job}")
-        
-        # Navigate directly to thank you screen after change dispensing
-        print("DEBUG: Change dispensing complete, navigating to thank you screen...")
-        self._navigate_to_thank_you()
     
     
     # Print job success/failure handling is now done by the thank you screen

@@ -489,19 +489,24 @@ class PrintingSystemApp(QMainWindow):
                 if hasattr(payment_model, 'cash_received') and payment_model.cash_received:
                     print(f"💰 Adding received coins to inventory: {payment_model.cash_received}")
                     self._update_coin_inventory_items(payment_model.cash_received, add=True)
+                else:
+                    print("DEBUG: No cash_received data available")
                 
                 # Handle dispensed change (coins given as change)
                 if hasattr(payment_model, 'change_dispensed') and payment_model.change_dispensed:
                     print(f"💰 Subtracting dispensed change from inventory: {payment_model.change_dispensed}")
                     self._update_coin_inventory_items(payment_model.change_dispensed, add=False)
+                    print("✅ Coin inventory updated successfully - dispensed change subtracted")
                 else:
-                    print("DEBUG: No change dispensed data available")
+                    print("DEBUG: No change dispensed data available - no change was given")
                     
             else:
                 print("⚠️ No payment screen available for coin inventory update")
                 
         except Exception as e:
             print(f"❌ Error updating coin inventory: {e}")
+            import traceback
+            print(f"❌ Full error traceback: {traceback.format_exc()}")
 
     def _update_coin_inventory_items(self, coin_data, add=True):
         """
@@ -551,6 +556,8 @@ class PrintingSystemApp(QMainWindow):
                     
         except Exception as e:
             print(f"❌ Error updating coin inventory items: {e}")
+            import traceback
+            print(f"❌ Full error traceback: {traceback.format_exc()}")
 
     def on_print_waiting(self):
         """
