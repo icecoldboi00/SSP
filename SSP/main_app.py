@@ -566,16 +566,6 @@ class PrintingSystemApp(QMainWindow):
         except Exception as e:
             print(f"❌ Error updating coin inventory items: {e}")
     
-    def test_coin_inventory_update(self):
-        """Test method to manually update coin inventory for debugging."""
-        print("DEBUG: Testing coin inventory update...")
-        try:
-            # Test updating 1 peso coin count
-            test_items = {1: 1}  # Add 1 peso coin
-            self._update_coin_inventory_items(test_items, add=True)
-            print("DEBUG: Test coin inventory update completed")
-        except Exception as e:
-            print(f"DEBUG: Test coin inventory update failed: {e}")
 
     def _log_transaction_after_print_success(self):
         """Log transaction to database after successful printing."""

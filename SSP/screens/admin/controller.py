@@ -97,6 +97,7 @@ class AdminController(QWidget):
         """Manually refresh CMYK levels from database."""
         print("Manually refreshing CMYK levels...")
         self.model.load_cmyk_levels()
+    
 
     def get_paper_count(self) -> int:
         """Returns the current paper count from the model."""

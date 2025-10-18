@@ -28,6 +28,7 @@ class AdminScreenView(QWidget):
     coin_1_increased = pyqtSignal()
     coin_5_decreased = pyqtSignal()
     coin_5_increased = pyqtSignal()
+    
 
     def __init__(self, background_image_path=None):
         super().__init__()
@@ -120,7 +121,7 @@ class AdminScreenView(QWidget):
         view_logs_button.setFixedHeight(48)
         view_logs_button.setStyleSheet(self._get_button_style("#1e440a", "#2a5d1a", font_size="16px"))
         
-        # Add both buttons to the same horizontal layout
+        # Add buttons to the same horizontal layout
         buttons_layout.addWidget(back_button)
         buttons_layout.addStretch()  # Push view logs button to the right
         buttons_layout.addWidget(view_logs_button)
