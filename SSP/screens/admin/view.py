@@ -601,7 +601,3 @@ class AdminScreenView(QWidget):
             }}
         """)
     
-    def update_coin_count_display(self, p1_count, p5_count):
-        """Updates the coin count displays."""
-        self.coin_1_label.setText(str(p1_count))
-        self.coin_5_label.setText(str(p5_count))

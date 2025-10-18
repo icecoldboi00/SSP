@@ -554,6 +554,11 @@ class PrintingSystemApp(QMainWindow):
                     
                     operation_symbol = "+" if add else "-"
                     print(f"✅ Updated {denomination} {'bill' if is_bill else 'coin'}: {current_count} {operation_symbol}{count} = {new_count}")
+            
+            # Refresh admin screen coin counts if it's available
+            if hasattr(self, 'admin_screen') and self.admin_screen:
+                print("DEBUG: Refreshing admin screen coin counts after inventory update")
+                self.admin_screen.model.load_coin_counts()
                     
         except Exception as e:
             print(f"❌ Error updating coin inventory items: {e}")
@@ -591,6 +596,12 @@ class PrintingSystemApp(QMainWindow):
                 if hasattr(self, 'admin_screen') and self.admin_screen:
                     self.admin_screen.model.db_manager.log_transaction(transaction_data)
                     print(f"✅ Transaction logged successfully: {transaction_data['file_name']}")
+                    
+                    # Refresh data viewer if it's available
+                    if hasattr(self, 'data_viewer_screen') and self.data_viewer_screen:
+                        print("DEBUG: Refreshing data viewer after transaction logging")
+                        self.data_viewer_screen.model.load_transactions()
+                        self.data_viewer_screen.model.load_cash_inventory()
                 else:
                     print("⚠️ No admin screen available for transaction logging")
             else:
