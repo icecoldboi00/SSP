@@ -65,6 +65,7 @@ class DataViewerController(QWidget):
         try:
             self.model.refresh_all_data()
             print("✅ Data viewer data loaded successfully")
+            print("DEBUG: Data viewer refreshed with latest database data")
         except Exception as e:
             print(f"❌ ERROR: Failed to load data in data viewer: {e}")
             self._show_message("Error", f"Failed to load data: {str(e)}")

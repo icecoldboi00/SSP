@@ -28,6 +28,7 @@ class AdminScreenView(QWidget):
     coin_1_increased = pyqtSignal()
     coin_5_decreased = pyqtSignal()
     coin_5_increased = pyqtSignal()
+    
 
     def __init__(self, background_image_path=None):
         super().__init__()
@@ -68,12 +69,16 @@ class AdminScreenView(QWidget):
             self.background_pixmap = None
 
     def paintEvent(self, event):
-        painter = QPainter(self)
-        if self.background_pixmap:
-            painter.drawPixmap(self.rect(), self.background_pixmap)
-        else:
-            painter.fillRect(self.rect(), Qt.GlobalColor.black)
-        super().paintEvent(event)
+        try:
+            painter = QPainter(self)
+            if self.background_pixmap:
+                painter.drawPixmap(self.rect(), self.background_pixmap)
+            else:
+                painter.fillRect(self.rect(), Qt.GlobalColor.black)
+            super().paintEvent(event)
+        except Exception as e:
+            print(f"Error in paintEvent: {e}")
+            super().paintEvent(event)
 
     def setup_ui(self):
         layout = QVBoxLayout(self)
@@ -116,7 +121,7 @@ class AdminScreenView(QWidget):
         view_logs_button.setFixedHeight(48)
         view_logs_button.setStyleSheet(self._get_button_style("#1e440a", "#2a5d1a", font_size="16px"))
         
-        # Add both buttons to the same horizontal layout
+        # Add buttons to the same horizontal layout
         buttons_layout.addWidget(back_button)
         buttons_layout.addStretch()  # Push view logs button to the right
         buttons_layout.addWidget(view_logs_button)
@@ -401,30 +406,28 @@ class AdminScreenView(QWidget):
         """)
 
     def update_coin_count_display(self, coin_1_count: int, coin_5_count: int):
-        """Updates the coin count input fields."""
-        self.coin_1_input.setText(str(coin_1_count))
-        self.coin_5_input.setText(str(coin_5_count))
+        """Updates the coin count labels."""
+        self.coin_1_label.setText(str(coin_1_count))
+        self.coin_5_label.setText(str(coin_5_count))
         
         # Set styling based on coin levels
         coin_1_color = self._get_coin_color(coin_1_count)
         coin_5_color = self._get_coin_color(coin_5_count)
         
-        self.coin_1_input.setStyleSheet(f"""
-            QLineEdit {{
-                background-color: white; color: #36454F; font-size: 22px;
+        self.coin_1_label.setStyleSheet(f"""
+            QLabel {{
+                background-color: {coin_1_color}; color: #36454F; font-size: 22px;
                 font-weight: bold; border: 2px solid #1e440a; border-radius: 8px;
                 padding: 5px 10px;
             }}
-            QLineEdit:focus {{ border: 2px solid #2a5d1a; }}
         """)
         
-        self.coin_5_input.setStyleSheet(f"""
-            QLineEdit {{
-                background-color: white; color: #36454F; font-size: 22px;
+        self.coin_5_label.setStyleSheet(f"""
+            QLabel {{
+                background-color: {coin_5_color}; color: #36454F; font-size: 22px;
                 font-weight: bold; border: 2px solid #1e440a; border-radius: 8px;
                 padding: 5px 10px;
             }}
-            QLineEdit:focus {{ border: 2px solid #2a5d1a; }}
         """)
 
     def _get_coin_color(self, count: int) -> str:
@@ -601,7 +604,3 @@ class AdminScreenView(QWidget):
             }}
         """)
     
-    def update_coin_count_display(self, p1_count, p5_count):
-        """Updates the coin count displays."""
-        self.coin_1_label.setText(str(p1_count))
-        self.coin_5_label.setText(str(p5_count))

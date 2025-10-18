@@ -14,13 +14,22 @@ class AdminModel(QObject):
     def __init__(self):
         super().__init__()
         self.db_manager = DatabaseManager()
-        self.sms_manager = get_sms_manager()
         self.paper_count = 100
         self.sms_alert_sent = False
         self._loading_cmyk = False  # Flag to prevent recursive calls
         
-        # Initialize the modem when the model is created
-        self.sms_manager.initialize_modem()
+        # Initialize SMS manager with error handling
+        try:
+            self.sms_manager = get_sms_manager()
+            if self.sms_manager:
+                print("SMS manager initialized")
+                # Don't initialize modem immediately - it might fail on Windows
+                # self.sms_manager.initialize_modem()
+            else:
+                print("SMS manager not available")
+        except Exception as e:
+            print(f"Error initializing SMS manager: {e}")
+            self.sms_manager = None
 
     def load_paper_count(self):
         """Loads the paper count from the database and emits a signal."""
@@ -107,12 +116,18 @@ class AdminModel(QObject):
             print(f"Low paper detected: {self.paper_count} sheets remaining. Sending alert.")
             message = f"ALERT: Paper is low ({self.paper_count} sheets left). Please refill soon."
             
-            # FIX: Use the correct method from sms_manager
-            if self.sms_manager.send_custom_alert(message):
-                self.sms_alert_sent = True
-                print("Low paper SMS sent successfully.")
-            else:
-                print("Failed to send low paper SMS.")
+            # Send SMS with error handling
+            try:
+                if self.sms_manager and hasattr(self.sms_manager, 'send_custom_alert'):
+                    if self.sms_manager.send_custom_alert(message):
+                        self.sms_alert_sent = True
+                        print("Low paper SMS sent successfully.")
+                    else:
+                        print("Failed to send low paper SMS.")
+                else:
+                    print("SMS manager not available - skipping SMS alert")
+            except Exception as e:
+                print(f"Error sending SMS alert: {e}")
 
         elif self.paper_count > 10:
             self.sms_alert_sent = False

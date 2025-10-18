@@ -79,18 +79,25 @@ class AdminController(QWidget):
     
     def on_enter(self):
         """Called by main_app when this screen becomes active."""
-        print("Admin screen entered. Refreshing data.")
-        self.model.load_paper_count()
-        self.model.load_coin_counts()
-        self.model.load_cmyk_levels()
-        # Debug: Show what paper count is loaded
-        print(f"Admin on_enter: Paper count loaded as {self.model.paper_count}")
-        print(f"Admin on_enter: Fresh DB value: {self.model.db_manager.get_setting('paper_count', default=100)}")
+        try:
+            print("Admin screen entered. Refreshing data.")
+            self.model.load_paper_count()
+            self.model.load_coin_counts()
+            self.model.load_cmyk_levels()
+            # Debug: Show what paper count is loaded
+            print(f"Admin on_enter: Paper count loaded as {self.model.paper_count}")
+            print(f"Admin on_enter: Fresh DB value: {self.model.db_manager.get_setting('paper_count', default=100)}")
+            print("Admin on_enter: All data refreshed successfully")
+        except Exception as e:
+            print(f"Error in admin screen on_enter: {e}")
+            import traceback
+            traceback.print_exc()
     
     def refresh_cmyk_levels(self):
         """Manually refresh CMYK levels from database."""
         print("Manually refreshing CMYK levels...")
         self.model.load_cmyk_levels()
+    
 
     def get_paper_count(self) -> int:
         """Returns the current paper count from the model."""

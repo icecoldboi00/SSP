@@ -301,6 +301,10 @@ class PrintingSystemApp(QMainWindow):
         """
         print(f"Payment completed. Starting print job for {payment_info['pdf_data']['filename']}")
         
+        # Store payment info for later use in transaction logging and inventory updates
+        self.current_payment_info = payment_info
+        print(f"DEBUG: Stored payment info: {payment_info}")
+        
         # Paper count check is now handled in show_screen method
         
         self.printer_manager.print_file(
@@ -319,6 +323,9 @@ class PrintingSystemApp(QMainWindow):
         """
         print("✅ Print job successfully completed")
         print(f"DEBUG: on_print_successful called, about to trigger ink analysis")
+        
+        # Log transaction to database after successful printing
+        self._log_transaction_after_print_success()
         
         # Update database immediately after print success (don't wait for ink analysis)
         print(f"DEBUG: Updating database immediately after print success")
@@ -474,16 +481,13 @@ class PrintingSystemApp(QMainWindow):
         
         This ensures the database reflects the actual coins in the system.
         """
-        if not hasattr(self, 'current_print_job') or not self.current_print_job:
-            print("⚠️ No print job info available for coin inventory update")
-            return
-        
         try:
-            print(f"DEBUG: Starting coin inventory update for print job: {self.current_print_job}")
+            print(f"DEBUG: Starting coin inventory update")
             
-            # Get payment info from the payment model if available
+            # Try to get payment info from payment screen first
             if hasattr(self, 'payment_screen') and self.payment_screen:
                 payment_model = self.payment_screen.model
+                print(f"DEBUG: Payment screen available, checking for coin data...")
                 
                 # Handle received coins (coins inserted during payment)
                 if hasattr(payment_model, 'cash_received') and payment_model.cash_received:
@@ -499,7 +503,6 @@ class PrintingSystemApp(QMainWindow):
                     print("✅ Coin inventory updated successfully - dispensed change subtracted")
                 else:
                     print("DEBUG: No change dispensed data available - no change was given")
-                    
             else:
                 print("⚠️ No payment screen available for coin inventory update")
                 
@@ -553,11 +556,98 @@ class PrintingSystemApp(QMainWindow):
                     
                     operation_symbol = "+" if add else "-"
                     print(f"✅ Updated {denomination} {'bill' if is_bill else 'coin'}: {current_count} {operation_symbol}{count} = {new_count}")
+            
+            # Refresh admin screen coin counts if it's available
+            if hasattr(self, 'admin_screen') and self.admin_screen:
+                print("DEBUG: Refreshing admin screen coin counts after inventory update")
+                self.admin_screen.model.load_coin_counts()
+                print("DEBUG: Admin screen coin counts refreshed")
+            else:
+                print("DEBUG: Admin screen not available for coin count refresh")
                     
         except Exception as e:
             print(f"❌ Error updating coin inventory items: {e}")
             import traceback
             print(f"❌ Full error traceback: {traceback.format_exc()}")
+
+    def _log_transaction_after_print_success(self):
+        """Log transaction to database after successful printing."""
+        try:
+            print("DEBUG: Starting transaction logging...")
+            
+            # Try to get transaction data from payment screen first
+            if hasattr(self, 'payment_screen') and self.payment_screen and hasattr(self.payment_screen.model, 'transaction_data') and self.payment_screen.model.transaction_data:
+                print("DEBUG: Logging transaction from payment screen")
+                self.payment_screen.model.log_transaction_after_print_success()
+                return
+            
+            # Fallback: Try to get transaction data from stored payment info
+            if hasattr(self, 'current_payment_info') and self.current_payment_info:
+                print("DEBUG: Logging transaction from stored payment info")
+                print(f"DEBUG: current_payment_info: {self.current_payment_info}")
+                
+                # Extract data safely with proper fallbacks
+                pdf_data = self.current_payment_info.get('pdf_data', {})
+                file_path = pdf_data.get('path', 'unknown.pdf')
+                selected_pages = self.current_payment_info.get('selected_pages', [])
+                
+                transaction_data = {
+                    'file_name': os.path.basename(file_path),
+                    'pages': len(selected_pages),
+                    'copies': self.current_payment_info.get('copies', 1),
+                    'color_mode': self.current_payment_info.get('color_mode', 'Color'),
+                    'total_cost': self.current_payment_info.get('total_cost', 0),
+                    'amount_paid': self.current_payment_info.get('amount_received', 0),
+                    'change_given': self.current_payment_info.get('change', 0),
+                    'status': 'completed'
+                }
+                
+                print(f"DEBUG: Transaction data: {transaction_data}")
+                
+                # Get database manager from admin screen
+                if hasattr(self, 'admin_screen') and self.admin_screen:
+                    self.admin_screen.model.db_manager.log_transaction(transaction_data)
+                    print(f"✅ Transaction logged successfully: {transaction_data['file_name']}")
+                    
+                    # Refresh data viewer if it's available
+                    if hasattr(self, 'data_viewer_screen') and self.data_viewer_screen:
+                        print("DEBUG: Refreshing data viewer after transaction logging")
+                        self.data_viewer_screen.model.load_transactions()
+                        self.data_viewer_screen.model.load_cash_inventory()
+                        print("DEBUG: Data viewer refreshed with new transaction and inventory data")
+                    else:
+                        print("DEBUG: Data viewer not available for refresh")
+                else:
+                    print("⚠️ No admin screen available for transaction logging")
+            else:
+                print("⚠️ No transaction data available to log")
+                print(f"DEBUG: hasattr current_payment_info: {hasattr(self, 'current_payment_info')}")
+                if hasattr(self, 'current_payment_info'):
+                    print(f"DEBUG: current_payment_info value: {self.current_payment_info}")
+                
+        except Exception as e:
+            print(f"❌ Error logging transaction: {e}")
+            import traceback
+            traceback.print_exc()
+            
+            # Fallback: Try to log a basic transaction record
+            try:
+                print("DEBUG: Attempting fallback transaction logging...")
+                if hasattr(self, 'admin_screen') and self.admin_screen:
+                    fallback_data = {
+                        'file_name': 'unknown.pdf',
+                        'pages': 1,
+                        'copies': 1,
+                        'color_mode': 'Color',
+                        'total_cost': 0,
+                        'amount_paid': 0,
+                        'change_given': 0,
+                        'status': 'completed'
+                    }
+                    self.admin_screen.model.db_manager.log_transaction(fallback_data)
+                    print("✅ Fallback transaction logged successfully")
+            except Exception as fallback_error:
+                print(f"❌ Fallback transaction logging also failed: {fallback_error}")
 
     def on_print_waiting(self):
         """
