@@ -25,11 +25,21 @@ class PinDialogController(PinDialogView):
     
     def _validate_pin(self):
         """Handles PIN validation."""
-        is_valid = self.model.validate_pin()
-        if is_valid:
-            self.accept()  # Close dialog with success
+        try:
+            is_valid = self.model.validate_pin()
+            # Don't call accept() here - let _handle_pin_validation handle it
+        except Exception as e:
+            print(f"Error validating PIN: {e}")
+            self.update_status("Error occurred")
     
     def _handle_pin_validation(self, is_valid):
         """Handles the result of PIN validation."""
-        if is_valid:
-            self.accept()  # Close dialog with success
+        try:
+            if is_valid:
+                print("PIN validated successfully")
+                self.accept()  # Close dialog with success
+            else:
+                print("PIN validation failed")
+        except Exception as e:
+            print(f"Error handling PIN validation: {e}")
+            self.update_status("Error occurred")

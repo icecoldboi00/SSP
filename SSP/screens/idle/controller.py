@@ -53,12 +53,20 @@ class IdleController(QWidget):
     
     def _go_to_admin(self):
         """Opens PIN dialog and navigates to admin screen if PIN is correct."""
-        dialog = PinDialog(self)
-        result = dialog.exec_()
-        if result == QDialog.Accepted:
-            self.main_app.show_screen('admin')
-        else:
-            print("PIN Dialog closed without correct PIN.")
+        try:
+            print("Opening PIN dialog for admin access...")
+            dialog = PinDialog(self)
+            result = dialog.exec_()
+            print(f"PIN Dialog result: {result}")
+            if result == QDialog.Accepted:
+                print("PIN accepted, navigating to admin screen")
+                self.main_app.show_screen('admin')
+            else:
+                print("PIN Dialog closed without correct PIN.")
+        except Exception as e:
+            print(f"Error in admin PIN dialog: {e}")
+            import traceback
+            traceback.print_exc()
     
     def _show_message(self, title, text):
         """Shows a message to the user."""
