@@ -829,11 +829,18 @@ class PaymentModel(QObject):
             # Start dispensing change in a separate thread
             if change_amount > 0:
                 print(f"Starting change dispensing for P{change_amount:.2f}")
+                # Compute required coins using payment algorithm (respects inventory)
+                can_dispense, reason, required_coins = self.payment_algorithm.can_dispense_change(change_amount)
+                if not can_dispense:
+                    print(f"WARNING: Algorithm reports change not dispensable: {reason}. Proceeding with best-effort greedy.")
+                    required_coins = None
+
                 self.dispense_thread = DispenseThread(
                     dispenser=self.change_dispenser,
                     amount=change_amount,
                     admin_screen=main_app.admin_screen,
-                    db_threader=main_app.db_threader
+                    db_threader=main_app.db_threader,
+                    required_coins=required_coins
                 )
                 self.dispense_thread.status_update.connect(self.payment_status_updated.emit)
                 self.dispense_thread.dispensing_finished.connect(self._on_dispensing_finished)

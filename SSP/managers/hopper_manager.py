@@ -312,7 +312,7 @@ class ChangeDispenser:
             print(f"Error reinitializing hoppers: {e}")
             return False
 
-    def dispense_change(self, amount: float, status_callback=None, admin_screen=None, db_threader=None):
+    def dispense_change(self, amount: float, status_callback=None, admin_screen=None, db_threader=None, required_coins=None):
         """Calculates and dispenses the correct change, one coin at a time. Returns actual coins dispensed."""
         if amount <= 0:
             return {'success': True, 'coins_1': 0, 'coins_5': 0}
@@ -335,8 +335,13 @@ class ChangeDispenser:
                     status_callback(error_msg)
                 return {'success': False, 'coins_1': 0, 'coins_5': 0, 'error': 'hopper_initialization_failed'}
 
-        num_fives = int(amount // 5)
-        num_ones = int(round(amount % 5))
+        # Use provided breakdown if available, otherwise compute greedy
+        if isinstance(required_coins, dict):
+            num_fives = int(required_coins.get(5, 0))
+            num_ones = int(required_coins.get(1, 0))
+        else:
+            num_fives = int(amount // 5)
+            num_ones = int(round(amount % 5))
         
         print(f"Dispensing ₱{amount:.2f}: {num_fives}x ₱5, {num_ones}x ₱1")
         if status_callback:
@@ -365,12 +370,17 @@ class ChangeDispenser:
                 error_msg = f"CRITICAL: Failed to dispense ₱5 coin {i + 1}. Dispensed {actual_fives}/{num_fives} so far."
                 if status_callback: status_callback(error_msg)
                 print(error_msg)
-                # Continue with what we have instead of failing completely
-                break
+                # Continue and try to make up with ₱1 coins later
+                continue
 
-        # Dispense 1-peso coins
-        for i in range(num_ones):
-            msg = f"Dispensing ₱1 coin ({i + 1} of {num_ones})"
+        # Include makeup ones for any missing ₱5s
+        makeup_ones = max(0, (num_fives - actual_fives) * 5)
+        total_ones_to_dispense = num_ones + makeup_ones
+        if makeup_ones > 0:
+            print(f"INFO: Making up shortfall of ₱5 coins with {makeup_ones} additional ₱1 coins")
+
+        for i in range(total_ones_to_dispense):
+            msg = f"Dispensing ₱1 coin ({i + 1} of {total_ones_to_dispense})"
             if status_callback: status_callback(msg)
             print(msg)
             
@@ -382,9 +392,9 @@ class ChangeDispenser:
 
             if success:
                 actual_ones += 1
-                print(f"DEBUG: Successfully dispensed ₱1 coin {actual_ones}/{num_ones}")
+                print(f"DEBUG: Successfully dispensed ₱1 coin {actual_ones}/{total_ones_to_dispense}")
             else:
-                error_msg = f"CRITICAL: Failed to dispense ₱1 coin {i + 1}. Dispensed {actual_ones}/{num_ones} so far."
+                error_msg = f"CRITICAL: Failed to dispense ₱1 coin {i + 1}. Dispensed {actual_ones}/{total_ones_to_dispense} so far."
                 if status_callback: status_callback(error_msg)
                 print(error_msg)
                 # Continue with what we have instead of failing completely
@@ -440,12 +450,13 @@ class DispenseThread(QThread):
     status_update = pyqtSignal(str)
     dispensing_finished = pyqtSignal(dict)  # Changed to emit the full result dict
 
-    def __init__(self, dispenser: ChangeDispenser, amount: float, admin_screen=None, db_threader=None):
+    def __init__(self, dispenser: ChangeDispenser, amount: float, admin_screen=None, db_threader=None, required_coins=None):
         super().__init__()
         self.dispenser = dispenser
         self.amount = amount
         self.admin_screen = admin_screen
         self.db_threader = db_threader
+        self.required_coins = required_coins
 
     def run(self):
         """This method is executed when the thread starts."""
@@ -461,9 +472,10 @@ class DispenseThread(QThread):
             return
             
         result = self.dispenser.dispense_change(
-            self.amount, 
-            self.status_update.emit, 
-            self.admin_screen, 
-            self.db_threader
+            self.amount,
+            self.status_update.emit,
+            self.admin_screen,
+            self.db_threader,
+            required_coins=self.required_coins
         )
         self.dispensing_finished.emit(result)

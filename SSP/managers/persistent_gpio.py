@@ -53,12 +53,15 @@ class PersistentGPIO(QObject):
         self.DEBOUNCE_TIME = 0.1   # Minimum time between pulses
         self.COIN_TIMEOUT = 0.5    # seconds without pulses = end of coin
         self.BILL_TIMEOUT = 0.5    # Time to wait for additional bill pulses (PULSE_TIMEOUT)
+        self.COIN_COOLDOWN = 0.3   # Ignore new pulses for this window after a coin is emitted
         
         # State tracking
         self.coin_pulse_count = 0
         self.coin_last_pulse_time = 0
         self.bill_pulse_count = 0
         self.bill_last_pulse_time = 0
+        # Cooldown tracking to avoid double-counting same coin (esp. ₱20)
+        self.coin_last_emit_time = 0
         
         # Callbacks
         self.coin_callback = None
@@ -110,6 +113,9 @@ class PersistentGPIO(QObject):
             
         current_time = time.time()
         with self._state_lock:
+            # Ignore pulses during cooldown after an emission (prevents one coin -> multiple reads)
+            if (current_time - self.coin_last_emit_time) < self.COIN_COOLDOWN:
+                return
             if current_time - self.coin_last_pulse_time > self.DEBOUNCE_TIME:
                 self.coin_pulse_count += 1
                 self.coin_last_pulse_time = current_time
@@ -182,6 +188,8 @@ class PersistentGPIO(QObject):
                 if coin_value > 0:
                     self.coin_inserted.emit(coin_value)
                     print(f"Coin processed: ₱{coin_value}")
+                    # Start cooldown to avoid immediately counting the tail pulses of the same coin
+                    self.coin_last_emit_time = current_time
                 self.coin_pulse_count = 0
             
             # Process bill timeout
