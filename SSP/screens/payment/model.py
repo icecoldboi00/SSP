@@ -523,6 +523,9 @@ class PaymentModel(QObject):
                 if coins_1 > 0 or coins_5 > 0:
                     print(f"DEBUG: Updating database immediately with dispensed coins: P1={coins_1}, P5={coins_5}")
                     self._update_coin_inventory_immediately(coins_1, coins_5)
+                    # Prevent double subtraction later in the post-print step
+                    self.change_dispensed = None
+                    print("DEBUG: change_dispensed cleared after immediate decrement to avoid double subtraction")
 
                 print("DEBUG: Change dispensing completed, proceeding to print")
                 self._start_printing()
