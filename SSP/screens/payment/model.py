@@ -488,6 +488,13 @@ class PaymentModel(QObject):
         }
         print(f"DEBUG: Transaction data created: {self.transaction_data}")
         
+        # Log transaction immediately when payment is completed
+        try:
+            self.db_manager.log_transaction(self.transaction_data)
+            print(f"✅ Transaction logged immediately after payment completion: {self.transaction_data['file_name']}")
+        except Exception as e:
+            print(f"❌ Error logging transaction immediately: {e}")
+        
         # Update cash inventory - add received coins to existing inventory
         for denomination, count in self.cash_received.items():
             if count > 0:
@@ -576,12 +583,11 @@ class PaymentModel(QObject):
         if hasattr(self, 'transaction_data'):
             print(f"DEBUG: transaction_data value: {self.transaction_data}")
         
+        # Transaction is already logged when payment completes, so just update status if needed
         if hasattr(self, 'transaction_data') and self.transaction_data:
-            try:
-                self.db_manager.log_transaction(self.transaction_data)
-                print(f"✅ Transaction logged successfully: {self.transaction_data['file_name']}")
-            except Exception as e:
-                print(f"❌ Error logging transaction: {e}")
+            print(f"✅ Transaction already logged during payment completion: {self.transaction_data['file_name']}")
+            # Optionally update status to 'printed' if you want to track print completion
+            # self.transaction_data['status'] = 'printed'
         else:
             print("⚠️ No transaction data available to log")
     
