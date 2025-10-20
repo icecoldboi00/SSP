@@ -103,15 +103,34 @@ class GPIOPaymentThread(QThread):
             self.bill_last_pulse_time = current_time
 
     def get_coin_value(self, pulses):
+        # Fixed coin detection logic - each coin type has specific pulse count
+        print(f"DEBUG: Processing {pulses} coin pulses")
+        
         if pulses == 1:
-            return 1
-        elif 5 <= pulses <= 7:
-            return 5
-        elif 10 <= pulses <= 12:
-            return 10
-        elif 18 <= pulses <= 21:
-            return 20
-        return 0
+            print("DEBUG: Detected ₱1 coin (1 pulse)")
+            return 1  # ₱1 coin = 1 pulse
+        elif pulses == 5:
+            print("DEBUG: Detected ₱5 coin (5 pulses)")
+            return 5  # ₱5 coin = 5 pulses
+        elif pulses == 10:
+            print("DEBUG: Detected ₱10 coin (10 pulses)")
+            return 10  # ₱10 coin = 10 pulses
+        elif pulses == 20:
+            print("DEBUG: Detected ₱20 coin (20 pulses)")
+            return 20  # ₱20 coin = 20 pulses
+        # Handle ranges for coins that might have slight variations
+        elif 4 <= pulses <= 6:
+            print(f"DEBUG: Detected ₱5 coin with variation ({pulses} pulses)")
+            return 5  # ₱5 coin with slight variation
+        elif 9 <= pulses <= 11:
+            print(f"DEBUG: Detected ₱10 coin with variation ({pulses} pulses)")
+            return 10  # ₱10 coin with slight variation
+        elif 18 <= pulses <= 22:
+            print(f"DEBUG: Detected ₱20 coin with variation ({pulses} pulses)")
+            return 20  # ₱20 coin with slight variation
+        else:
+            print(f"DEBUG: Unknown coin pulse count: {pulses} - returning 0")
+            return 0
 
     def get_bill_value(self, pulses):
         if pulses == 2:
@@ -826,6 +845,7 @@ class PaymentModel(QObject):
     def complete_payment(self, main_app):
         """Complete the payment process - dispense change and start printing."""
         print("Starting payment completion process...")
+        print(f"DEBUG: Payment completion - amount_received: {self.amount_received}, total_cost: {self.total_cost}")
         
         try:
             # Validate payment data exists
@@ -841,6 +861,7 @@ class PaymentModel(QObject):
             # Calculate change to dispense
             change_amount = self.amount_received - self.total_cost
             print(f"Change to dispense: P{change_amount:.2f}")
+            print(f"DEBUG: Payment calculation - received: {self.amount_received}, cost: {self.total_cost}, change: {change_amount}")
             
             # Stop any existing dispense thread to prevent conflicts
             if hasattr(self, 'dispense_thread') and self.dispense_thread and self.dispense_thread.isRunning():
@@ -999,8 +1020,14 @@ class PaymentModel(QObject):
         """Goes back to print options screen."""
         print("Payment screen: going back to print options")
         
-        # Log partial payment if user received cash but cancelled
-        self._log_partial_payment()
+        # Only log partial payment if user received cash but amount was insufficient
+        if self.amount_received > 0 and self.amount_received < self.total_cost:
+            print(f"DEBUG: Logging partial payment - received {self.amount_received}, required {self.total_cost}")
+            self._log_partial_payment()
+        elif self.amount_received >= self.total_cost:
+            print(f"DEBUG: Payment was sufficient ({self.amount_received} >= {self.total_cost}), not logging as cancelled")
+        else:
+            print("DEBUG: No payment received, not logging transaction")
         
         self.on_leave()
         self.reset_payment_state()
