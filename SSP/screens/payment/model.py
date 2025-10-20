@@ -868,6 +868,41 @@ class PaymentModel(QObject):
             change_amount = self.amount_received - self.total_cost
             print(f"Change to dispense: P{change_amount:.2f}")
             print(f"DEBUG: Payment calculation - received: {self.amount_received}, cost: {self.total_cost}, change: {change_amount}")
+
+            # Create transaction data and log immediately so it exists regardless of print outcome
+            try:
+                pdf_path = None
+                selected_pages = []
+                copies = 1
+                color_mode = 'Color'
+
+                if hasattr(self, 'payment_data') and self.payment_data:
+                    pdf_info = self.payment_data.get('pdf_data') or {}
+                    pdf_path = pdf_info.get('path')
+                    selected_pages = self.payment_data.get('selected_pages') or []
+                    copies = int(self.payment_data.get('copies') or 1)
+                    color_mode = self.payment_data.get('color_mode') or 'Color'
+
+                file_name = os.path.basename(pdf_path) if pdf_path else 'unknown.pdf'
+
+                self.transaction_data = {
+                    'file_name': file_name,
+                    'pages': len(selected_pages),
+                    'copies': copies,
+                    'color_mode': color_mode,
+                    'total_cost': float(self.total_cost or 0),
+                    'amount_paid': float(self.amount_received or 0),
+                    'change_given': float(change_amount or 0),
+                    'status': 'completed'
+                }
+                print(f"DEBUG: Transaction data (late path) created: {self.transaction_data}")
+                try:
+                    self.db_manager.log_transaction(self.transaction_data)
+                    print(f"✅ Transaction logged immediately (late path): {self.transaction_data['file_name']}")
+                except Exception as log_err:
+                    print(f"❌ Error logging transaction immediately (late path): {log_err}")
+            except Exception as tx_err:
+                print(f"❌ Error creating transaction data (late path): {tx_err}")
             
             # Stop any existing dispense thread to prevent conflicts
             if hasattr(self, 'dispense_thread') and self.dispense_thread and self.dispense_thread.isRunning():
