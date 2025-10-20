@@ -75,9 +75,9 @@ class USBController(QWidget):
         
         self.model.check_current_drives()
         
-        # Start timeout timer (1 minute)
-        self.timeout_timer.start(60000)
-        print("⏰ USB screen timeout started (1 minute)")
+        # Start timeout timer (5 minutes)
+        self.timeout_timer.start(300000)
+        print("⏰ USB screen timeout started (5 minutes)")
     
     def on_leave(self):
         """Called by main_app when leaving this screen."""
@@ -96,7 +96,7 @@ class USBController(QWidget):
     def _reset_timeout(self):
         """Reset the timeout timer (call on user activity)."""
         self.timeout_timer.stop()
-        self.timeout_timer.start(60000)
+        self.timeout_timer.start(300000)
         print("⏰ USB screen timeout reset")
     
     def reset_usb_state(self):

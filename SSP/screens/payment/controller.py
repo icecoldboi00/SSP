@@ -42,6 +42,11 @@ class PaymentController(QWidget):
         self.view.simulation_coin_clicked.connect(self._reset_timeout)
         self.view.simulation_bill_clicked.connect(self._reset_timeout)
         
+        # Reset timeout on payment activity
+        self.model.amount_received_updated.connect(self._reset_timeout)
+        self.model.change_updated.connect(self._reset_timeout)
+        self.model.payment_status_updated.connect(self._reset_timeout)
+        
         # --- Model -> Controller -> View ---
         self.model.payment_data_updated.connect(self.view.update_payment_data)
         self.model.payment_status_updated.connect(self.view.update_payment_status)
@@ -81,9 +86,9 @@ class PaymentController(QWidget):
         print(f"DEBUG: Model type: {type(self.model)}")
         print(f"DEBUG: View type: {type(self.view)}")
         
-        # Start timeout timer (1 minute)
-        self.timeout_timer.start(60000)
-        print("TIMEOUT: Payment screen timeout started (1 minute)")
+        # Start timeout timer (5 minutes)
+        self.timeout_timer.start(300000)
+        print("TIMEOUT: Payment screen timeout started (5 minutes)")
         
         print("DEBUG: About to call model.on_enter()")
         try:
@@ -157,7 +162,7 @@ class PaymentController(QWidget):
     def _reset_timeout(self):
         """Reset the timeout timer (call on user activity)."""
         self.timeout_timer.stop()
-        self.timeout_timer.start(60000)
+        self.timeout_timer.start(300000)
         print("TIMEOUT: Payment screen timeout reset")
     
     def _manual_disable_acceptors(self):

@@ -588,7 +588,11 @@ class PaymentModel(QObject):
                 self.change_dispensed = {1: coins_1, 5: coins_5}
                 print(f"DEBUG: Stored dispensed change data: {self.change_dispensed}")
                 
-                # Database update will be handled after successful printing
+                # Update database immediately when coins are dispensed
+                if coins_1 > 0 or coins_5 > 0:
+                    print(f"DEBUG: Updating database immediately with dispensed coins: P1={coins_1}, P5={coins_5}")
+                    self._update_coin_inventory_immediately(coins_1, coins_5)
+                
                 print("DEBUG: Change dispensing completed, proceeding to print")
                 self._start_printing()
             else:
@@ -632,6 +636,35 @@ class PaymentModel(QObject):
     
     # Print timeout handling is now done by the thank you screen
     # The thank you screen will handle all print job monitoring and timeouts
+    
+    def _update_coin_inventory_immediately(self, coins_1, coins_5):
+        """Update coin inventory immediately when coins are dispensed."""
+        try:
+            print(f"DEBUG: Updating coin inventory immediately - P1: {coins_1}, P5: {coins_5}")
+            
+            # Get current inventory
+            inventory = self.db_manager.get_cash_inventory()
+            current_1 = 0
+            current_5 = 0
+            
+            for item in inventory:
+                if item['denomination'] == 1 and item['type'] == 'coin':
+                    current_1 = item['count']
+                elif item['denomination'] == 5 and item['type'] == 'coin':
+                    current_5 = item['count']
+            
+            # Calculate new counts (prevent negative)
+            new_1 = max(0, current_1 - coins_1)
+            new_5 = max(0, current_5 - coins_5)
+            
+            # Update database
+            self.db_manager.update_cash_inventory(1, new_1, 'coin')
+            self.db_manager.update_cash_inventory(5, new_5, 'coin')
+            
+            print(f"✅ Coin inventory updated immediately: P1 {current_1} -> {new_1}, P5 {current_5} -> {new_5}")
+            
+        except Exception as e:
+            print(f"❌ Error updating coin inventory immediately: {e}")
     
     def _navigate_to_thank_you(self):
         """Navigate to thank you screen after all operations are complete."""

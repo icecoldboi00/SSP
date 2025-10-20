@@ -16,10 +16,15 @@ class FileBrowserController(QWidget):
         self.model = FileBrowserModel()
         self.view = FileBrowserView()
         
-        # Setup timeout timer (1 minute = 60000ms)
+        # Setup timeout timer (5 minutes = 300000ms)
         self.timeout_timer = QTimer()
         self.timeout_timer.setSingleShot(True)
         self.timeout_timer.timeout.connect(self._on_timeout)
+        
+        # Setup warning timer (4 minutes - 1 minute before timeout)
+        self.warning_timer = QTimer()
+        self.warning_timer.setSingleShot(True)
+        self.warning_timer.timeout.connect(self._show_timeout_warning)
         
         # Set the view's layout as this controller's layout
         self.setLayout(self.view.main_layout)
@@ -38,6 +43,17 @@ class FileBrowserController(QWidget):
         self.view.back_to_idle_clicked.connect(self._reset_timeout)
         self.view.continue_button_clicked.connect(self._reset_timeout)
         self.view.pdf_button_clicked.connect(self._reset_timeout)
+        self.view.single_page_clicked.connect(self._reset_timeout)
+        self.view.multipage_clicked.connect(self._reset_timeout)
+        self.view.select_all_clicked.connect(self._reset_timeout)
+        self.view.deselect_all_clicked.connect(self._reset_timeout)
+        self.view.prev_page_clicked.connect(self._reset_timeout)
+        self.view.next_page_clicked.connect(self._reset_timeout)
+        self.view.prev_grid_page_clicked.connect(self._reset_timeout)
+        self.view.next_grid_page_clicked.connect(self._reset_timeout)
+        self.view.page_widget_clicked.connect(self._reset_timeout)
+        self.view.page_checkbox_clicked.connect(self._reset_timeout)
+        self.view.single_page_checkbox_clicked.connect(self._reset_timeout)
         
         self.view.single_page_clicked.connect(self._set_single_page_view)
         self.view.multipage_clicked.connect(self._set_multipage_view)
@@ -205,9 +221,11 @@ class FileBrowserController(QWidget):
         # Don't reload PDF files here - they are loaded by USB controller
         # The files are already loaded via load_pdf_files() method
         
-        # Start timeout timer (1 minute)
-        self.timeout_timer.start(60000)
-        print("⏰ File browser screen timeout started (1 minute)")
+        # Start timeout timer (5 minutes)
+        self.timeout_timer.start(300000)
+        # Start warning timer (4 minutes)
+        self.warning_timer.start(240000)
+        print("⏰ File browser screen timeout started (5 minutes)")
     
     def on_leave(self):
         """Called by main_app when leaving this screen."""
@@ -215,6 +233,7 @@ class FileBrowserController(QWidget):
         self.model.cleanup()
         # Stop timeout timer
         self.timeout_timer.stop()
+        self.warning_timer.stop()
     
     def _on_timeout(self):
         """Handle timeout - return to idle screen."""
@@ -224,5 +243,12 @@ class FileBrowserController(QWidget):
     def _reset_timeout(self):
         """Reset the timeout timer (call on user activity)."""
         self.timeout_timer.stop()
-        self.timeout_timer.start(60000)
+        self.warning_timer.stop()
+        self.timeout_timer.start(300000)
+        self.warning_timer.start(240000)
         print("⏰ File browser screen timeout reset")
+    
+    def _show_timeout_warning(self):
+        """Show warning before timeout."""
+        print("⚠️ File browser screen will timeout in 1 minute - please continue your selection")
+        # You could add a visual warning here if needed
