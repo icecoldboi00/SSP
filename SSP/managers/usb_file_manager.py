@@ -327,6 +327,7 @@ class USBFileManager:
                 print(f"Cleaning up old session folders in {temp_base_dir}")
             
                 current_session_folder = f"Session_{self.session_id}"
+                cleaned_count = 0
             
                 for folder_name in os.listdir(temp_base_dir):
                     if folder_name.startswith("Session_") and folder_name != current_session_folder:
@@ -335,11 +336,20 @@ class USBFileManager:
                             if os.path.isdir(folder_path):
                                 shutil.rmtree(folder_path)
                                 print(f"Deleted old session folder: {folder_name}")
+                                cleaned_count += 1
                         except Exception as e:
                             print(f"Error deleting old session folder {folder_name}: {e}")
+                
+                print(f"✅ Cleaned up {cleaned_count} old session folders")
                         
         except Exception as e:
             print(f"Error cleaning up old session folders: {e}")
+            # Log error for debugging
+            try:
+                from utils.error_logger import log_error
+                log_error("USB Temp Folder Cleanup Error", str(e), "usb_file_manager")
+            except Exception as log_error:
+                print(f"⚠️ Failed to log error: {log_error}")
     
     def get_temp_folder_info(self):
         """Get information about the current temporary folder"""
@@ -467,6 +477,39 @@ class USBFileManager:
         self.operation_in_progress = False
         self.current_usb_drive = None
         print("✅ USB drive marked as safe to remove")
+    
+    def force_cleanup_all_resources(self):
+        """Force cleanup of all resources to prevent memory leaks."""
+        try:
+            print("🔄 Force cleaning up all USB file manager resources...")
+            
+            # Clear all tracking data
+            self.files_in_use.clear()
+            self.operation_in_progress = False
+            self.current_usb_drive = None
+            self.last_known_drives.clear()
+            
+            # Clean up all temporary directories
+            self.cleanup_all_temp_folders()
+            
+            # Force cleanup current session directory if it exists
+            if hasattr(self, 'destination_dir') and os.path.exists(self.destination_dir):
+                try:
+                    shutil.rmtree(self.destination_dir)
+                    print(f"✅ Cleaned up current session directory: {self.destination_dir}")
+                except Exception as e:
+                    print(f"⚠️ Error cleaning up current session directory: {e}")
+            
+            print("✅ Force cleanup of all resources completed")
+            
+        except Exception as e:
+            print(f"⚠️ Error during force cleanup: {e}")
+            # Log error for debugging
+            try:
+                from utils.error_logger import log_error
+                log_error("USB Force Cleanup All Resources Error", str(e), "usb_file_manager")
+            except Exception as log_error:
+                print(f"⚠️ Failed to log error: {log_error}")
     
     def _create_new_session(self):
         """Create a new session directory for each USB drive."""

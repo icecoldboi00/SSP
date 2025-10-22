@@ -64,29 +64,61 @@ class USBController(QWidget):
     
     def on_enter(self):
         """Called by main_app when this screen becomes active."""
-        print("🔄 Entering USB screen, performing initial check...")
-        self.view.start_blinking()
-        
-        # Reset the returning flag when entering normally
-        self.model.set_returning_from_file_browser(False)
-        
-        # Reset USB manager state for new session
-        self.model.reset_usb_manager_state()
-        
-        self.model.check_current_drives()
-        
-        # Start timeout timer (5 minutes)
-        self.timeout_timer.start(300000)
-        print("⏰ USB screen timeout started (5 minutes)")
+        try:
+            print("🔄 Entering USB screen, performing initial check...")
+            
+            # Check system resources before proceeding
+            if not self._check_system_resources():
+                print("⚠️ System resources low, performing cleanup...")
+                self.model.force_cleanup()
+            
+            self.view.start_blinking()
+            
+            # Reset the returning flag when entering normally
+            self.model.set_returning_from_file_browser(False)
+            
+            # Reset USB manager state for new session
+            self.model.reset_usb_manager_state()
+            
+            self.model.check_current_drives()
+            
+            # Start timeout timer (5 minutes)
+            self.timeout_timer.start(300000)
+            print("⏰ USB screen timeout started (5 minutes)")
+            
+        except Exception as e:
+            print(f"❌ Error entering USB screen: {e}")
+            # Log error for debugging
+            try:
+                from utils.error_logger import log_error
+                log_error("USB Screen Enter Error", str(e), "usb_controller")
+            except Exception as log_error:
+                print(f"⚠️ Failed to log error: {log_error}")
+            
+            # Show error to user and return to idle
+            self.main_app.show_screen('idle')
     
     def on_leave(self):
         """Called by main_app when leaving this screen."""
-        print("⏹️ Leaving USB screen")
-        self.model.stop_usb_monitoring()
-        self.view.stop_blinking()
-        
-        # Stop timeout timer
-        self.timeout_timer.stop()
+        try:
+            print("⏹️ Leaving USB screen")
+            self.model.stop_usb_monitoring()
+            self.view.stop_blinking()
+            
+            # Stop timeout timer
+            self.timeout_timer.stop()
+            
+            # Force cleanup of any remaining resources
+            self.model.force_cleanup()
+            
+        except Exception as e:
+            print(f"⚠️ Error leaving USB screen: {e}")
+            # Log error for debugging
+            try:
+                from utils.error_logger import log_error
+                log_error("USB Screen Leave Error", str(e), "usb_controller")
+            except Exception as log_error:
+                print(f"⚠️ Failed to log error: {log_error}")
     
     def _on_timeout(self):
         """Handle timeout - return to idle screen."""
@@ -102,3 +134,43 @@ class USBController(QWidget):
     def reset_usb_state(self):
         """Public method to reset USB monitoring state."""
         self.model.reset_usb_state()
+    
+    def _check_system_resources(self):
+        """Check if system has sufficient resources to proceed."""
+        try:
+            import psutil
+            
+            # Check available memory (should have at least 100MB free)
+            memory = psutil.virtual_memory()
+            free_memory_mb = memory.available / (1024 * 1024)
+            
+            if free_memory_mb < 100:
+                print(f"⚠️ Low memory: {free_memory_mb:.1f}MB available")
+                return False
+            
+            # Check disk space (should have at least 500MB free)
+            disk = psutil.disk_usage('/')
+            free_disk_mb = disk.free / (1024 * 1024)
+            
+            if free_disk_mb < 500:
+                print(f"⚠️ Low disk space: {free_disk_mb:.1f}MB available")
+                return False
+            
+            # Check CPU usage (should be less than 90%)
+            cpu_percent = psutil.cpu_percent(interval=1)
+            if cpu_percent > 90:
+                print(f"⚠️ High CPU usage: {cpu_percent}%")
+                return False
+            
+            print(f"✅ System resources OK - Memory: {free_memory_mb:.1f}MB, Disk: {free_disk_mb:.1f}MB, CPU: {cpu_percent}%")
+            return True
+            
+        except Exception as e:
+            print(f"⚠️ Error checking system resources: {e}")
+            # If we can't check resources, assume they're OK but log the error
+            try:
+                from utils.error_logger import log_error
+                log_error("System Resource Check Error", str(e), "usb_controller")
+            except Exception as log_error:
+                print(f"⚠️ Failed to log error: {log_error}")
+            return True  # Assume OK if we can't check
