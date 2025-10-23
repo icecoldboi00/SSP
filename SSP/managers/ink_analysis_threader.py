@@ -137,7 +137,7 @@ class InkAnalysisThreadManager(QObject):
             pdf_path = operation.data['pdf_path']
             selected_pages = operation.data.get('selected_pages')
             copies = operation.data.get('copies', 1)
-            dpi = operation.data.get('dpi', 300)
+            dpi = operation.data.get('dpi', 150)
             color_mode = operation.data.get('color_mode', 'Color')
             
             # Perform analysis and update database

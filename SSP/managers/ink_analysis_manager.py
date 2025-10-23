@@ -14,7 +14,7 @@ class InkAnalysisManager:
     def __init__(self, db_manager=None):
         self.db_manager = db_manager
         
-    def analyze_pdf_ink_usage(self, pdf_path, selected_pages=None, dpi=300):
+    def analyze_pdf_ink_usage(self, pdf_path, selected_pages=None, dpi=150):
         try:
             doc = fitz.open(pdf_path)
             total_pages = len(doc)
