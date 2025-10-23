@@ -136,7 +136,7 @@ class InkAnalysisManager:
         return cartridge_used_percent
 
     def _calculate_job_costs(self, avg_k, avg_c, avg_m, avg_y, total_pages, 
-                           yield_black=17000, yield_color=17000, standard_coverage=5.0):
+                           yield_black=7000, yield_color=7000, standard_coverage=5.0):
         """
         Calculates the percentage of each individual cartridge used for a print job.
         """
