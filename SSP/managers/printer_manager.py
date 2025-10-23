@@ -26,8 +26,11 @@ from managers.sms_manager import send_paper_jam_sms, send_printing_error_sms
 try:
     import fitz  # PyMuPDF
     PYMUPDF_AVAILABLE = True
+    print("✅ PyMuPDF library found. PDF page selection is ENABLED.")
 except ImportError:
     PYMUPDF_AVAILABLE = False
+    print("❌ PyMuPDF library not found. PDF page selection will be DISABLED.")
+    print("   Install with: pip install PyMuPDF")
 
 
 class PrinterThread(QThread):
@@ -72,7 +75,7 @@ class PrinterThread(QThread):
     def run(self):
         """Execute the complete print workflow."""
         if not PYMUPDF_AVAILABLE:
-            self.print_failed.emit("PyMuPDF library is not installed.")
+            self.print_failed.emit("PyMuPDF library is not installed. Please install with: pip install PyMuPDF")
             return
 
         try:
@@ -84,7 +87,13 @@ class PrinterThread(QThread):
             # Build and execute CUPS print command
             command = self.build_print_command()
             config = get_config()
-            print(f"Printing: {len(self.selected_pages)} pages, {self.copies} copies, {self.color_mode}")
+            print(f"🖨️ Printing: {len(self.selected_pages)} pages, {self.copies} copies, {self.color_mode}")
+            print(f"🖨️ Command: {' '.join(command)}")
+            print(f"🖨️ Temp PDF: {self.temp_pdf_path}")
+            
+            # Verify temp PDF exists before printing
+            if not os.path.exists(self.temp_pdf_path):
+                raise FileNotFoundError(f"Temporary PDF not found: {self.temp_pdf_path}")
             
             process = subprocess.run(
                 command, 
@@ -93,6 +102,10 @@ class PrinterThread(QThread):
                 check=True,
                 timeout=config.printer_timeout
             )
+            
+            print(f"🖨️ CUPS output: {process.stdout}")
+            if process.stderr:
+                print(f"🖨️ CUPS stderr: {process.stderr}")
 
             # Validate print job was accepted by CUPS
             if not process.stdout or "request id is" not in process.stdout:
@@ -189,21 +202,46 @@ class PrinterThread(QThread):
         Sets self.temp_pdf_path to the temporary file path on success.
         """
         try:
+            print(f"🔍 Creating temp PDF with pages: {self.selected_pages}")
+            print(f"🔍 Source file: {self.file_path}")
+            
+            # Verify source file exists
+            if not os.path.exists(self.file_path):
+                raise FileNotFoundError(f"Source PDF file not found: {self.file_path}")
+            
             original_doc = fitz.open(self.file_path)
+            print(f"🔍 Original PDF has {len(original_doc)} pages")
+            
+            # Validate page numbers
+            max_page = len(original_doc)
+            invalid_pages = [p for p in self.selected_pages if p < 1 or p > max_page]
+            if invalid_pages:
+                raise ValueError(f"Invalid page numbers: {invalid_pages}. PDF has {max_page} pages.")
+            
             pages_0_indexed = [p - 1 for p in self.selected_pages]
+            print(f"🔍 Converting to 0-indexed pages: {pages_0_indexed}")
             
             temp_doc = fitz.open()
             
             # Copy selected pages
             for page_num in pages_0_indexed:
+                print(f"🔍 Copying page {page_num + 1} (0-indexed: {page_num})")
                 temp_doc.insert_pdf(original_doc, from_page=page_num, to_page=page_num)
             
             # Save to temporary file
             fd, self.temp_pdf_path = tempfile.mkstemp(suffix=".pdf", prefix="printjob-")
             os.close(fd)
+            print(f"🔍 Saving temp PDF to: {self.temp_pdf_path}")
             temp_doc.save(self.temp_pdf_path, garbage=4, deflate=True)
             temp_doc.close()
             original_doc.close()
+            
+            # Verify temp file was created
+            if os.path.exists(self.temp_pdf_path):
+                file_size = os.path.getsize(self.temp_pdf_path)
+                print(f"✅ Temp PDF created successfully: {file_size} bytes")
+            else:
+                raise Exception("Temp PDF file was not created")
             
         except Exception as e:
             print(f"❌ Failed to create temporary PDF: {str(e)}")
@@ -549,34 +587,66 @@ class PrinterManager(QObject):
             True if printer is available and ready, False otherwise
         """
         try:
+            print(f"🔍 Checking printer availability for: {self.printer_name}")
+            
             # Check if lp command exists
             result = subprocess.run(['which', 'lp'], capture_output=True, text=True)
             if result.returncode != 0:
-                print("⚠️ 'lp' command not found. Is CUPS installed?")
+                print("❌ 'lp' command not found. Is CUPS installed?")
+                print("   Install CUPS: sudo apt-get install cups")
                 return False
+            print("✅ CUPS lp command found")
             
             # Check if CUPS daemon is running
             try:
                 result = subprocess.run(['pgrep', 'cupsd'], capture_output=True, text=True)
                 if result.returncode != 0:
-                    print("⚠️ CUPS daemon (cupsd) is not running")
+                    print("❌ CUPS daemon (cupsd) is not running")
+                    print("   Start CUPS: sudo systemctl start cups")
                     return False
+                print("✅ CUPS daemon is running")
             except Exception as e:
-                print(f"⚠️ Error checking CUPS daemon: {e}")
+                print(f"❌ Error checking CUPS daemon: {e}")
                 return False
+                
+            # List all available printers first
+            try:
+                result = subprocess.run(['lpstat', '-p'], capture_output=True, text=True, timeout=10)
+                if result.returncode == 0:
+                    print(f"🔍 Available printers:")
+                    for line in result.stdout.split('\n'):
+                        if line.strip():
+                            print(f"   {line}")
+                else:
+                    print("⚠️ Could not list printers")
+            except Exception as e:
+                print(f"⚠️ Error listing printers: {e}")
                 
             # Check if printer exists
             result = subprocess.run(['lpstat', '-p', self.printer_name], 
                                   capture_output=True, text=True, timeout=10)
             if result.returncode != 0:
-                print(f"⚠️ Printer '{self.printer_name}' not found")
+                print(f"❌ Printer '{self.printer_name}' not found")
+                print(f"   Available printers listed above")
+                print(f"   Update printer name in config.py")
                 return False
+            print(f"✅ Printer '{self.printer_name}' found")
             
             # Check printer state
             output = result.stdout.lower()
-            if 'offline' in output or 'stopped' in output or 'jam' in output:
-                print(f"⚠️ Printer is in error state")
+            print(f"🔍 Printer status: {result.stdout.strip()}")
+            
+            if 'offline' in output or 'stopped' in output:
+                print(f"❌ Printer is offline or stopped")
                 return False
+            elif 'jam' in output:
+                print(f"❌ Paper jam detected")
+                return False
+            elif 'error' in output:
+                print(f"❌ Printer error detected")
+                return False
+            else:
+                print(f"✅ Printer is ready")
                 
             return True
             

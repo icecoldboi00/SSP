@@ -414,8 +414,10 @@ class ThankYouModel(QObject):
         # Only start safety timeout if not in error state
         # Error states should wait for admin override, not auto-redirect
         if self.current_state not in ["error", "admin_override"]:
-            # Start safety timeout (2 minutes) only for non-error states
-            self.redirect_timer.start(120000)
+            # Start safety timeout (3 minutes) for print jobs
+            # This ensures user doesn't get stuck if printing fails silently
+            self.redirect_timer.start(180000)
+            print(f"⏰ Started 3-minute safety timeout for print job")
     
     def _on_print_failed(self, error_message):
         """
