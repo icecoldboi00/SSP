@@ -143,10 +143,17 @@ class USBScreenModel(QObject):
             self.monitoring_thread.stop_monitoring()
             
             # Wait for thread to finish gracefully
-            if not self.monitoring_thread.wait(3000):  # Increased wait time to 3 seconds
-                print("⚠️ Thread did not stop gracefully, terminating...")
-                self.monitoring_thread.terminate()
-                self.monitoring_thread.wait(1000)
+            if not self.monitoring_thread.wait(5000):  # Increased wait time to 5 seconds
+                print("⚠️ Thread did not stop gracefully, forcing termination...")
+                # Try to force stop the monitoring loop first
+                self.monitoring_thread.monitoring = False
+                self.monitoring_thread._should_stop = True
+                
+                # Wait a bit more for graceful shutdown
+                if not self.monitoring_thread.wait(2000):
+                    print("⚠️ Forcing thread termination...")
+                    self.monitoring_thread.terminate()
+                    self.monitoring_thread.wait(1000)
             
             # Clean up thread reference
             self.monitoring_thread = None
@@ -306,7 +313,48 @@ class USBScreenModel(QObject):
             if hasattr(self.usb_manager, 'current_usb_drive'):
                 self.usb_manager.current_usb_drive = None
             
+            # Clean up old temporary directories to prevent memory leaks
+            if hasattr(self.usb_manager, 'cleanup_all_temp_folders'):
+                self.usb_manager.cleanup_all_temp_folders()
+                print("🔄 Cleaned up old temporary directories")
+            
             print("✅ USB manager state reset complete")
             
         except Exception as e:
             print(f"⚠️ Error resetting USB manager state: {e}")
+            # Log error to database for debugging
+            try:
+                from utils.error_logger import log_error
+                log_error("USB Manager Reset Error", str(e), "usb_screen_model")
+            except Exception as log_error:
+                print(f"⚠️ Failed to log error: {log_error}")
+    
+    def force_cleanup(self):
+        """Force cleanup of all resources to prevent memory leaks."""
+        try:
+            print("🔄 Force cleaning up USB screen resources...")
+            
+            # Stop monitoring thread
+            self.stop_usb_monitoring()
+            
+            # Clear all state
+            self.returning_from_file_browser = False
+            
+            # Force cleanup USB manager
+            if hasattr(self.usb_manager, 'force_safe_eject'):
+                self.usb_manager.force_safe_eject()
+            
+            # Force cleanup all resources
+            if hasattr(self.usb_manager, 'force_cleanup_all_resources'):
+                self.usb_manager.force_cleanup_all_resources()
+            
+            print("✅ Force cleanup completed")
+            
+        except Exception as e:
+            print(f"⚠️ Error during force cleanup: {e}")
+            # Log error for debugging
+            try:
+                from utils.error_logger import log_error
+                log_error("USB Force Cleanup Error", str(e), "usb_screen_model")
+            except Exception as log_error:
+                print(f"⚠️ Failed to log error: {log_error}")
