@@ -1,50 +1,58 @@
 # managers/ink_analysis_manager.py
 
-import cv2
+import fitz  # PyMuPDF
 import numpy as np
-from pdf2image import convert_from_path
 from datetime import datetime
 
 class InkAnalysisManager:
+    """Manages ink usage analysis for PDF files and updates database accordingly."""
+    
+    # Standard coverage percentage for a single channel (C, M, Y, or K) on a "standard page".
+    # Industry standard for ISO yield tests is often around 5% per channel.
+    STANDARD_CHANNEL_COVERAGE_PERCENT = 5.0
+    
     def __init__(self, db_manager=None):
         self.db_manager = db_manager
         
-    def analyze_pdf_ink_usage(self, pdf_path, selected_pages=None, dpi=150):
+    def analyze_pdf_ink_usage(self, pdf_path, selected_pages=None, dpi=300):
         try:
-            pages = convert_from_path(pdf_path, dpi=dpi)
-            total_pages = len(pages)
+            doc = fitz.open(pdf_path)
+            total_pages = len(doc)
             
             if total_pages == 0:
+                doc.close()
                 return self._create_empty_result()
             
             # Filter to selected pages if specified
             if selected_pages:
                 # Convert to 0-indexed and filter
-                pages_to_analyze = [pages[i-1] for i in selected_pages if 1 <= i <= total_pages]
+                pages_to_analyze = [i-1 for i in selected_pages if 1 <= i <= total_pages]
             else:
-                pages_to_analyze = pages
-            
+                pages_to_analyze = list(range(total_pages))
             
             if not pages_to_analyze:
+                doc.close()
                 return self._create_empty_result()
             
             # Analyze each page
             total_c, total_m, total_y, total_k = 0, 0, 0, 0
             analyzed_pages = 0
             
-            for page_image in pages_to_analyze:
-                # Convert to OpenCV format (BGR)
-                opencv_image = cv2.cvtColor(np.array(page_image), cv2.COLOR_RGB2BGR)
+            for page_num in pages_to_analyze:
+                page = doc[page_num]
+                # Render page in CMYK colorspace
+                pix = page.get_pixmap(colorspace=fitz.csCMYK, dpi=dpi)
                 
                 # Analyze ink usage for this page
-                c, m, y, k = self._analyze_ink_usage(opencv_image)
+                c, m, y, k = self._analyze_page_coverage_fitz(pix)
                 
                 total_c += c
                 total_m += m
                 total_y += y
                 total_k += k
                 analyzed_pages += 1
-                
+            
+            doc.close()
             
             # Calculate averages
             avg_c = total_c / analyzed_pages
@@ -81,7 +89,6 @@ class InkAnalysisManager:
                 'timestamp': datetime.now()
             }
             
-            
             return result
             
         except Exception as e:
@@ -90,52 +97,80 @@ class InkAnalysisManager:
             traceback.print_exc()
             return self._create_error_result(str(e))
     
-    def _analyze_ink_usage(self, image_data, ignore_white=True):
-        if ignore_white:
-            white_mask = np.all(image_data == [255, 255, 255], axis=-1)
-            pixels_to_analyze = image_data[~white_mask]
-            if pixels_to_analyze.size == 0:
-                return (0, 0, 0, 0)
-            num_pixels = pixels_to_analyze.shape[0]
-            analysis_target = pixels_to_analyze
-        else:
-            height, width, _ = image_data.shape
-            num_pixels = height * width
-            analysis_target = image_data.reshape((num_pixels, 3))
-
-        bgr_normalized = analysis_target.astype(np.float32) / 255.0
-        b, g, r = bgr_normalized[:, 0], bgr_normalized[:, 1], bgr_normalized[:, 2]
-
-        epsilon = 1e-9
-        k = 1 - np.maximum.reduce([r, g, b])
-        c = (1 - r - k) / (1 - k + epsilon)
-        m = (1 - g - k) / (1 - k + epsilon)
-        y = (1 - b - k) / (1 - k + epsilon)
-
-        cyan_coverage = (np.sum(c) / num_pixels) * 100
-        magenta_coverage = (np.sum(m) / num_pixels) * 100
-        yellow_coverage = (np.sum(y) / num_pixels) * 100
-        black_coverage = (np.sum(k) / num_pixels) * 100
+    def _analyze_page_coverage_fitz(self, pix):
+        """
+        Analyzes a single fitz.Pixmap (rendered in CMYK) and returns its
+        average ink coverage percentages for each channel.
+        """
+        if pix.width == 0 or pix.height == 0:
+            return 0, 0, 0, 0
         
-        return (cyan_coverage, magenta_coverage, yellow_coverage, black_coverage)
+        # Max possible ink value for one channel on this page (every pixel = 255)
+        max_channel_value = np.uint64(pix.width) * np.uint64(pix.height) * 255
+        
+        if max_channel_value == 0:
+            return 0, 0, 0, 0
+
+        # Get the raw C,M,Y,K byte data and use numpy for super-fast summing
+        samples = np.frombuffer(pix.samples, dtype=np.uint8).reshape(-1, 4)
+        cmyk_totals = samples.sum(axis=0, dtype=np.uint64)
+
+        # Calculate the percentage of coverage for each channel on this page
+        cyan_coverage = (cmyk_totals[0] / max_channel_value) * 100
+        magenta_coverage = (cmyk_totals[1] / max_channel_value) * 100
+        yellow_coverage = (cmyk_totals[2] / max_channel_value) * 100
+        black_coverage = (cmyk_totals[3] / max_channel_value) * 100
+        
+        return cyan_coverage, magenta_coverage, yellow_coverage, black_coverage
     
+    def _calculate_channel_cost(self, avg_coverage_percent, total_pages_in_job, yield_pages_for_cartridge, standard_coverage_percent):
+        """
+        Calculates the percentage of a single ink cartridge used for a print job.
+
+        Args:
+            avg_coverage_percent (float): The average ink coverage percentage for this channel
+                                          across all pages of the current job.
+            total_pages_in_job (int): The number of physical pages in the current PDF document.
+            yield_pages_for_cartridge (int): The advertised yield (in standard pages) for this specific cartridge.
+            standard_coverage_percent (float): The ink coverage percentage of a "standard page" for this channel.
+
+        Returns:
+            float: The percentage of the cartridge capacity that this job will consume.
+        """
+        if yield_pages_for_cartridge <= 0 or standard_coverage_percent <= 0:
+            return 0.0 # Avoid division by zero, or if cartridge has no yield
+
+        if avg_coverage_percent <= 0:
+            return 0.0 # If the job uses no ink for this channel, cost is 0
+
+        # How many "standard pages" one physical page of *this job* is equivalent to.
+        # E.g., if avg_coverage is 10% and standard is 5%, then 1 real page = 2 standard pages.
+        equivalent_standard_pages_per_real_page = avg_coverage_percent / standard_coverage_percent
+
+        # Total equivalent standard pages for this entire job for this channel
+        total_equivalent_standard_pages_for_job = total_pages_in_job * equivalent_standard_pages_per_real_page
+
+        # Percentage of cartridge used
+        cartridge_used_percent = (total_equivalent_standard_pages_for_job / yield_pages_for_cartridge) * 100
+        
+        return cartridge_used_percent
+
     def _calculate_job_costs(self, avg_k, avg_c, avg_m, avg_y, total_pages, 
                            yield_black=17000, yield_color=17000, standard_coverage=5.0):
-        job_cost_black_percent = 0.0
-        job_cost_color_percent = 0.0
-
-        if yield_black and avg_k > 0:
-            realistic_yield_black = (yield_black * standard_coverage) / avg_k
-            if realistic_yield_black > 0:
-                job_cost_black_percent = (1 / realistic_yield_black) * total_pages * 100
-
-        avg_total_color = avg_c + avg_m + avg_y
-        if yield_color and avg_total_color > 0:
-            realistic_yield_color = (yield_color * standard_coverage) / avg_total_color
-            if realistic_yield_color > 0:
-                job_cost_color_percent = (1 / realistic_yield_color) * total_pages * 100
-                
-        return job_cost_black_percent, job_cost_color_percent
+        """
+        Calculate job costs using individual channel calculations.
+        Returns both individual channel costs and combined color/black costs for compatibility.
+        """
+        # Calculate individual channel costs
+        c_cost = self._calculate_channel_cost(avg_c, total_pages, yield_color, self.STANDARD_CHANNEL_COVERAGE_PERCENT)
+        m_cost = self._calculate_channel_cost(avg_m, total_pages, yield_color, self.STANDARD_CHANNEL_COVERAGE_PERCENT)
+        y_cost = self._calculate_channel_cost(avg_y, total_pages, yield_color, self.STANDARD_CHANNEL_COVERAGE_PERCENT)
+        k_cost = self._calculate_channel_cost(avg_k, total_pages, yield_black, self.STANDARD_CHANNEL_COVERAGE_PERCENT)
+        
+        # For backward compatibility, calculate combined color cost
+        color_cost = max(c_cost, m_cost, y_cost)  # Use the highest color channel cost
+        
+        return k_cost, color_cost
     
     def _create_empty_result(self):
         return {
