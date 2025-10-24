@@ -79,7 +79,7 @@ class PaymentController(QWidget):
         self.view.set_buttons_enabled(True)
         
         # If payment screen is already active, enable payment mode now
-        if hasattr(self.model, 'payment_ready') and self.model.payment_ready:
+        if hasattr(self.model, 'gpio_thread') and self.model.gpio_thread:
             print("DEBUG: Payment screen already active, enabling payment mode now")
             self.model.enable_payment_mode()
     
@@ -92,12 +92,8 @@ class PaymentController(QWidget):
         print(f"DEBUG: Model type: {type(self.model)}")
         print(f"DEBUG: View type: {type(self.view)}")
         
-        # Reset payment state to prevent accumulation from previous sessions
-        print("DEBUG: Resetting payment state to prevent accumulation")
-        self.model.reset_payment_state()
-        
-        # GPIO thread will be reset when created in setup_gpio()
-        print("DEBUG: GPIO thread will be reset when created")
+        # Don't reset payment state here - it will be reset in the model's on_enter()
+        print("DEBUG: Payment state will be reset in model's on_enter() method")
         
         # Start timeout timer (5 minutes)
         self.timeout_timer.start(300000)

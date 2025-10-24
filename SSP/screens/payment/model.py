@@ -193,6 +193,26 @@ class GPIOPaymentThread(QThread):
                     self.bill_pulse_count = 0
             time.sleep(0.05)
 
+    def enable_payment(self):
+        """Enable payment acceptors."""
+        print("DEBUG: GPIOPaymentThread.enable_payment() called")
+        if self.gpio_available:
+            self.set_acceptor_state(True)  # Enable bill acceptor
+            self.set_coin_acceptor_state(True)  # Enable coin acceptor
+            print("SUCCESS: Payment acceptors enabled")
+        else:
+            print("WARNING: GPIO not available - payment acceptors not enabled")
+
+    def disable_payment(self):
+        """Disable payment acceptors."""
+        print("DEBUG: GPIOPaymentThread.disable_payment() called")
+        if self.gpio_available:
+            self.set_acceptor_state(False)  # Disable bill acceptor
+            self.set_coin_acceptor_state(False)  # Disable coin acceptor
+            print("SUCCESS: Payment acceptors disabled")
+        else:
+            print("WARNING: GPIO not available - payment acceptors not disabled")
+
     def stop(self):
         """Stop the GPIO thread safely."""
         print("Stopping GPIO payment thread...")
@@ -255,7 +275,7 @@ class PaymentModel(QObject):
         self.payment_ready = False
         
         # If payment screen is already active, enable payment mode now
-        if hasattr(self, 'persistent_gpio') and self.persistent_gpio:
+        if hasattr(self, 'gpio_thread') and self.gpio_thread:
             print("DEBUG: Payment data set, enabling payment mode now")
             self.enable_payment_mode()
 
