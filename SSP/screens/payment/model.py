@@ -118,15 +118,16 @@ class GPIOPaymentThread(QThread):
             # Setup coin acceptor inhibit pin (pin 22)
             print("DEBUG: Setting up coin acceptor control pin (pin 22)")
             self.pi.set_mode(self.COIN_INHIBIT_PIN, pigpio.OUTPUT)
-            self.set_coin_acceptor_state(False)  # Start disabled (pin 22 = 0)
-            print("DEBUG: Coin acceptor disabled by default - will be enabled when payment screen is entered")
+            # Don't disable here - let the payment mode control the state
+            print("DEBUG: Coin acceptor control pin configured - state controlled by payment mode")
 
             # Setup bill acceptor GPIO
             print("DEBUG: Setting up bill acceptor GPIO (pin 18)")
             self.pi.set_mode(self.BILL_PIN, pigpio.INPUT)
             self.pi.set_pull_up_down(self.BILL_PIN, pigpio.PUD_UP)
             self.pi.set_mode(self.INHIBIT_PIN, pigpio.OUTPUT)
-            self.set_acceptor_state(False)  # Start disabled
+            # Don't disable here - let the payment mode control the state
+            print("DEBUG: Bill acceptor control pin configured - state controlled by payment mode")
             self.pi.callback(self.BILL_PIN, pigpio.FALLING_EDGE, self.bill_pulse_detected)
 
             print("DEBUG: GPIO setup completed successfully")
@@ -292,6 +293,12 @@ class GPIOPaymentThread(QThread):
             print("DEBUG: Enabling coin acceptor...")
             self.set_coin_acceptor_state(True)  # Enable coin acceptor
             print("SUCCESS: Payment acceptors enabled")
+            
+            # Verify the acceptors are actually enabled
+            coin_state = self.pi.read(self.COIN_INHIBIT_PIN)
+            bill_state = self.pi.read(self.INHIBIT_PIN)
+            print(f"DEBUG: Final coin acceptor state: {coin_state} (1=enabled)")
+            print(f"DEBUG: Final bill acceptor state: {bill_state} (0=enabled)")
         else:
             print("WARNING: GPIO not available or pi not connected - payment acceptors not enabled")
 
