@@ -68,8 +68,6 @@ class PaymentTester:
         self.ghost_detections = 0
         
         print("🔧 Payment Tester initialized")
-        print(f"📌 Monitoring pins: Coin={self.COIN_PIN}, Bill={self.BILL_PIN}")
-        print(f"📌 Control pins: Coin Inhibit={self.COIN_INHIBIT_PIN}, Bill Inhibit={self.BILL_INHIBIT_PIN}")
     
     def initialize(self):
         """Initialize GPIO connection and setup."""
@@ -80,17 +78,13 @@ class PaymentTester:
                 print("❌ Failed to connect to pigpio daemon")
                 return False
             
-            print("✅ Connected to pigpio daemon")
-            
             # Setup GPIO pins
             self._setup_gpio_pins()
             
             # Enable both acceptors for testing
             self._enable_acceptors()
             
-            print("✅ Payment test system ready")
-            print("💰 Insert coins or bills to test detection...")
-            print("🛑 Press Ctrl+C to stop testing")
+            print("✅ Ready - Insert coins or bills")
             
             return True
             
@@ -115,7 +109,7 @@ class PaymentTester:
             self.pi.set_mode(self.COIN_INHIBIT_PIN, pigpio.OUTPUT)
             self.pi.set_mode(self.BILL_INHIBIT_PIN, pigpio.OUTPUT)
             
-            print(f"✅ GPIO pins configured - Coin: {self.COIN_PIN}, Bill: {self.BILL_PIN}")
+            pass  # Silent setup
             
         except Exception as e:
             print(f"❌ GPIO setup failed: {e}")
@@ -126,11 +120,9 @@ class PaymentTester:
         try:
             # Enable coin acceptor (HIGH = enabled)
             self.pi.write(self.COIN_INHIBIT_PIN, 1)
-            print("✅ Coin acceptor enabled")
             
             # Enable bill acceptor (LOW = enabled)
             self.pi.write(self.BILL_INHIBIT_PIN, 0)
-            print("✅ Bill acceptor enabled")
             
         except Exception as e:
             print(f"❌ Failed to enable acceptors: {e}")
@@ -138,20 +130,16 @@ class PaymentTester:
     def _coin_pulse_detected(self, gpio, level, tick):
         """Handle coin pulse detection."""
         if gpio != self.COIN_PIN:
-            print(f"⚠️  Ignoring pulse from GPIO {gpio} (not coin acceptor pin {self.COIN_PIN})")
             return
         
         current_time = time.time()
         
         # Debounce check
         if current_time - self.coin_last_pulse_time < self.DEBOUNCE_TIME:
-            print(f"⚠️  Coin pulse ignored - too soon after last pulse ({current_time - self.coin_last_pulse_time:.3f}s)")
             return
         
         self.coin_pulse_count += 1
         self.coin_last_pulse_time = current_time
-        
-        print(f"🪙 Coin pulse detected - GPIO: {gpio}, Count: {self.coin_pulse_count}")
         
         # Start aggregation timer
         self._start_coin_aggregation()
@@ -159,20 +147,16 @@ class PaymentTester:
     def _bill_pulse_detected(self, gpio, level, tick):
         """Handle bill pulse detection."""
         if gpio != self.BILL_PIN:
-            print(f"⚠️  Ignoring pulse from GPIO {gpio} (not bill acceptor pin {self.BILL_PIN})")
             return
         
         current_time = time.time()
         
         # Debounce check
         if current_time - self.bill_last_pulse_time < self.DEBOUNCE_TIME:
-            print(f"⚠️  Bill pulse ignored - too soon after last pulse ({current_time - self.bill_last_pulse_time:.3f}s)")
             return
         
         self.bill_pulse_count += 1
         self.bill_last_pulse_time = current_time
-        
-        print(f"💵 Bill pulse detected - GPIO: {gpio}, Count: {self.bill_pulse_count}")
         
         # Start aggregation timer
         self._start_bill_aggregation()
@@ -205,15 +189,13 @@ class PaymentTester:
             value = self._get_coin_value(self.coin_pulse_count)
             if value > 0:
                 self.total_coins_detected += 1
-                print(f"💰 COIN DETECTED: {value} peso coin ({self.coin_pulse_count} pulses)")
-                self._print_statistics()
+                print(f"{value} peso coin")
             else:
-                print(f"❓ Unknown coin pattern: {self.coin_pulse_count} pulses")
+                print(f"Unknown coin ({self.coin_pulse_count} pulses)")
             
             # Reset pulse count
             self.coin_pulse_count = 0
         else:
-            print("⚠️  Ghost coin detection - no pulses but timeout occurred")
             self.ghost_detections += 1
         
         self.coin_aggregation_timer = None
@@ -224,23 +206,19 @@ class PaymentTester:
             value = self._get_bill_value(self.bill_pulse_count)
             if value > 0:
                 self.total_bills_detected += 1
-                print(f"💵 BILL DETECTED: {value} peso bill ({self.bill_pulse_count} pulses)")
-                self._print_statistics()
+                print(f"{value} peso bill")
             else:
-                print(f"❓ Unknown bill pattern: {self.bill_pulse_count} pulses")
+                print(f"Unknown bill ({self.bill_pulse_count} pulses)")
             
             # Reset pulse count
             self.bill_pulse_count = 0
         else:
-            print("⚠️  Ghost bill detection - no pulses but timeout occurred")
             self.ghost_detections += 1
         
         self.bill_aggregation_timer = None
     
     def _get_coin_value(self, pulses: int) -> int:
         """Convert pulse count to coin value."""
-        print(f"🔍 Analyzing {pulses} coin pulses...")
-        
         if pulses == 1:
             return 1  # ₱1 coin = 1 pulse
         elif pulses == 2:
@@ -257,13 +235,10 @@ class PaymentTester:
         elif 6 <= pulses <= 10:
             return 20  # ₱20 coin with variation
         else:
-            print(f"❓ Unknown coin pulse count: {pulses}")
             return 0
     
     def _get_bill_value(self, pulses: int) -> int:
         """Convert pulse count to bill value."""
-        print(f"🔍 Analyzing {pulses} bill pulses...")
-        
         if pulses == 2:
             return 20  # ₱20 bill = 2 pulses
         elif pulses == 5:
@@ -273,13 +248,11 @@ class PaymentTester:
         elif pulses == 50:
             return 500  # ₱500 bill = 50 pulses
         else:
-            print(f"❓ Unknown bill pulse count: {pulses}")
             return 0
     
     def _print_statistics(self):
         """Print current test statistics."""
-        runtime = time.time() - self.test_start_time
-        print(f"📊 STATS: Runtime: {runtime:.1f}s | Coins: {self.total_coins_detected} | Bills: {self.total_bills_detected} | Ghost: {self.ghost_detections}")
+        pass  # Removed to reduce console output
     
     def run_test(self):
         """Run the payment test."""
@@ -287,21 +260,16 @@ class PaymentTester:
             return
         
         try:
-            print("\n" + "="*60)
-            print("🧪 PAYMENT ACCEPTOR TEST STARTED")
-            print("="*60)
-            print("💰 Insert coins or bills to test detection")
-            print("🛑 Press Ctrl+C to stop and show final statistics")
-            print("="*60 + "\n")
+            print("Ready - Insert coins or bills")
             
             # Keep running until interrupted
             while self.running:
                 time.sleep(0.1)
                 
         except KeyboardInterrupt:
-            print("\n🛑 Test stopped by user")
+            print("\nTest stopped")
         except Exception as e:
-            print(f"\n❌ Test error: {e}")
+            print(f"\nError: {e}")
         finally:
             self._cleanup()
             self._print_final_statistics()
@@ -309,13 +277,10 @@ class PaymentTester:
     def _cleanup(self):
         """Clean up GPIO resources."""
         try:
-            print("\n🧹 Cleaning up...")
-            
             # Disable acceptors
             if self.pi:
                 self.pi.write(self.COIN_INHIBIT_PIN, 0)  # Disable coin acceptor
                 self.pi.write(self.BILL_INHIBIT_PIN, 1)  # Disable bill acceptor
-                print("✅ Acceptors disabled")
             
             # Cancel timers
             if self.coin_aggregation_timer:
@@ -332,50 +297,33 @@ class PaymentTester:
             # Close pigpio connection
             if self.pi:
                 self.pi.stop()
-                print("✅ pigpio connection closed")
                 
         except Exception as e:
-            print(f"⚠️  Cleanup error: {e}")
+            pass  # Silent cleanup
     
     def _print_final_statistics(self):
         """Print final test statistics."""
-        runtime = time.time() - self.test_start_time
-        
-        print("\n" + "="*60)
-        print("📊 FINAL TEST STATISTICS")
-        print("="*60)
-        print(f"⏱️  Total Runtime: {runtime:.1f} seconds")
-        print(f"🪙 Total Coins Detected: {self.total_coins_detected}")
-        print(f"💵 Total Bills Detected: {self.total_bills_detected}")
-        print(f"👻 Ghost Detections: {self.ghost_detections}")
-        print(f"📈 Detection Rate: {(self.total_coins_detected + self.total_bills_detected) / (runtime / 60):.1f} items/minute")
-        print("="*60)
-        
+        print(f"\nTotal: {self.total_coins_detected} coins, {self.total_bills_detected} bills")
         if self.ghost_detections > 0:
-            print("⚠️  WARNING: Ghost detections detected!")
-            print("   This may indicate hardware issues or interference.")
-        else:
-            print("✅ No ghost detections - system working correctly!")
+            print(f"Ghost detections: {self.ghost_detections}")
 
 
 def signal_handler(sig, frame):
     """Handle Ctrl+C gracefully."""
-    print("\n🛑 Received interrupt signal")
+    print("\nStopped")
     sys.exit(0)
 
 
 def main():
     """Main function."""
-    print("🧪 Payment Acceptor Test Script")
-    print("=" * 40)
+    print("Payment Test")
     
     # Set up signal handler for graceful exit
     signal.signal(signal.SIGINT, signal_handler)
     
     # Check pigpio availability
     if not PIGPIO_AVAILABLE:
-        print("❌ pigpio library not available")
-        print("   Please install: sudo apt-get install python3-pigpio")
+        print("pigpio not available")
         sys.exit(1)
     
     # Create and run tester
