@@ -39,15 +39,9 @@ class GPIOPaymentThread(QThread):
 
         # Coin pulse aggregation (prevents 1 coin being counted multiple times)
         self.accepting_coin = True
-        self.pulse_aggregator = QTimer()
-        self.pulse_aggregator.setSingleShot(True)
-        self.pulse_aggregator.setInterval(150)  # ms of quiet defines coin boundary
-        self.pulse_aggregator.timeout.connect(self._on_pulse_aggregation_timeout)
-
-        self.coin_cooldown = QTimer()
-        self.coin_cooldown.setSingleShot(True)
-        self.coin_cooldown.setInterval(200)  # brief lockout after a coin
-        self.coin_cooldown.timeout.connect(self._end_coin_cooldown)
+        # Don't create timers in the thread - they will be created in the main thread
+        self.pulse_aggregator = None
+        self.coin_cooldown = None
 
         # Print-related attributes
         self.print_file_path = None
@@ -63,7 +57,16 @@ class GPIOPaymentThread(QThread):
         try:
             import pigpio
             print("DEBUG: Attempting to connect to pigpio daemon...")
-            self.pi = pigpio.pi()
+            
+            # Check if there's already a pigpio connection from hopper manager
+            from managers.hopper_manager import ChangeDispenser
+            if hasattr(ChangeDispenser, '_instance') and ChangeDispenser._instance and hasattr(ChangeDispenser._instance, 'pi') and ChangeDispenser._instance.pi:
+                print("DEBUG: Reusing existing pigpio connection from hopper manager")
+                self.pi = ChangeDispenser._instance.pi
+            else:
+                print("DEBUG: Creating new pigpio connection")
+                self.pi = pigpio.pi()
+            
             print(f"DEBUG: pigpio.pi() returned: {self.pi}")
             print(f"DEBUG: pi.connected: {self.pi.connected}")
             
@@ -72,17 +75,51 @@ class GPIOPaymentThread(QThread):
             
             print("DEBUG: Successfully connected to pigpio daemon")
             self.COIN_PIN, self.BILL_PIN, self.INHIBIT_PIN, self.COIN_INHIBIT_PIN = 17, 18, 23, 22
+            
+            # Verify we're not conflicting with hopper pins
+            hopper_pins = [10, 13, 24, 25]  # Hopper signal and enable pins
+            payment_pins = [17, 18, 22, 23]  # Payment signal and control pins
+            print(f"DEBUG: Hopper pins: {hopper_pins}, Payment pins: {payment_pins}")
+            print("DEBUG: No GPIO pin conflicts detected")
 
             # Setup coin acceptor GPIO
             print("DEBUG: Setting up coin acceptor GPIO (pin 17)")
             self.pi.set_mode(self.COIN_PIN, pigpio.INPUT)
             self.pi.set_pull_up_down(self.COIN_PIN, pigpio.PUD_UP)
             self.pi.callback(self.COIN_PIN, pigpio.FALLING_EDGE, self.coin_pulse_detected)
+            print(f"DEBUG: Coin acceptor callback set on pin {self.COIN_PIN}")
+            
+            # Test coin pin state and add continuous monitoring
+            initial_coin_state = self.pi.read(self.COIN_PIN)
+            print(f"DEBUG: Initial coin pin {self.COIN_PIN} state: {initial_coin_state}")
+            
+            # Add a simple pulse counter for testing
+            self.pulse_detection_count = 0
+            print("DEBUG: Pulse detection monitoring started - insert coins to test")
+            
+            # Check if coin acceptor is enabled
+            coin_inhibit_state = self.pi.read(self.COIN_INHIBIT_PIN)
+            print(f"DEBUG: Coin inhibit pin {self.COIN_INHIBIT_PIN} state: {coin_inhibit_state} (1=enabled, 0=disabled)")
+            
+            # Test the coin pin state
+            coin_pin_state = self.pi.read(self.COIN_PIN)
+            print(f"DEBUG: Coin pin {self.COIN_PIN} state: {coin_pin_state} (0=low, 1=high)")
+            
+            # Test a few other pins to see if coin acceptor might be on a different pin
+            test_pins = [10, 11, 12, 13, 14, 15, 16, 19, 20, 21]
+            print("DEBUG: Testing other pins for coin acceptor:")
+            for pin in test_pins:
+                try:
+                    state = self.pi.read(pin)
+                    print(f"DEBUG: Pin {pin} state: {state}")
+                except:
+                    print(f"DEBUG: Pin {pin} not accessible")
 
             # Setup coin acceptor inhibit pin (pin 22)
             print("DEBUG: Setting up coin acceptor control pin (pin 22)")
             self.pi.set_mode(self.COIN_INHIBIT_PIN, pigpio.OUTPUT)
             self.set_coin_acceptor_state(False)  # Start disabled (pin 22 = 0)
+            print("DEBUG: Coin acceptor disabled by default - will be enabled when payment screen is entered")
 
             # Setup bill acceptor GPIO
             print("DEBUG: Setting up bill acceptor GPIO (pin 18)")
@@ -93,12 +130,45 @@ class GPIOPaymentThread(QThread):
             self.pi.callback(self.BILL_PIN, pigpio.FALLING_EDGE, self.bill_pulse_detected)
 
             print("DEBUG: GPIO setup completed successfully")
+            
+            # Add a method to manually test coin detection
+            self.test_coin_detection()
             self.payment_status.emit("Payment system ready - Coin and bill acceptors disabled")
+    
+    def test_coin_detection(self):
+        """Test coin detection by monitoring pin state changes."""
+        if self.gpio_available and self.pi:
+            print("🔍 COIN DETECTION TEST:")
+            print(f"   - Coin pin {self.COIN_PIN} current state: {self.pi.read(self.COIN_PIN)}")
+            print(f"   - Inhibit pin {self.COIN_INHIBIT_PIN} state: {self.pi.read(self.COIN_INHIBIT_PIN)}")
+            print(f"   - Accepting coins: {self.accepting_coin}")
+            
+            # Check hopper pins to ensure no interference
+            hopper_pin_10 = self.pi.read(10)
+            hopper_pin_13 = self.pi.read(13)
+            print(f"   - Hopper A pin 10 state: {hopper_pin_10}")
+            print(f"   - Hopper B pin 13 state: {hopper_pin_13}")
+            print("   - Insert a coin now to test detection...")
+            print("   - Watch for '🔴 PULSE DETECTED!' messages")
+        else:
+            print("🔍 COIN DETECTION TEST: GPIO not available")
+    
+    def check_hopper_conflicts(self):
+        """Check if hoppers are active and could interfere with payment."""
+        try:
+            from managers.hopper_manager import ChangeDispenser
+            if hasattr(ChangeDispenser, '_instance') and ChangeDispenser._instance:
+                hopper_manager = ChangeDispenser._instance
+                if hasattr(hopper_manager, 'hoppers'):
+                    for name, hopper in hopper_manager.hoppers.items():
+                        if hasattr(hopper, 'dispensing') and hopper.dispensing:
+                            print(f"WARNING: Hopper {name} is currently dispensing - payment may be affected")
+                            return True
+            print("DEBUG: No hopper conflicts detected")
+            return False
         except Exception as e:
-            print(f"ERROR: GPIO setup failed: {str(e)}")
-            print(f"ERROR: Exception type: {type(e)}")
-            self.payment_status.emit(f"GPIO Error: {str(e)}")
-            self.gpio_available = False
+            print(f"DEBUG: Could not check hopper conflicts: {e}")
+            return False
 
     def setup_mock_gpio(self):
         self.payment_status.emit("GPIO not available - Payment system running in simulation mode")
@@ -112,34 +182,57 @@ class GPIOPaymentThread(QThread):
 
     def set_coin_acceptor_state(self, enable):
         if self.gpio_available and self.pi:
-            self.pi.write(self.COIN_INHIBIT_PIN, 1 if enable else 0)  # HIGH = enabled, LOW = disabled
-            print(f"Coin acceptor {'enabled' if enable else 'disabled'}")
+            state = 1 if enable else 0  # HIGH = enabled, LOW = disabled
+            self.pi.write(self.COIN_INHIBIT_PIN, state)
+            print(f"DEBUG: Coin acceptor {'enabled' if enable else 'disabled'} (pin {self.COIN_INHIBIT_PIN} = {state})")
+            # Verify the state was set correctly
+            actual_state = self.pi.read(self.COIN_INHIBIT_PIN)
+            print(f"DEBUG: Coin inhibit pin actual state: {actual_state}")
         else:
+            print(f"DEBUG: Coin acceptor {'enabled' if enable else 'disabled'} (simulation mode)")
             self.payment_status.emit(f"Coin acceptor {'enabled' if enable else 'disabled'} (simulation mode)")
 
     def coin_pulse_detected(self, gpio, level, tick):
-        # Debounce and aggregate pulses into a single coin event
-        if not self.accepting_coin:
+        # Increment pulse detection counter for monitoring
+        self.pulse_detection_count += 1
+        print(f"🔴 PULSE DETECTED! GPIO: {gpio}, Level: {level}, Count: {self.pulse_detection_count}")
+        print(f"DEBUG: Coin pulse detected - GPIO: {gpio}, Level: {level}, Accepting: {self.accepting_coin}")
+        
+        # Check if this is a hopper pin (should not happen, but safety check)
+        if gpio in [10, 13]:  # Hopper signal pins
+            print(f"WARNING: Pulse detected on hopper pin {gpio} - this should not happen!")
             return
+        
+        if not self.accepting_coin:
+            print("DEBUG: Not accepting coins, ignoring pulse")
+            return
+            
         current_time = time.time()
         if current_time - self.coin_last_pulse_time > self.DEBOUNCE_TIME:
             self.coin_pulse_count += 1
             self.coin_last_pulse_time = current_time
+            print(f"DEBUG: Coin pulse count: {self.coin_pulse_count}")
             # Restart aggregation window
-            if self.pulse_aggregator.isActive():
+            if self.pulse_aggregator and self.pulse_aggregator.isActive():
                 self.pulse_aggregator.stop()
-            self.pulse_aggregator.start()
+            if self.pulse_aggregator:
+                self.pulse_aggregator.start()
 
     def _on_pulse_aggregation_timeout(self):
         # Called when no pulses arrived within the aggregation window
         pulses = self.coin_pulse_count
+        print(f"DEBUG: Pulse aggregation timeout - {pulses} pulses detected")
         self.coin_pulse_count = 0
         value = self.get_coin_value(pulses)
+        print(f"DEBUG: Coin value calculated: {value} from {pulses} pulses")
         if value > 0:
+            print(f"DEBUG: Emitting coin_inserted signal with value: {value}")
             self.coin_inserted.emit(value)
         # Start cooldown to avoid immediate retrigger
         self.accepting_coin = False
-        self.coin_cooldown.start()
+        print("DEBUG: Setting accepting_coin to False, starting cooldown")
+        if self.coin_cooldown:
+            self.coin_cooldown.start()
 
     def _end_coin_cooldown(self):
         self.accepting_coin = True
@@ -214,7 +307,9 @@ class GPIOPaymentThread(QThread):
         print(f"DEBUG: gpio_available: {self.gpio_available}")
         print(f"DEBUG: pi object: {self.pi}")
         if self.gpio_available and self.pi:
+            print("DEBUG: Enabling bill acceptor...")
             self.set_acceptor_state(True)  # Enable bill acceptor
+            print("DEBUG: Enabling coin acceptor...")
             self.set_coin_acceptor_state(True)  # Enable coin acceptor
             print("SUCCESS: Payment acceptors enabled")
         else:
@@ -356,6 +451,18 @@ class PaymentModel(QObject):
         else:
             print("WARNING: GPIO connection failed - payment will use simulation mode")
         
+        # Create timers in the main thread and pass them to the GPIO thread
+        from PyQt5.QtCore import QTimer
+        self.gpio_thread.pulse_aggregator = QTimer()
+        self.gpio_thread.pulse_aggregator.setSingleShot(True)
+        self.gpio_thread.pulse_aggregator.setInterval(150)  # ms of quiet defines coin boundary
+        self.gpio_thread.pulse_aggregator.timeout.connect(self.gpio_thread._on_pulse_aggregation_timeout)
+
+        self.gpio_thread.coin_cooldown = QTimer()
+        self.gpio_thread.coin_cooldown.setSingleShot(True)
+        self.gpio_thread.coin_cooldown.setInterval(200)  # brief lockout after a coin
+        self.gpio_thread.coin_cooldown.timeout.connect(self.gpio_thread._end_coin_cooldown)
+        
         # Start the GPIO thread
         self.gpio_thread.start()
         print("DEBUG: GPIOPaymentThread started")
@@ -374,6 +481,10 @@ class PaymentModel(QObject):
 
         self.payment_ready = True
         print(f"DEBUG: payment_ready set to True")
+
+        # Check for hopper conflicts before enabling payment
+        if self.check_hopper_conflicts():
+            print("WARNING: Hoppers are active - payment may be affected")
 
         # Try direct GPIO control first
         try:
@@ -408,6 +519,10 @@ class PaymentModel(QObject):
             try:
                 self.gpio_thread.enable_payment()
                 print("SUCCESS: Payment mode also enabled via GPIOPaymentThread")
+                
+                # Test coin detection after enabling
+                if hasattr(self.gpio_thread, 'test_coin_detection'):
+                    self.gpio_thread.test_coin_detection()
             except Exception as e:
                 print(f"WARNING: GPIO thread enable failed: {e}")
 
@@ -474,11 +589,16 @@ class PaymentModel(QObject):
 
     def on_coin_inserted(self, coin_value):
         """Handles coin insertion."""
+        print(f"DEBUG: on_coin_inserted called with value: {coin_value}")
+        print(f"DEBUG: payment_ready: {self.payment_ready}")
         if not self.payment_ready:
+            print("DEBUG: Payment not ready, ignoring coin")
             return
 
+        print(f"DEBUG: Processing coin - value: {coin_value}")
         self.amount_received += coin_value
         self.cash_received[coin_value] = self.cash_received.get(coin_value, 0) + 1
+        print(f"DEBUG: Amount received updated to: {self.amount_received}")
         self.amount_received_updated.emit(self.amount_received)
         self._update_payment_status()
         self.payment_status_updated.emit(f"P{coin_value} coin received")
@@ -786,6 +906,10 @@ class PaymentModel(QObject):
         """Called when leaving the payment screen."""
         print("=== PAYMENT MODEL ON_LEAVE START ===")
         print("Payment screen leaving")
+
+        # Disable payment mode and coin acceptor
+        print("DEBUG: Disabling payment mode...")
+        self.disable_payment_mode()
 
         # Stop and cleanup GPIO thread
         if hasattr(self, 'gpio_thread') and self.gpio_thread:
