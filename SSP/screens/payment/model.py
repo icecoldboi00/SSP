@@ -35,7 +35,7 @@ class GPIOPaymentThread(QThread):
         self.bill_last_pulse_time = time.time()
         self.COIN_TIMEOUT = 0.5    # seconds without pulses = end of coin
         self.PULSE_TIMEOUT = 0.5   # Time to wait for additional bill pulses
-        self.DEBOUNCE_TIME = 0.1   # Minimum time between pulses
+        self.DEBOUNCE_TIME = 0.2   # Minimum time between pulses (increased for better debouncing)
 
         # Coin pulse aggregation (prevents 1 coin being counted multiple times)
         self.accepting_coin = True
@@ -224,9 +224,17 @@ class GPIOPaymentThread(QThread):
                     QTimer.singleShot(0, lambda: self.coin_inserted.emit(value))
                     # Reset pulse count after processing
                     self.coin_pulse_count = 0
-                    # Brief cooldown to prevent double detection
+                    # Brief cooldown to prevent double detection - use simple delay instead of QTimer
                     self.accepting_coin = False
-                    QTimer.singleShot(500, self._end_coin_cooldown)  # 500ms cooldown
+                    print("DEBUG: Starting cooldown to prevent double detection")
+                    # Use a simple thread delay instead of QTimer
+                    import threading
+                    def reset_accepting():
+                        import time
+                        time.sleep(0.5)  # 500ms cooldown
+                        self.accepting_coin = True
+                        print("DEBUG: Coin cooldown ended, accepting coins again")
+                    threading.Thread(target=reset_accepting, daemon=True).start()
                 else:
                     print(f"DEBUG: Unknown coin value for {self.coin_pulse_count} pulses")
                     self.coin_pulse_count = 0
@@ -254,16 +262,6 @@ class GPIOPaymentThread(QThread):
         self.accepting_coin = True
         print("DEBUG: Coin cooldown ended, accepting coins again")
 
-    def test_coin_detection_manual(self):
-        """Manually test coin detection by simulating a coin insertion."""
-        print("DEBUG: Manual coin detection test - simulating 1 peso coin")
-        if self.gpio_available and self.pi:
-            # Simulate a coin insertion by directly calling the signal
-            from PyQt5.QtCore import QTimer
-            QTimer.singleShot(0, lambda: self.coin_inserted.emit(1))
-            print("DEBUG: Simulated 1 peso coin insertion")
-        else:
-            print("DEBUG: GPIO not available for manual test")
 
     def bill_pulse_detected(self, gpio, level, tick):
         current_time = time.time()
@@ -562,9 +560,8 @@ class PaymentModel(QObject):
                 if hasattr(self.gpio_thread, 'test_coin_detection'):
                     self.gpio_thread.test_coin_detection()
                 
-                # Add a manual test to verify coin detection is working
-                print("DEBUG: Testing coin detection manually...")
-                self.gpio_thread.test_coin_detection_manual()
+                # Manual test removed to prevent false coin detection
+                print("DEBUG: Coin detection ready - insert actual coins to test")
             except Exception as e:
                 print(f"WARNING: GPIO thread enable failed: {e}")
 
