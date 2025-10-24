@@ -27,9 +27,6 @@ class GPIOPaymentThread(QThread):
             self.gpio_available = True
         except ImportError:
             self.gpio_available = False
-        if self.gpio_available:
-            self.setup_gpio()
-        else:
             self.setup_mock_gpio()
 
         self.coin_pulse_count = 0
@@ -64,29 +61,41 @@ class GPIOPaymentThread(QThread):
 
     def setup_gpio(self):
         try:
+            print("DEBUG: Attempting to connect to pigpio daemon...")
             self.pi = pigpio.pi()
+            print(f"DEBUG: pigpio.pi() returned: {self.pi}")
+            print(f"DEBUG: pi.connected: {self.pi.connected}")
+            
             if not self.pi.connected:
-                raise Exception("Could not connect to pigpio daemon")
+                raise Exception("Could not connect to pigpio daemon - daemon may not be running")
+            
+            print("DEBUG: Successfully connected to pigpio daemon")
             self.COIN_PIN, self.BILL_PIN, self.INHIBIT_PIN, self.COIN_INHIBIT_PIN = 17, 18, 23, 22
 
             # Setup coin acceptor GPIO
+            print("DEBUG: Setting up coin acceptor GPIO (pin 17)")
             self.pi.set_mode(self.COIN_PIN, pigpio.INPUT)
             self.pi.set_pull_up_down(self.COIN_PIN, pigpio.PUD_UP)
             self.pi.callback(self.COIN_PIN, pigpio.FALLING_EDGE, self.coin_pulse_detected)
 
             # Setup coin acceptor inhibit pin (pin 22)
+            print("DEBUG: Setting up coin acceptor control pin (pin 22)")
             self.pi.set_mode(self.COIN_INHIBIT_PIN, pigpio.OUTPUT)
             self.set_coin_acceptor_state(False)  # Start disabled (pin 22 = 0)
 
             # Setup bill acceptor GPIO
+            print("DEBUG: Setting up bill acceptor GPIO (pin 18)")
             self.pi.set_mode(self.BILL_PIN, pigpio.INPUT)
             self.pi.set_pull_up_down(self.BILL_PIN, pigpio.PUD_UP)
             self.pi.set_mode(self.INHIBIT_PIN, pigpio.OUTPUT)
             self.set_acceptor_state(False)  # Start disabled
             self.pi.callback(self.BILL_PIN, pigpio.FALLING_EDGE, self.bill_pulse_detected)
 
+            print("DEBUG: GPIO setup completed successfully")
             self.payment_status.emit("Payment system ready - Coin and bill acceptors disabled")
         except Exception as e:
+            print(f"ERROR: GPIO setup failed: {str(e)}")
+            print(f"ERROR: Exception type: {type(e)}")
             self.payment_status.emit(f"GPIO Error: {str(e)}")
             self.gpio_available = False
 
@@ -182,6 +191,11 @@ class GPIOPaymentThread(QThread):
         return 0
 
     def run(self):
+        # Setup GPIO in the thread context
+        if self.gpio_available:
+            self.setup_gpio()
+            print("DEBUG: GPIO setup completed in thread")
+        
         while self.running:
             now = time.time()
             if self.gpio_available:
@@ -196,12 +210,14 @@ class GPIOPaymentThread(QThread):
     def enable_payment(self):
         """Enable payment acceptors."""
         print("DEBUG: GPIOPaymentThread.enable_payment() called")
-        if self.gpio_available:
+        print(f"DEBUG: gpio_available: {self.gpio_available}")
+        print(f"DEBUG: pi object: {self.pi}")
+        if self.gpio_available and self.pi:
             self.set_acceptor_state(True)  # Enable bill acceptor
             self.set_coin_acceptor_state(True)  # Enable coin acceptor
             print("SUCCESS: Payment acceptors enabled")
         else:
-            print("WARNING: GPIO not available - payment acceptors not enabled")
+            print("WARNING: GPIO not available or pi not connected - payment acceptors not enabled")
 
     def disable_payment(self):
         """Disable payment acceptors."""
