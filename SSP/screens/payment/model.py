@@ -148,32 +148,11 @@ class GPIOPaymentThread(QThread):
             print(f"   - Inhibit pin {self.COIN_INHIBIT_PIN} state: {self.pi.read(self.COIN_INHIBIT_PIN)}")
             print(f"   - Accepting coins: {self.accepting_coin}")
             
-            # Check hopper pins to ensure no interference
-            hopper_pin_10 = self.pi.read(10)
-            hopper_pin_13 = self.pi.read(13)
-            print(f"   - Hopper A pin 10 state: {hopper_pin_10}")
-            print(f"   - Hopper B pin 13 state: {hopper_pin_13}")
             print("   - Insert a coin now to test detection...")
             print("   - Watch for '🔴 PULSE DETECTED!' messages")
         else:
             print("🔍 COIN DETECTION TEST: GPIO not available")
     
-    def check_hopper_conflicts(self):
-        """Check if hoppers are active and could interfere with payment."""
-        try:
-            from managers.hopper_manager import ChangeDispenser
-            if hasattr(ChangeDispenser, '_instance') and ChangeDispenser._instance:
-                hopper_manager = ChangeDispenser._instance
-                if hasattr(hopper_manager, 'hoppers'):
-                    for name, hopper in hopper_manager.hoppers.items():
-                        if hasattr(hopper, 'dispensing') and hopper.dispensing:
-                            print(f"WARNING: Hopper {name} is currently dispensing - payment may be affected")
-                            return True
-            print("DEBUG: No hopper conflicts detected")
-            return False
-        except Exception as e:
-            print(f"DEBUG: Could not check hopper conflicts: {e}")
-            return False
 
     def setup_mock_gpio(self):
         self.payment_status.emit("GPIO not available - Payment system running in simulation mode")
@@ -203,10 +182,6 @@ class GPIOPaymentThread(QThread):
         print(f"🔴 PULSE DETECTED! GPIO: {gpio}, Level: {level}, Count: {self.pulse_detection_count}")
         print(f"DEBUG: Coin pulse detected - GPIO: {gpio}, Level: {level}, Accepting: {self.accepting_coin}")
         
-        # Check if this is a hopper pin (should not happen, but safety check)
-        if gpio in [10, 13]:  # Hopper signal pins
-            print(f"WARNING: Pulse detected on hopper pin {gpio} - this should not happen!")
-            return
         
         if not self.accepting_coin:
             print("DEBUG: Not accepting coins, ignoring pulse")
@@ -487,9 +462,7 @@ class PaymentModel(QObject):
         self.payment_ready = True
         print(f"DEBUG: payment_ready set to True")
 
-        # Check for hopper conflicts before enabling payment
-        if self.check_hopper_conflicts():
-            print("WARNING: Hoppers are active - payment may be affected")
+        # Payment mode enabled - no hopper conflict checking needed
 
         # Try direct GPIO control first
         try:
