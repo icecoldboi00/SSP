@@ -359,6 +359,11 @@ class PaymentModel(QObject):
         # Start the GPIO thread
         self.gpio_thread.start()
         print("DEBUG: GPIOPaymentThread started")
+        
+        # Set initial payment status after GPIO is ready
+        if hasattr(self, 'total_cost') and self.total_cost > 0:
+            print("DEBUG: Setting initial payment status after GPIO setup")
+            self.payment_status_updated.emit("Payment system ready - Coin and bill acceptors disabled")
 
     def enable_payment_mode(self):
         """Enables payment mode with direct GPIO control."""
@@ -406,7 +411,9 @@ class PaymentModel(QObject):
             except Exception as e:
                 print(f"WARNING: GPIO thread enable failed: {e}")
 
-        self.payment_status_updated.emit(status_text)
+        # Add a small delay to ensure this status overrides any GPIO thread messages
+        from PyQt5.QtCore import QTimer
+        QTimer.singleShot(100, lambda: self.payment_status_updated.emit(status_text))
         self.payment_mode_changed.emit(True)
 
     def disable_payment_mode(self):
@@ -444,7 +451,9 @@ class PaymentModel(QObject):
                 print(f"WARNING: GPIO thread disable failed: {e}")
 
         status_text = "Payment mode disabled"
-        self.payment_status_updated.emit(status_text)
+        # Add a small delay to ensure this status overrides any GPIO thread messages
+        from PyQt5.QtCore import QTimer
+        QTimer.singleShot(100, lambda: self.payment_status_updated.emit(status_text))
         self.payment_mode_changed.emit(False)
     
     def test_gpio_connection(self):
