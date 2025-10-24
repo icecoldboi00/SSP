@@ -1,6 +1,5 @@
 # screens/usb/controller.py
 
-import time
 from PyQt5.QtWidgets import QWidget, QGridLayout, QMessageBox
 from PyQt5.QtCore import QTimer
 
@@ -17,15 +16,10 @@ class USBController(QWidget):
         self.model = USBScreenModel()
         self.view = USBScreenView()
         
-        # Setup timeout timer (5 minutes = 300000ms)
+        # Setup timeout timer (1 minute = 60000ms)
         self.timeout_timer = QTimer()
         self.timeout_timer.setSingleShot(True)
         self.timeout_timer.timeout.connect(self._on_timeout)
-        
-        # Setup watchdog timer to prevent complete freezes
-        self.watchdog_timer = QTimer()
-        self.watchdog_timer.timeout.connect(self._watchdog_check)
-        self.last_activity_time = 0
         
         layout = QGridLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
@@ -42,13 +36,9 @@ class USBController(QWidget):
         
         # --- Model -> View ---
         self.model.status_changed.connect(self._update_status)
-        self.model.status_changed.connect(self._update_activity)  # Track activity
         self.model.usb_detected.connect(self.model.on_usb_detected)
-        self.model.usb_detected.connect(self._update_activity)  # Track activity
         self.model.usb_removed.connect(self.model.on_usb_removed)
-        self.model.usb_removed.connect(self._update_activity)  # Track activity
         self.model.pdf_files_found.connect(self._handle_pdf_files_found)
-        self.model.pdf_files_found.connect(self._update_activity)  # Track activity
         self.model.show_message.connect(self.view.show_message)
         
         # Safety warning connections
@@ -96,12 +86,6 @@ class USBController(QWidget):
             self.timeout_timer.start(300000)
             print("⏰ USB screen timeout started (5 minutes)")
             
-            # Start watchdog timer (check every 5 seconds for faster detection)
-            self.watchdog_timer.start(5000)
-            self.last_activity_time = time.time()
-            self.system_check_count = 0
-            print("🐕 Watchdog timer started")
-            
         except Exception as e:
             print(f"❌ Error entering USB screen: {e}")
             # Log error for debugging
@@ -123,10 +107,6 @@ class USBController(QWidget):
             
             # Stop timeout timer
             self.timeout_timer.stop()
-            
-            # Stop watchdog timer
-            self.watchdog_timer.stop()
-            print("🐕 Watchdog timer stopped")
             
             # Force cleanup of any remaining resources
             self.model.force_cleanup()
@@ -156,54 +136,33 @@ class USBController(QWidget):
         self.model.reset_usb_state()
     
     def _check_system_resources(self):
-        """Check if system has sufficient resources to proceed with aggressive limits."""
+        """Check if system has sufficient resources to proceed."""
         try:
             import psutil
-            import gc
             
-            # Force garbage collection first
-            gc.collect()
-            
-            # Check available memory (increased requirement to 200MB)
+            # Check available memory (should have at least 100MB free)
             memory = psutil.virtual_memory()
             free_memory_mb = memory.available / (1024 * 1024)
-            memory_percent = memory.percent
             
-            if free_memory_mb < 200:
-                print(f"⚠️ CRITICAL: Low memory: {free_memory_mb:.1f}MB available ({memory_percent}% used)")
-                self._emergency_cleanup()
+            if free_memory_mb < 100:
+                print(f"⚠️ Low memory: {free_memory_mb:.1f}MB available")
                 return False
             
-            if memory_percent > 85:
-                print(f"⚠️ CRITICAL: High memory usage: {memory_percent}%")
-                self._emergency_cleanup()
-                return False
-            
-            # Check disk space (increased requirement to 1GB)
+            # Check disk space (should have at least 500MB free)
             disk = psutil.disk_usage('/')
             free_disk_mb = disk.free / (1024 * 1024)
             
-            if free_disk_mb < 1000:
-                print(f"⚠️ CRITICAL: Low disk space: {free_disk_mb:.1f}MB available")
-                self._emergency_cleanup()
+            if free_disk_mb < 500:
+                print(f"⚠️ Low disk space: {free_disk_mb:.1f}MB available")
                 return False
             
-            # Check CPU usage (reduced threshold to 80%)
-            cpu_percent = psutil.cpu_percent(interval=0.5)  # Faster check
-            if cpu_percent > 80:
-                print(f"⚠️ CRITICAL: High CPU usage: {cpu_percent}%")
-                self._emergency_cleanup()
+            # Check CPU usage (should be less than 90%)
+            cpu_percent = psutil.cpu_percent(interval=1)
+            if cpu_percent > 90:
+                print(f"⚠️ High CPU usage: {cpu_percent}%")
                 return False
             
-            # Check for too many open files
-            process = psutil.Process()
-            open_files = len(process.open_files())
-            if open_files > 100:
-                print(f"⚠️ CRITICAL: Too many open files: {open_files}")
-                self._emergency_cleanup()
-                return False
-            
-            print(f"✅ System resources OK - Memory: {free_memory_mb:.1f}MB ({memory_percent}%), Disk: {free_disk_mb:.1f}MB, CPU: {cpu_percent}%, Files: {open_files}")
+            print(f"✅ System resources OK - Memory: {free_memory_mb:.1f}MB, Disk: {free_disk_mb:.1f}MB, CPU: {cpu_percent}%")
             return True
             
         except Exception as e:
@@ -215,171 +174,3 @@ class USBController(QWidget):
             except Exception as log_error:
                 print(f"⚠️ Failed to log error: {log_error}")
             return True  # Assume OK if we can't check
-    
-    def _emergency_cleanup(self):
-        """Emergency cleanup to free system resources."""
-        try:
-            print("🚨 EMERGENCY: Performing aggressive cleanup...")
-            
-            # Force garbage collection
-            import gc
-            gc.collect()
-            
-            # Stop any ongoing operations
-            if hasattr(self.model, 'usb_manager') and self.model.usb_manager:
-                self.model.usb_manager.stop_copy_operation()
-                self.model.usb_manager.set_operation_in_progress(False)
-            
-            # Stop USB monitoring
-            self.model.stop_usb_monitoring()
-            
-            # Clear any cached data
-            if hasattr(self.model, 'usb_manager'):
-                self.model.usb_manager.force_cleanup_all_resources()
-            
-            # Force another garbage collection
-            gc.collect()
-            
-            print("✅ Emergency cleanup completed")
-            
-        except Exception as e:
-            print(f"❌ Emergency cleanup failed: {e}")
-            # Last resort: restart the application
-            self._emergency_restart()
-    
-    def _emergency_restart(self):
-        """Emergency restart of the application."""
-        try:
-            print("🚨 EMERGENCY: Restarting application...")
-            import subprocess
-            import sys
-            import os
-            
-            # Kill the current process and restart
-            subprocess.Popen([sys.executable, os.path.abspath(__file__)])
-            sys.exit(1)
-            
-        except Exception as e:
-            print(f"❌ Emergency restart failed: {e}")
-            # Absolute last resort: system reboot
-            try:
-                import subprocess
-                subprocess.run(['sudo', 'reboot'], timeout=10)
-            except:
-                pass
-    
-    def _watchdog_check(self):
-        """Aggressive watchdog timer to detect and prevent system freezes."""
-        try:
-            current_time = time.time()
-            self.system_check_count += 1
-            
-            # Check system resources every 5 checks (25 seconds)
-            if self.system_check_count % 5 == 0:
-                if not self._check_system_resources():
-                    print("🐕 Watchdog: System resources critical, forcing cleanup...")
-                    self._emergency_cleanup()
-                    return
-                
-                # Also check system responsiveness
-                if not self._check_system_responsiveness():
-                    print("🐕 Watchdog: System responsiveness critical, emergency restart...")
-                    return
-            
-            # Check if we've been stuck for more than 15 seconds (reduced from 30)
-            if current_time - self.last_activity_time > 15:
-                print("🐕 Watchdog: No activity for 15+ seconds, checking for freeze...")
-                
-                # Check if USB manager is stuck
-                if hasattr(self.model, 'usb_manager') and self.model.usb_manager:
-                    if self.model.usb_manager.operation_in_progress:
-                        print("🐕 Watchdog: USB operation appears stuck, attempting recovery...")
-                        self._recover_from_freeze()
-                    else:
-                        # Update activity time if operation is not stuck
-                        self.last_activity_time = current_time
-                else:
-                    # Update activity time if no USB manager
-                    self.last_activity_time = current_time
-            else:
-                # Update activity time on normal operation
-                self.last_activity_time = current_time
-                
-        except Exception as e:
-            print(f"🐕 Watchdog error: {e}")
-            # If watchdog itself fails, it's a critical system issue
-            self._emergency_cleanup()
-    
-    def _recover_from_freeze(self):
-        """Attempt to recover from a freeze."""
-        try:
-            print("🔄 Attempting to recover from freeze...")
-            
-            # Stop any ongoing operations
-            if hasattr(self.model, 'usb_manager') and self.model.usb_manager:
-                self.model.usb_manager.stop_copy_operation()
-                self.model.usb_manager.set_operation_in_progress(False)
-            
-            # Reset USB monitoring
-            self.model.stop_usb_monitoring()
-            time.sleep(1)  # Give it a moment
-            self.model.start_usb_monitoring()
-            
-            # Update status
-            self.model.status_changed.emit("System recovered from freeze. Please try again.", 'warning')
-            print("✅ Recovery attempt completed")
-            
-        except Exception as e:
-            print(f"❌ Recovery failed: {e}")
-            # Last resort: return to idle screen
-            self.main_app.show_screen('idle')
-    
-    def _update_activity(self):
-        """Update the last activity time."""
-        self.last_activity_time = time.time()
-    
-    def _check_system_responsiveness(self):
-        """Check if the entire system is becoming unresponsive."""
-        try:
-            import psutil
-            import os
-            
-            # Check if we can still access system resources
-            current_process = psutil.Process()
-            
-            # Check if process is still responsive
-            try:
-                cpu_percent = current_process.cpu_percent()
-                memory_info = current_process.memory_info()
-            except (psutil.NoSuchProcess, psutil.AccessDenied):
-                print("🐕 CRITICAL: Process appears to be dead or inaccessible")
-                self._emergency_restart()
-                return False
-            
-            # Check system load
-            try:
-                load_avg = os.getloadavg()
-                if load_avg[0] > 4.0:  # High system load
-                    print(f"🐕 CRITICAL: High system load: {load_avg[0]}")
-                    self._emergency_cleanup()
-                    return False
-            except:
-                pass  # getloadavg might not be available on all systems
-            
-            # Check if we can still write to disk
-            try:
-                test_file = "/tmp/usb_system_test"
-                with open(test_file, 'w') as f:
-                    f.write("test")
-                os.remove(test_file)
-            except Exception as e:
-                print(f"🐕 CRITICAL: Cannot write to disk: {e}")
-                self._emergency_restart()
-                return False
-            
-            return True
-            
-        except Exception as e:
-            print(f"🐕 CRITICAL: System responsiveness check failed: {e}")
-            self._emergency_restart()
-            return False
