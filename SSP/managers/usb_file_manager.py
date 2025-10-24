@@ -134,10 +134,9 @@ class USBFileManager:
         print(f"\n🔍 Starting scan_and_copy_pdf_files for {source_dir}")
         copied_files = []
 
-        # Check if operations should be stopped
-        if self._should_stop:
-            print("🛑 Operations stopped by user")
-            return []
+        # Reset stop flag for new operation
+        self._should_stop = False
+        print("🔄 Reset stop flag for new USB operation")
 
         try:
             # Only create a new session directory if we don't have one or if it's a different USB drive
@@ -154,6 +153,10 @@ class USBFileManager:
             print(f"📂 Scanning and copying PDF files from {source_dir} to {self.destination_dir}")
             
             for root, _, files in os.walk(source_dir):
+                # Check stop flag during directory traversal
+                if self._should_stop:
+                    print("🛑 Stop requested during file scanning, but continuing to complete current directory")
+                
                 for filename in files:
                     if filename.lower().endswith('.pdf'):
                         source_path = os.path.join(root, filename)
