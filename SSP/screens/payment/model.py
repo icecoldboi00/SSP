@@ -74,11 +74,11 @@ class GPIOPaymentThread(QThread):
                 raise Exception("Could not connect to pigpio daemon - daemon may not be running")
             
             print("DEBUG: Successfully connected to pigpio daemon")
-            self.COIN_PIN, self.BILL_PIN, self.INHIBIT_PIN, self.COIN_INHIBIT_PIN = 5, 16, 23, 22
+            self.COIN_PIN, self.BILL_PIN, self.INHIBIT_PIN, self.COIN_INHIBIT_PIN = 5, 18, 23, 22
             
             # Verify we're not conflicting with hopper pins
             hopper_pins = [10, 13, 24, 25]  # Hopper signal and enable pins
-            payment_pins = [5, 16, 22, 23]  # Payment signal and control pins (updated)
+            payment_pins = [5, 18, 22, 23]  # Payment signal and control pins (updated)
             print(f"DEBUG: Hopper pins: {hopper_pins}, Payment pins: {payment_pins}")
             print("DEBUG: No GPIO pin conflicts detected")
 
@@ -116,7 +116,7 @@ class GPIOPaymentThread(QThread):
             print(f"DEBUG: Coin pin {self.COIN_PIN} state: {coin_pin_state} (0=low, 1=high)")
             
             # Test a few other pins to see if coin acceptor might be on a different pin
-            test_pins = [5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 19, 20, 21]
+            test_pins = [5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21]
             print("DEBUG: Testing other pins for coin acceptor:")
             for pin in test_pins:
                 try:
@@ -132,7 +132,7 @@ class GPIOPaymentThread(QThread):
             print("DEBUG: Coin acceptor control pin configured - state controlled by payment mode")
 
             # Setup bill acceptor GPIO
-            print("DEBUG: Setting up bill acceptor GPIO (pin 16)")
+            print("DEBUG: Setting up bill acceptor GPIO (pin 18)")
             self.pi.set_mode(self.BILL_PIN, pigpio.INPUT)
             self.pi.set_pull_up_down(self.BILL_PIN, pigpio.PUD_UP)
             self.pi.set_mode(self.INHIBIT_PIN, pigpio.OUTPUT)
