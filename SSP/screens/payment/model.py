@@ -97,6 +97,12 @@ class GPIOPaymentThread(QThread):
             self.pulse_detection_count = 0
             print("DEBUG: Pulse detection monitoring started - insert coins to test")
             
+            # Test if coin acceptor is actually connected to pin 17
+            print("DEBUG: Testing coin acceptor connection...")
+            print(f"DEBUG: Coin pin {self.COIN_PIN} current state: {self.pi.read(self.COIN_PIN)}")
+            print(f"DEBUG: Coin inhibit pin {self.COIN_INHIBIT_PIN} state: {self.pi.read(self.COIN_INHIBIT_PIN)}")
+            print("DEBUG: If coin acceptor is connected, you should see pulses when inserting coins")
+            
             # Check if coin acceptor is enabled
             coin_inhibit_state = self.pi.read(self.COIN_INHIBIT_PIN)
             print(f"DEBUG: Coin inhibit pin {self.COIN_INHIBIT_PIN} state: {coin_inhibit_state} (1=enabled, 0=disabled)")
@@ -173,11 +179,22 @@ class GPIOPaymentThread(QThread):
             # Verify the state was set correctly
             actual_state = self.pi.read(self.COIN_INHIBIT_PIN)
             print(f"DEBUG: Coin inhibit pin actual state: {actual_state}")
+            
+            # Test coin pin state after enabling
+            if enable:
+                coin_pin_state = self.pi.read(self.COIN_PIN)
+                print(f"DEBUG: Coin pin {self.COIN_PIN} state after enabling: {coin_pin_state}")
+                print("DEBUG: Coin acceptor should now detect pulses when coins are inserted")
         else:
             print(f"DEBUG: Coin acceptor {'enabled' if enable else 'disabled'} (simulation mode)")
             self.payment_status.emit(f"Coin acceptor {'enabled' if enable else 'disabled'} (simulation mode)")
 
     def coin_pulse_detected(self, gpio, level, tick):
+        # Only process pulses from the coin acceptor pin (17), ignore hopper sensors
+        if gpio != 17:
+            print(f"DEBUG: Ignoring pulse from GPIO {gpio} (not coin acceptor pin 17)")
+            return
+            
         # Increment pulse detection counter for monitoring
         self.pulse_detection_count += 1
         print(f"🔴 PULSE DETECTED! GPIO: {gpio}, Level: {level}, Count: {self.pulse_detection_count}")
@@ -214,8 +231,9 @@ class GPIOPaymentThread(QThread):
         # Start cooldown to avoid immediate retrigger
         self.accepting_coin = False
         print("DEBUG: Setting accepting_coin to False, starting cooldown")
-        if self.coin_cooldown:
-            self.coin_cooldown.start()
+        # Use QTimer.singleShot to start cooldown in main thread
+        from PyQt5.QtCore import QTimer
+        QTimer.singleShot(200, self._end_coin_cooldown)
 
     def _end_coin_cooldown(self):
         self.accepting_coin = True
@@ -596,10 +614,6 @@ class PaymentModel(QObject):
         
         print("DEBUG: UI signals emitted successfully")
     
-    def test_coin_processing(self, coin_value=1):
-        """Test coin processing by manually triggering a coin insertion."""
-        print(f"DEBUG: Testing coin processing with value: {coin_value}")
-        self.on_coin_inserted(coin_value)
 
     def on_bill_inserted(self, bill_value):
         """Handles bill insertion."""
@@ -896,10 +910,6 @@ class PaymentModel(QObject):
         if hasattr(self, 'total_cost') and self.total_cost > 0:
             print("DEBUG: About to call enable_payment_mode()")
             self.enable_payment_mode()
-            
-            # Test coin processing to verify UI updates work
-            print("DEBUG: Testing coin processing...")
-            self.test_coin_processing(1)
         else:
             print("DEBUG: No valid payment data yet, payment mode will be enabled when data is set")
         print("=== PAYMENT MODEL ON_ENTER END ===")
