@@ -291,10 +291,9 @@ class PaymentModel(QObject):
         self.cash_received = {}
         self.payment_ready = False
         
-        # If payment screen is already active, enable payment mode now
-        if hasattr(self, 'gpio_thread') and self.gpio_thread:
-            print("DEBUG: Payment data set, enabling payment mode now")
-            self.enable_payment_mode()
+        # Always enable payment mode when payment data is set
+        print("DEBUG: Payment data set, enabling payment mode now")
+        self.enable_payment_mode()
 
         # Extract print-related attributes for later use
         if 'pdf_data' in payment_data and 'path' in payment_data['pdf_data']:
@@ -766,9 +765,12 @@ class PaymentModel(QObject):
         self.amount_received_updated.emit(0)
         self.change_updated.emit(0, "")
 
-        # Automatically enable payment mode
-        print("DEBUG: About to call enable_payment_mode()")
-        self.enable_payment_mode()
+        # Automatically enable payment mode if we have valid payment data
+        if hasattr(self, 'total_cost') and self.total_cost > 0:
+            print("DEBUG: About to call enable_payment_mode()")
+            self.enable_payment_mode()
+        else:
+            print("DEBUG: No valid payment data yet, payment mode will be enabled when data is set")
         print("=== PAYMENT MODEL ON_ENTER END ===")
 
     def on_leave(self):
