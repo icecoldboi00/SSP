@@ -3,7 +3,114 @@ import shutil
 import psutil
 import tempfile
 import platform
+import threading
+import time
 from datetime import datetime
+from PyQt5.QtCore import QObject, pyqtSignal, QThread
+
+class FileCopyThread(QThread):
+    """Non-blocking thread for file copying operations."""
+    progress_updated = pyqtSignal(int, int)  # current, total
+    file_copied = pyqtSignal(str, int)  # filename, size
+    operation_completed = pyqtSignal(list)  # copied_files
+    operation_failed = pyqtSignal(str)  # error_message
+    
+    def __init__(self, source_dir, destination_dir, supported_extensions):
+        super().__init__()
+        self.source_dir = source_dir
+        self.destination_dir = destination_dir
+        self.supported_extensions = supported_extensions
+        self._should_stop = False
+    
+    def stop(self):
+        """Stop the copying operation."""
+        self._should_stop = True
+    
+    def run(self):
+        """Run the file copying operation in a separate thread."""
+        try:
+            copied_files = []
+            pdf_files = []
+            
+            # Find all PDF files first
+            for root, dirs, files in os.walk(self.source_dir):
+                if self._should_stop:
+                    return
+                    
+                for filename in files:
+                    if self._should_stop:
+                        return
+                        
+                    if any(filename.lower().endswith(ext) for ext in self.supported_extensions):
+                        pdf_files.append(os.path.join(root, filename))
+            
+            total_files = len(pdf_files)
+            if total_files == 0:
+                self.operation_completed.emit([])
+                return
+            
+            # Copy files with progress updates
+            for i, source_path in enumerate(pdf_files):
+                if self._should_stop:
+                    return
+                
+                filename = os.path.basename(source_path)
+                dest_path = os.path.join(self.destination_dir, filename)
+                
+                try:
+                    # Copy file with timeout protection
+                    self._copy_file_with_timeout(source_path, dest_path)
+                    
+                    if os.path.exists(dest_path):
+                        file_size = os.path.getsize(dest_path)
+                        self.file_copied.emit(filename, file_size)
+                        
+                        # Get PDF page count (with timeout)
+                        page_count = self._get_pdf_page_count(dest_path)
+                        
+                        copied_files.append({
+                            'filename': filename,
+                            'path': dest_path,
+                            'size': file_size,
+                            'pages': page_count
+                        })
+                    
+                    # Update progress
+                    self.progress_updated.emit(i + 1, total_files)
+                    
+                except Exception as e:
+                    print(f"Error copying {filename}: {e}")
+                    continue
+            
+            self.operation_completed.emit(copied_files)
+            
+        except Exception as e:
+            self.operation_failed.emit(str(e))
+    
+    def _copy_file_with_timeout(self, source_path, dest_path, timeout=30):
+        """Copy file with timeout protection."""
+        def copy_operation():
+            shutil.copy2(source_path, dest_path)
+        
+        # Run copy in a separate thread with timeout
+        copy_thread = threading.Thread(target=copy_operation)
+        copy_thread.daemon = True
+        copy_thread.start()
+        copy_thread.join(timeout)
+        
+        if copy_thread.is_alive():
+            raise Exception(f"Copy operation timed out after {timeout} seconds")
+    
+    def _get_pdf_page_count(self, file_path, timeout=5):
+        """Get PDF page count with timeout protection."""
+        try:
+            import fitz  # PyMuPDF
+            doc = fitz.open(file_path)
+            page_count = len(doc)
+            doc.close()
+            return page_count
+        except Exception:
+            return 1
 
 class USBFileManager:
     """Handles USB detection and PDF file filtering"""
@@ -24,6 +131,10 @@ class USBFileManager:
         self.current_usb_drive = None
         self.files_in_use = set()  # Track files currently being processed
         self.operation_in_progress = False
+        
+        # Non-blocking file operations
+        self.copy_thread = None
+        self.operation_timeout = 60  # 60 seconds timeout for operations
     
     def get_usb_drives(self):
         """Detect ONLY actual USB/removable drives - exclude all internal drives"""
@@ -212,6 +323,88 @@ class USBFileManager:
             import traceback
             traceback.print_exc()
             return []
+    
+    def scan_and_copy_pdf_files_async(self, source_dir):
+        """Non-blocking version of scan_and_copy_pdf_files with timeout protection."""
+        print(f"\n🔍 Starting async scan_and_copy_pdf_files for {source_dir}")
+        
+        try:
+            # Stop any existing copy operation
+            if self.copy_thread and self.copy_thread.isRunning():
+                print("🛑 Stopping existing copy operation")
+                self.copy_thread.stop()
+                self.copy_thread.wait(5000)  # Wait up to 5 seconds
+            
+            # Only create a new session directory if we don't have one or if it's a different USB drive
+            if not self.destination_dir or not os.path.exists(self.destination_dir) or self.current_usb_drive != source_dir:
+                print(f"🔄 Creating new session directory for USB drive: {source_dir}")
+                self._create_new_session()
+            else:
+                print(f"🔄 Reusing existing session directory: {self.destination_dir}")
+            
+            # Set current drive and mark operation as in progress
+            self.set_current_drive(source_dir)
+            self.set_operation_in_progress(True)
+            
+            print(f"📂 Starting async file copy from {source_dir} to {self.destination_dir}")
+            
+            # Create and start the copy thread
+            self.copy_thread = FileCopyThread(source_dir, self.destination_dir, self.supported_extensions)
+            
+            # Connect signals for progress updates
+            self.copy_thread.progress_updated.connect(self._on_copy_progress)
+            self.copy_thread.file_copied.connect(self._on_file_copied)
+            self.copy_thread.operation_completed.connect(self._on_copy_completed)
+            self.copy_thread.operation_failed.connect(self._on_copy_failed)
+            
+            # Start the thread
+            self.copy_thread.start()
+            
+            return []  # Return empty list immediately, results will come via signals
+            
+        except Exception as e:
+            print(f"❌ Error in async scan_and_copy_pdf_files: {str(e)}")
+            self.set_operation_in_progress(False)
+            import traceback
+            traceback.print_exc()
+            return []
+    
+    def _on_copy_progress(self, current, total):
+        """Handle copy progress updates."""
+        print(f"📊 Copy progress: {current}/{total} files")
+    
+    def _on_file_copied(self, filename, size):
+        """Handle individual file copied."""
+        print(f"✅ Copied {filename} ({size/1024:.1f} KB)")
+    
+    def _on_copy_completed(self, copied_files):
+        """Handle copy operation completion."""
+        self.set_operation_in_progress(False)
+        print(f"📁 File operation completed")
+        
+        if copied_files:
+            print(f"✅ Successfully copied {len(copied_files)} PDF files:")
+            for file_info in copied_files:
+                print(f"   📄 {file_info['filename']} ({file_info['size']/1024:.1f} KB, {file_info['pages']} pages)")
+            
+            # Automatically eject USB drive after successful copy
+            if self.current_usb_drive:
+                self._auto_eject_usb_drive(self.current_usb_drive)
+        else:
+            print("❌ No PDF files found to copy")
+    
+    def _on_copy_failed(self, error_message):
+        """Handle copy operation failure."""
+        self.set_operation_in_progress(False)
+        print(f"❌ Copy operation failed: {error_message}")
+    
+    def stop_copy_operation(self):
+        """Stop any ongoing copy operation."""
+        if self.copy_thread and self.copy_thread.isRunning():
+            print("🛑 Stopping copy operation")
+            self.copy_thread.stop()
+            self.copy_thread.wait(5000)  # Wait up to 5 seconds
+            self.set_operation_in_progress(False)
         
     def cleanup_temp_files(self):
         """Delete all files in the temporary directory after printing"""

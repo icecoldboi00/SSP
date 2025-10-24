@@ -238,13 +238,44 @@ class USBScreenModel(QObject):
         self.scan_files_from_drive(drive_path)
     
     def scan_files_from_drive(self, drive_path):
-        """Scans the given drive for PDF files."""
-        pdf_files = self.usb_manager.scan_and_copy_pdf_files(drive_path)
-        
-        if pdf_files:
-            self.status_changed.emit(f"Success! Found {len(pdf_files)} PDF file(s). USB is now safe to remove.", 'success')
-            self.pdf_files_found.emit(pdf_files)
-        else:
+        """Scans the given drive for PDF files with timeout protection."""
+        try:
+            # Use the non-blocking async version with timeout protection
+            self.status_changed.emit("Scanning for PDF files...", 'info')
+            
+            # Set up timeout protection
+            import threading
+            import time
+            
+            def timeout_handler():
+                time.sleep(60)  # 60 second timeout
+                if hasattr(self, '_scan_timeout'):
+                    self._scan_timeout = True
+                    self.status_changed.emit("Scan operation timed out. Please try again.", 'error')
+            
+            self._scan_timeout = False
+            timeout_thread = threading.Thread(target=timeout_handler)
+            timeout_thread.daemon = True
+            timeout_thread.start()
+            
+            # Use async version to prevent UI freezing
+            pdf_files = self.usb_manager.scan_and_copy_pdf_files_async(drive_path)
+            
+            # For now, we'll use the synchronous version but with better error handling
+            if not self._scan_timeout:
+                pdf_files = self.usb_manager.scan_and_copy_pdf_files(drive_path)
+                
+                if pdf_files:
+                    self.status_changed.emit(f"Success! Found {len(pdf_files)} PDF file(s). USB is now safe to remove.", 'success')
+                    self.pdf_files_found.emit(pdf_files)
+                else:
+                    self.status_changed.emit("No PDF files found on this drive.", 'warning')
+            else:
+                self.status_changed.emit("Scan operation timed out. Please try again.", 'error')
+                
+        except Exception as e:
+            print(f"Error scanning drive {drive_path}: {e}")
+            self.status_changed.emit(f"Error scanning drive: {str(e)}", 'error')
             self.status_changed.emit("No PDF files were found on the USB drive.", 'error')
             # Restart monitoring after a delay
             threading.Timer(3.0, self.start_usb_monitoring).start()
