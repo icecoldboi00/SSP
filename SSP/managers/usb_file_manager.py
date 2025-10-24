@@ -493,16 +493,12 @@ class USBFileManager:
             self.current_usb_drive = None
             self.last_known_drives.clear()
             
-            # Clean up all temporary directories
+            # Clean up all temporary directories (old sessions only)
             self.cleanup_all_temp_folders()
             
-            # Force cleanup current session directory if it exists
-            if hasattr(self, 'destination_dir') and os.path.exists(self.destination_dir):
-                try:
-                    shutil.rmtree(self.destination_dir)
-                    print(f"✅ Cleaned up current session directory: {self.destination_dir}")
-                except Exception as e:
-                    print(f"⚠️ Error cleaning up current session directory: {e}")
+            # DO NOT delete current session directory - files are still needed by file browser
+            # The current session directory will be cleaned up when the print job is complete
+            print(f"🔄 Preserving current session directory: {self.destination_dir}")
             
             print("✅ Force cleanup of all resources completed")
             

@@ -479,6 +479,24 @@ class PrintingSystemApp(QMainWindow):
         except Exception as e:
             print(f"❌ Error updating paper count after payment: {e}")
 
+    def _cleanup_session_directory_after_print(self):
+        """Clean up the session directory after successful printing."""
+        try:
+            if hasattr(self, 'usb_file_manager') and self.usb_file_manager:
+                # Get the current session directory
+                session_dir = self.usb_file_manager.get_current_session_directory()
+                if session_dir and os.path.exists(session_dir):
+                    print(f"🧹 Cleaning up session directory after successful print: {session_dir}")
+                    import shutil
+                    shutil.rmtree(session_dir)
+                    print(f"✅ Session directory cleaned up: {session_dir}")
+                else:
+                    print(f"ℹ️ No session directory to clean up")
+            else:
+                print(f"ℹ️ No USB file manager available for cleanup")
+        except Exception as e:
+            print(f"⚠️ Error cleaning up session directory: {e}")
+
     def on_print_successful(self):
         """
         Handle successful print job completion.
@@ -491,6 +509,9 @@ class PrintingSystemApp(QMainWindow):
         
         # Update transaction status to 'completed' (already logged as 'paid')
         self._update_transaction_status_to_completed()
+        
+        # Clean up session directory after successful printing
+        self._cleanup_session_directory_after_print()
         
         # Clear the print job after successful completion to prevent re-printing
         print(f"DEBUG: Clearing current_print_job after successful completion")
@@ -856,6 +877,9 @@ class PrintingSystemApp(QMainWindow):
             error_message: String describing the error that occurred
         """
         print(f"❌ Print job failed: {error_message}")
+        
+        # Clean up session directory after print failure
+        self._cleanup_session_directory_after_print()
         
         # Send SMS notification for all print failures
         try:
