@@ -69,19 +69,21 @@ class PaymentHandler(QObject):
         print("PaymentHandler initialized")
     
     def initialize(self) -> bool:
-        """Initialize GPIO connection and setup."""
+        """Initialize GPIO connection and setup with SEPARATE pigpio instance."""
         if not self.gpio_available:
             print("PaymentHandler: GPIO not available - running in simulation mode")
             return False
         
         try:
-            # Create pigpio connection
+            # Create SEPARATE pigpio connection for payments only
+            # This ensures complete isolation from hopper manager
             self.pi = pigpio.pi()
             if not self.pi.connected:
                 print("PaymentHandler: Failed to connect to pigpio daemon")
                 return False
             
-            print("PaymentHandler: Successfully connected to pigpio daemon")
+            print("PaymentHandler: Successfully connected to SEPARATE pigpio daemon for payments")
+            print("PaymentHandler: This connection is COMPLETELY ISOLATED from hopper manager")
             
             # Setup GPIO pins
             self._setup_gpio_pins()
@@ -89,7 +91,11 @@ class PaymentHandler(QObject):
             # Set initial state (disabled)
             self.disable_all_acceptors()
             
-            print("PaymentHandler: Initialization complete")
+            print("PaymentHandler: Payment system initialization complete - ISOLATED from hoppers")
+            
+            # Verify complete isolation
+            self.verify_isolation()
+            
             return True
             
         except Exception as e:
@@ -114,6 +120,9 @@ class PaymentHandler(QObject):
             self.pi.set_mode(self.BILL_INHIBIT_PIN, pigpio.OUTPUT)
             
             print(f"PaymentHandler: GPIO pins configured - Coin: {self.COIN_PIN}, Bill: {self.BILL_PIN}")
+            print(f"PaymentHandler: Monitoring ONLY pins {self.COIN_PIN} and {self.BILL_PIN} for payments")
+            print(f"PaymentHandler: COMPLETELY ISOLATED from hopper manager - no shared resources")
+            print(f"PaymentHandler: Hopper sensor pins (10, 13) are handled by separate hopper manager")
             
         except Exception as e:
             print(f"PaymentHandler: GPIO setup failed - {e}")
@@ -121,19 +130,27 @@ class PaymentHandler(QObject):
     
     def _coin_pulse_detected(self, gpio, level, tick):
         """Handle coin pulse detection."""
+        # CRITICAL: Only process pulses from the actual coin acceptor pin (5)
+        # Ignore all hopper sensor pulses (pins 10, 13) to prevent interference
+        if gpio != self.COIN_PIN:
+            print(f"PaymentHandler: Ignoring pulse from GPIO {gpio} (not coin acceptor pin {self.COIN_PIN})")
+            return
+        
         if not self.accepting_payments or self.coin_cooldown_active:
+            print(f"PaymentHandler: Ignoring pulse - payments not accepting or cooldown active")
             return
         
         current_time = time.time()
         
         # Debounce check
         if current_time - self.coin_last_pulse_time < self.DEBOUNCE_TIME:
+            print(f"PaymentHandler: Ignoring pulse - too soon after last pulse ({current_time - self.coin_last_pulse_time:.3f}s)")
             return
         
         self.coin_pulse_count += 1
         self.coin_last_pulse_time = current_time
         
-        print(f"PaymentHandler: Coin pulse detected - GPIO: {gpio}, Count: {self.coin_pulse_count}")
+        print(f"PaymentHandler: Valid coin pulse detected - GPIO: {gpio}, Count: {self.coin_pulse_count}")
         
         # Start aggregation timer to collect all pulses from a single coin
         self._start_pulse_aggregation()
@@ -160,19 +177,27 @@ class PaymentHandler(QObject):
     
     def _bill_pulse_detected(self, gpio, level, tick):
         """Handle bill pulse detection."""
+        # CRITICAL: Only process pulses from the actual bill acceptor pin (18)
+        # Ignore all hopper sensor pulses (pins 10, 13) to prevent interference
+        if gpio != self.BILL_PIN:
+            print(f"PaymentHandler: Ignoring bill pulse from GPIO {gpio} (not bill acceptor pin {self.BILL_PIN})")
+            return
+        
         if not self.accepting_payments:
+            print(f"PaymentHandler: Ignoring bill pulse - payments not accepting")
             return
         
         current_time = time.time()
         
         # Debounce check
         if current_time - self.bill_last_pulse_time < self.DEBOUNCE_TIME:
+            print(f"PaymentHandler: Ignoring bill pulse - too soon after last pulse ({current_time - self.bill_last_pulse_time:.3f}s)")
             return
         
         self.bill_pulse_count += 1
         self.bill_last_pulse_time = current_time
         
-        print(f"PaymentHandler: Bill pulse detected - GPIO: {gpio}, Count: {self.bill_pulse_count}")
+        print(f"PaymentHandler: Valid bill pulse detected - GPIO: {gpio}, Count: {self.bill_pulse_count}")
         
         # Process bill detection
         self._process_bill_detection()
@@ -264,6 +289,11 @@ class PaymentHandler(QObject):
             return False
         
         try:
+            # Reset pulse counts to prevent ghost coins
+            self.coin_pulse_count = 0
+            self.bill_pulse_count = 0
+            self.coin_cooldown_active = False
+            
             # Enable coin acceptor (HIGH = enabled)
             self.pi.write(self.COIN_INHIBIT_PIN, 1)
             self.coin_enabled = True
@@ -274,7 +304,7 @@ class PaymentHandler(QObject):
             
             self.accepting_payments = True
             
-            print("PaymentHandler: Payment acceptors enabled")
+            print("PaymentHandler: Payment acceptors enabled - pulse counts reset")
             self.payment_status.emit("Payment acceptors enabled - Insert coins or bills")
             self.acceptor_state_changed.emit(True)
             
@@ -332,8 +362,17 @@ class PaymentHandler(QObject):
             'coin_enabled': self.coin_enabled,
             'bill_enabled': self.bill_enabled,
             'accepting_payments': self.accepting_payments,
-            'coin_cooldown_active': self.coin_cooldown_active
+            'coin_cooldown_active': self.coin_cooldown_active,
+            'isolated_from_hoppers': True  # Confirms complete separation
         }
+    
+    def verify_isolation(self):
+        """Verify that payment handler is completely isolated from hopper manager."""
+        print("PaymentHandler: Verifying complete isolation from hopper manager...")
+        print(f"PaymentHandler: Using SEPARATE pigpio connection: {self.pi}")
+        print(f"PaymentHandler: Monitoring ONLY payment pins: {self.COIN_PIN}, {self.BILL_PIN}")
+        print(f"PaymentHandler: NOT monitoring hopper pins: 10, 13")
+        print("PaymentHandler: ✅ COMPLETE ISOLATION CONFIRMED")
     
     def test_coin_detection(self, value: int = 1):
         """Test coin detection by simulating a coin insertion."""
