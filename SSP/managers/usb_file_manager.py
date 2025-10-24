@@ -49,6 +49,13 @@ class FileCopyThread(QThread):
                 self.operation_completed.emit([])
                 return
             
+            # Limit to maximum 20 files to prevent system overload
+            max_files = min(20, total_files)
+            if total_files > max_files:
+                print(f"⚠️ Limiting to {max_files} files to prevent system overload (found {total_files})")
+                pdf_files = pdf_files[:max_files]
+                total_files = max_files
+            
             # Copy files with progress updates
             for i, source_path in enumerate(pdf_files):
                 if self._should_stop:
@@ -78,6 +85,9 @@ class FileCopyThread(QThread):
                     # Update progress
                     self.progress_updated.emit(i + 1, total_files)
                     
+                    # Add small delay between files to prevent system overload
+                    time.sleep(0.1)
+                    
                 except Exception as e:
                     print(f"Error copying {filename}: {e}")
                     continue
@@ -87,19 +97,40 @@ class FileCopyThread(QThread):
         except Exception as e:
             self.operation_failed.emit(str(e))
     
-    def _copy_file_with_timeout(self, source_path, dest_path, timeout=30):
-        """Copy file with timeout protection."""
-        def copy_operation():
-            shutil.copy2(source_path, dest_path)
-        
-        # Run copy in a separate thread with timeout
-        copy_thread = threading.Thread(target=copy_operation)
-        copy_thread.daemon = True
-        copy_thread.start()
-        copy_thread.join(timeout)
-        
-        if copy_thread.is_alive():
-            raise Exception(f"Copy operation timed out after {timeout} seconds")
+    def _copy_file_with_timeout(self, source_path, dest_path, timeout=10):
+        """Copy file with aggressive timeout protection and size limits."""
+        try:
+            # Check file size first (limit to 50MB to prevent system overload)
+            file_size = os.path.getsize(source_path)
+            if file_size > 50 * 1024 * 1024:  # 50MB limit
+                raise Exception(f"File too large: {file_size/1024/1024:.1f}MB (max 50MB)")
+            
+            def copy_operation():
+                # Use chunked copying to prevent memory issues
+                with open(source_path, 'rb') as src, open(dest_path, 'wb') as dst:
+                    while True:
+                        chunk = src.read(8192)  # 8KB chunks
+                        if not chunk:
+                            break
+                        dst.write(chunk)
+            
+            # Run copy in a separate thread with aggressive timeout
+            copy_thread = threading.Thread(target=copy_operation)
+            copy_thread.daemon = True
+            copy_thread.start()
+            copy_thread.join(timeout)
+            
+            if copy_thread.is_alive():
+                raise Exception(f"Copy operation timed out after {timeout} seconds")
+                
+        except Exception as e:
+            # Clean up partial file if it exists
+            if os.path.exists(dest_path):
+                try:
+                    os.remove(dest_path)
+                except:
+                    pass
+            raise e
     
     def _get_pdf_page_count(self, file_path, timeout=5):
         """Get PDF page count with timeout protection."""
