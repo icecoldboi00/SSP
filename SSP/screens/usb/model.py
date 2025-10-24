@@ -356,3 +356,23 @@ class USBScreenModel(QObject):
                 log_error("USB Force Cleanup Error", str(e), "usb_screen_model")
             except Exception as log_error:
                 print(f"⚠️ Failed to log error: {log_error}")
+    
+    def stop_all_operations(self):
+        """Stop all long-running operations to prevent system freezes."""
+        try:
+            print("🛑 Stopping all USB operations...")
+            
+            # Stop USB monitoring thread
+            if hasattr(self, 'monitor_thread') and self.monitor_thread:
+                self.monitor_thread.stop_monitoring()
+                print("🛑 USB monitoring thread stopped")
+            
+            # Stop any file operations
+            if hasattr(self, 'usb_manager') and self.usb_manager:
+                self.usb_manager.stop_all_operations()
+                print("🛑 USB file operations stopped")
+            
+            print("✅ All USB operations stopped")
+            
+        except Exception as e:
+            print(f"⚠️ Error stopping operations: {e}")

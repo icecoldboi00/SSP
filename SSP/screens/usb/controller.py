@@ -16,10 +16,15 @@ class USBController(QWidget):
         self.model = USBScreenModel()
         self.view = USBScreenView()
         
-        # Setup timeout timer (1 minute = 60000ms)
+        # Setup timeout timer (5 minutes = 300000ms)
         self.timeout_timer = QTimer()
         self.timeout_timer.setSingleShot(True)
         self.timeout_timer.timeout.connect(self._on_timeout)
+        
+        # Setup operation timeout to prevent long-running operations
+        self.operation_timeout = QTimer()
+        self.operation_timeout.setSingleShot(True)
+        self.operation_timeout.timeout.connect(self._on_operation_timeout)
         
         layout = QGridLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
@@ -86,6 +91,10 @@ class USBController(QWidget):
             self.timeout_timer.start(300000)
             print("⏰ USB screen timeout started (5 minutes)")
             
+            # Start operation timeout (30 seconds) to prevent long-running operations
+            self.operation_timeout.start(30000)
+            print("⏰ USB operation timeout started (30 seconds)")
+            
         except Exception as e:
             print(f"❌ Error entering USB screen: {e}")
             # Log error for debugging
@@ -125,6 +134,11 @@ class USBController(QWidget):
         print("⏰ USB screen timeout - returning to idle screen")
         self.main_app.show_screen('idle')
     
+    def _on_operation_timeout(self):
+        """Called when an operation takes too long."""
+        print("⏰ USB operation timeout - stopping long-running operations")
+        self.model.stop_all_operations()
+    
     def _reset_timeout(self):
         """Reset the timeout timer (call on user activity)."""
         self.timeout_timer.stop()
@@ -136,41 +150,23 @@ class USBController(QWidget):
         self.model.reset_usb_state()
     
     def _check_system_resources(self):
-        """Check if system has sufficient resources to proceed."""
+        """Light system resource check to avoid freezes."""
         try:
             import psutil
             
-            # Check available memory (should have at least 100MB free)
+            # Quick memory check only (no CPU check to avoid blocking)
             memory = psutil.virtual_memory()
             free_memory_mb = memory.available / (1024 * 1024)
             
-            if free_memory_mb < 100:
-                print(f"⚠️ Low memory: {free_memory_mb:.1f}MB available")
+            # Only check if memory is critically low (less than 50MB)
+            if free_memory_mb < 50:
+                print(f"⚠️ Critically low memory: {free_memory_mb:.1f}MB available")
                 return False
             
-            # Check disk space (should have at least 500MB free)
-            disk = psutil.disk_usage('/')
-            free_disk_mb = disk.free / (1024 * 1024)
-            
-            if free_disk_mb < 500:
-                print(f"⚠️ Low disk space: {free_disk_mb:.1f}MB available")
-                return False
-            
-            # Check CPU usage (should be less than 90%)
-            cpu_percent = psutil.cpu_percent(interval=1)
-            if cpu_percent > 90:
-                print(f"⚠️ High CPU usage: {cpu_percent}%")
-                return False
-            
-            print(f"✅ System resources OK - Memory: {free_memory_mb:.1f}MB, Disk: {free_disk_mb:.1f}MB, CPU: {cpu_percent}%")
+            print(f"✅ System resources OK - Memory: {free_memory_mb:.1f}MB")
             return True
             
         except Exception as e:
             print(f"⚠️ Error checking system resources: {e}")
-            # If we can't check resources, assume they're OK but log the error
-            try:
-                from utils.error_logger import log_error
-                log_error("System Resource Check Error", str(e), "usb_controller")
-            except Exception as log_error:
-                print(f"⚠️ Failed to log error: {log_error}")
-            return True  # Assume OK if we can't check
+            # If we can't check resources, assume they're OK
+            return True

@@ -24,6 +24,7 @@ class USBFileManager:
         self.current_usb_drive = None
         self.files_in_use = set()  # Track files currently being processed
         self.operation_in_progress = False
+        self._should_stop = False  # Flag to stop operations
     
     def get_usb_drives(self):
         """Detect ONLY actual USB/removable drives - exclude all internal drives"""
@@ -133,6 +134,11 @@ class USBFileManager:
         print(f"\n🔍 Starting scan_and_copy_pdf_files for {source_dir}")
         copied_files = []
 
+        # Check if operations should be stopped
+        if self._should_stop:
+            print("🛑 Operations stopped by user")
+            return []
+
         try:
             # Only create a new session directory if we don't have one or if it's a different USB drive
             if not self.destination_dir or not os.path.exists(self.destination_dir) or self.current_usb_drive != source_dir:
@@ -212,6 +218,16 @@ class USBFileManager:
             import traceback
             traceback.print_exc()
             return []
+    
+    def stop_all_operations(self):
+        """Stop all file operations to prevent system freezes."""
+        try:
+            print("🛑 Stopping USB file operations...")
+            self._should_stop = True
+            self.operation_in_progress = False
+            print("✅ USB file operations stopped")
+        except Exception as e:
+            print(f"⚠️ Error stopping USB operations: {e}")
         
     def cleanup_temp_files(self):
         """Delete all files in the temporary directory after printing"""
