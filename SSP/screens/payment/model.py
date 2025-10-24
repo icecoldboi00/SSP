@@ -351,12 +351,18 @@ class PaymentModel(QObject):
         self.gpio_thread.payment_status.connect(self.payment_status_updated.emit)
         print("DEBUG: Signals connected successfully")
 
+        # Test GPIO connection first
+        if self.test_gpio_connection():
+            print("DEBUG: GPIO connection verified")
+        else:
+            print("WARNING: GPIO connection failed - payment will use simulation mode")
+        
         # Start the GPIO thread
         self.gpio_thread.start()
         print("DEBUG: GPIOPaymentThread started")
 
     def enable_payment_mode(self):
-        """Enables payment mode."""
+        """Enables payment mode with direct GPIO control."""
         print(f"DEBUG: enable_payment_mode called, total_cost: {self.total_cost}")
         if self.total_cost <= 0:
             print("DEBUG: Total cost is 0 or negative, not enabling payment")
@@ -365,31 +371,98 @@ class PaymentModel(QObject):
         self.payment_ready = True
         print(f"DEBUG: payment_ready set to True")
 
-        print(f"DEBUG: Checking if gpio_thread exists: {hasattr(self, 'gpio_thread')}")
-        if hasattr(self, 'gpio_thread') and self.gpio_thread:
-            print(f"DEBUG: gpio_thread value: {self.gpio_thread}")
-            print(f"DEBUG: Calling gpio_thread.enable_payment()")
-            self.gpio_thread.enable_payment()
-            print("SUCCESS: Payment mode enabled via GPIOPaymentThread")
-        else:
-            print("ERROR: No GPIO thread available")
+        # Try direct GPIO control first
+        try:
+            import pigpio
+            pi = pigpio.pi()
+            if pi.connected:
+                print("DEBUG: Direct GPIO connection successful")
+                
+                # Enable coin acceptor (pin 22 = HIGH)
+                pi.set_mode(22, pigpio.OUTPUT)
+                pi.write(22, 1)  # HIGH = enabled
+                print("DEBUG: Coin acceptor enabled (pin 22 = HIGH)")
+                
+                # Enable bill acceptor (pin 23 = LOW) 
+                pi.set_mode(23, pigpio.OUTPUT)
+                pi.write(23, 0)  # LOW = enabled
+                print("DEBUG: Bill acceptor enabled (pin 23 = LOW)")
+                
+                pi.stop()
+                print("SUCCESS: Payment acceptors enabled via direct GPIO")
+                status_text = "Payment mode enabled - Insert coins or bills"
+            else:
+                print("WARNING: Could not connect to pigpio daemon")
+                status_text = "Payment mode enabled - Use simulation buttons"
+        except Exception as e:
+            print(f"WARNING: Direct GPIO failed: {e}")
+            status_text = "Payment mode enabled - Use simulation buttons"
 
-        status_text = "Payment mode enabled - Use simulation buttons" if not self.gpio_thread.gpio_available else "Payment mode enabled - Insert coins or bills"
+        # Also try the thread-based approach as backup
+        if hasattr(self, 'gpio_thread') and self.gpio_thread:
+            print(f"DEBUG: Also trying gpio_thread.enable_payment()")
+            try:
+                self.gpio_thread.enable_payment()
+                print("SUCCESS: Payment mode also enabled via GPIOPaymentThread")
+            except Exception as e:
+                print(f"WARNING: GPIO thread enable failed: {e}")
+
         self.payment_status_updated.emit(status_text)
         self.payment_mode_changed.emit(True)
 
     def disable_payment_mode(self):
-        """Disables payment mode."""
+        """Disables payment mode with direct GPIO control."""
         self.payment_ready = False
+        
+        # Try direct GPIO control first
+        try:
+            import pigpio
+            pi = pigpio.pi()
+            if pi.connected:
+                print("DEBUG: Direct GPIO disable connection successful")
+                
+                # Disable coin acceptor (pin 22 = LOW)
+                pi.set_mode(22, pigpio.OUTPUT)
+                pi.write(22, 0)  # LOW = disabled
+                print("DEBUG: Coin acceptor disabled (pin 22 = LOW)")
+                
+                # Disable bill acceptor (pin 23 = HIGH)
+                pi.set_mode(23, pigpio.OUTPUT)
+                pi.write(23, 1)  # HIGH = disabled
+                print("DEBUG: Bill acceptor disabled (pin 23 = HIGH)")
+                
+                pi.stop()
+                print("SUCCESS: Payment acceptors disabled via direct GPIO")
+        except Exception as e:
+            print(f"WARNING: Direct GPIO disable failed: {e}")
+        
+        # Also try the thread-based approach as backup
         if hasattr(self, 'gpio_thread') and self.gpio_thread:
-            self.gpio_thread.disable_payment()
-            print("SUCCESS: Payment mode disabled via GPIOPaymentThread")
-        else:
-            print("ERROR: No GPIO thread available")
+            try:
+                self.gpio_thread.disable_payment()
+                print("SUCCESS: Payment mode also disabled via GPIOPaymentThread")
+            except Exception as e:
+                print(f"WARNING: GPIO thread disable failed: {e}")
 
-        status_text = "Payment mode disabled" + (" (Simulation)" if not (hasattr(self, 'gpio_thread') and self.gpio_thread and self.gpio_thread.gpio_available) else "")
+        status_text = "Payment mode disabled"
         self.payment_status_updated.emit(status_text)
         self.payment_mode_changed.emit(False)
+    
+    def test_gpio_connection(self):
+        """Test GPIO connection and return status."""
+        try:
+            import pigpio
+            pi = pigpio.pi()
+            if pi.connected:
+                print("✅ GPIO connection test successful")
+                pi.stop()
+                return True
+            else:
+                print("❌ GPIO connection test failed - not connected")
+                return False
+        except Exception as e:
+            print(f"❌ GPIO connection test failed: {e}")
+            return False
 
     def on_coin_inserted(self, coin_value):
         """Handles coin insertion."""
