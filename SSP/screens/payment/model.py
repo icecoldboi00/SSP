@@ -134,6 +134,11 @@ class GPIOPaymentThread(QThread):
             # Add a method to manually test coin detection
             self.test_coin_detection()
             self.payment_status.emit("Payment system ready - Coin and bill acceptors disabled")
+        except Exception as e:
+            print(f"ERROR: GPIO setup failed: {str(e)}")
+            print(f"ERROR: Exception type: {type(e)}")
+            self.payment_status.emit(f"GPIO Error: {str(e)}")
+            self.gpio_available = False
     
     def test_coin_detection(self):
         """Test coin detection by monitoring pin state changes."""
