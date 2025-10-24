@@ -217,8 +217,12 @@ class USBFileManager:
         copied_files = []
 
         try:
-            # Create a new session directory for each USB drive
-            self._create_new_session()
+            # Only create a new session directory if we don't have one or if it's a different USB drive
+            if not self.destination_dir or not os.path.exists(self.destination_dir) or self.current_usb_drive != source_dir:
+                print(f"🔄 Creating new session directory for USB drive: {source_dir}")
+                self._create_new_session()
+            else:
+                print(f"🔄 Reusing existing session directory: {self.destination_dir}")
             
             # Set current drive and mark operation as in progress
             self.set_current_drive(source_dir)
@@ -526,6 +530,33 @@ class USBFileManager:
         self.files_in_use.clear()
         self.operation_in_progress = False
         self.current_usb_drive = None
+    
+    def get_current_session_directory(self):
+        """Get the current session directory path."""
+        return self.destination_dir
+    
+    def get_current_session_id(self):
+        """Get the current session ID."""
+        return self.session_id
+    
+    def verify_file_in_session(self, file_path):
+        """Verify that a file exists in the current session directory."""
+        if not file_path:
+            return False
+        
+        # Check if file exists
+        if not os.path.exists(file_path):
+            print(f"❌ File not found: {file_path}")
+            return False
+        
+        # Check if file is in current session directory
+        if not file_path.startswith(self.destination_dir):
+            print(f"❌ File is not in current session directory: {file_path}")
+            print(f"❌ Expected to be in: {self.destination_dir}")
+            return False
+        
+        print(f"✅ File verified in session directory: {file_path}")
+        return True
     
     def _auto_eject_usb_drive(self, usb_path):
         """Automatically eject USB drive after files are copied."""

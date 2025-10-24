@@ -98,6 +98,14 @@ class PrintingSystemApp(QMainWindow):
         # Initialize printer manager (no dependencies)
         self.printer_manager = PrinterManager()
         
+        # Initialize USB file manager for session management
+        try:
+            self.usb_file_manager = USBFileManager()
+            print("✅ USB file manager initialized successfully")
+        except Exception as e:
+            print(f"❌ ERROR: Failed to initialize USB file manager: {e}")
+            self.usb_file_manager = None
+        
         # Track low paper alert to prevent multiple SMS
         self.low_paper_alert_sent = False
         
@@ -317,7 +325,15 @@ class PrintingSystemApp(QMainWindow):
         
         # Verify file exists before printing
         file_path = payment_info['pdf_data']['path']
-        if not os.path.exists(file_path):
+        print(f"🔍 Verifying file before printing: {file_path}")
+        
+        # Use USB file manager to verify file is in current session
+        if hasattr(self, 'usb_file_manager') and self.usb_file_manager:
+            if not self.usb_file_manager.verify_file_in_session(file_path):
+                print(f"❌ PDF file not found in current session: {file_path}")
+                self.thank_you_screen.show_printing_error(f"PDF file not found: {os.path.basename(file_path)}")
+                return
+        elif not os.path.exists(file_path):
             print(f"❌ PDF file not found: {file_path}")
             self.thank_you_screen.show_printing_error(f"PDF file not found: {os.path.basename(file_path)}")
             return
