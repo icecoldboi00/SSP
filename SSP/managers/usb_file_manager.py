@@ -30,69 +30,13 @@ class USBFileManager:
     def get_usb_drives(self):
         """Detect ONLY actual USB/removable drives - exclude all internal drives"""
         usb_drives = []
-        system = platform.system()
         
         try:
-            if system == "Windows":
-                usb_drives = self._get_windows_usb_drives()
-            elif system == "Linux":
-                usb_drives = self._get_linux_usb_drives()
-            else:
-                print(f"OS not found: {system}")
-                
+            usb_drives = self._get_linux_usb_drives()
         except Exception as e:
             print(f"Error detecting USB drives: {e}")
         
         print(f"Detected {len(usb_drives)} actual USB drives: {usb_drives}")
-        return usb_drives
-    
-    def _get_windows_usb_drives(self):
-        """Windows-specific USB drive detection"""
-        usb_drives = []
-        
-        try:
-            import win32file
-            import win32api
-            
-            # Get all logical drives
-            drives = win32api.GetLogicalDriveStrings()
-            drives = drives.split('\000')[:-1]
-            
-            print(f"Checking {len(drives)} drives: {drives}")
-            
-            for drive in drives:
-                try:
-                    # Check if it's a removable drive
-                    drive_type = win32file.GetDriveType(drive)
-                    print(f"Drive {drive} type: {drive_type}")
-                    
-                    # DRIVE_REMOVABLE = 2 (floppy, USB, etc.)
-                    if drive_type == 2:
-                        # Additional check to ensure it's accessible
-                        if os.path.exists(drive) and os.path.isdir(drive):
-                            try:
-                                # Try to access the drive to make sure it's ready
-                                os.listdir(drive)
-                                usb_drives.append(drive)
-                                print(f"✅ Found removable USB drive: {drive}")
-                            except (OSError, PermissionError) as e:
-                                print(f"❌ USB drive {drive} not ready or accessible: {e}")
-                    else:
-                        print(f"Drive {drive} is not removable (type: {drive_type})")
-                                
-                except Exception as e:
-                    print(f"Error checking drive {drive}: {e}")
-                    continue
-                    
-        except ImportError:
-            print("❌ pywin32 not available, using fallback method")
-            # Fallback method using psutil
-            usb_drives = self._get_usb_drives_fallback()
-        except Exception as e:
-            print(f"❌ Error in Windows USB detection: {e}")
-            # Try fallback method
-            usb_drives = self._get_usb_drives_fallback()
-            
         return usb_drives
     
     def _get_linux_usb_drives(self):
@@ -129,31 +73,6 @@ class USBFileManager:
                         
         except Exception as e:
             print(f"Error in Linux USB detection: {e}")
-            
-        return usb_drives
-    
-    def _get_macos_usb_drives(self):
-        """macOS-specific USB drive detection"""
-        usb_drives = []
-        
-        try:
-            partitions = psutil.disk_partitions()
-            
-            for partition in partitions:
-                # On macOS, USB drives are typically mounted under /Volumes/
-                if partition.mountpoint.startswith('/Volumes/'):
-                    # Skip the main system volume
-                    if partition.mountpoint != '/Volumes/Macintosh HD':
-                        try:
-                            if os.path.exists(partition.mountpoint) and os.path.isdir(partition.mountpoint):
-                                os.listdir(partition.mountpoint)
-                                usb_drives.append(partition.mountpoint)
-                                print(f"Found USB drive: {partition.mountpoint}")
-                        except (OSError, PermissionError):
-                            print(f"USB drive {partition.mountpoint} not accessible")
-                            
-        except Exception as e:
-            print(f"Error in macOS USB detection: {e}")
             
         return usb_drives
     
