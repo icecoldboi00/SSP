@@ -208,7 +208,9 @@ class GPIOPaymentThread(QThread):
         print(f"DEBUG: Coin value calculated: {value} from {pulses} pulses")
         if value > 0:
             print(f"DEBUG: Emitting coin_inserted signal with value: {value}")
-            self.coin_inserted.emit(value)
+            # Use QTimer.singleShot to ensure signal is emitted in main thread
+            from PyQt5.QtCore import QTimer
+            QTimer.singleShot(0, lambda: self.coin_inserted.emit(value))
         # Start cooldown to avoid immediate retrigger
         self.accepting_coin = False
         print("DEBUG: Setting accepting_coin to False, starting cooldown")
@@ -584,9 +586,20 @@ class PaymentModel(QObject):
         self.amount_received += coin_value
         self.cash_received[coin_value] = self.cash_received.get(coin_value, 0) + 1
         print(f"DEBUG: Amount received updated to: {self.amount_received}")
+        print(f"DEBUG: Total cost: {self.total_cost}")
+        print(f"DEBUG: Remaining: {self.total_cost - self.amount_received}")
+        
+        # Emit signals to update UI
         self.amount_received_updated.emit(self.amount_received)
         self._update_payment_status()
         self.payment_status_updated.emit(f"P{coin_value} coin received")
+        
+        print("DEBUG: UI signals emitted successfully")
+    
+    def test_coin_processing(self, coin_value=1):
+        """Test coin processing by manually triggering a coin insertion."""
+        print(f"DEBUG: Testing coin processing with value: {coin_value}")
+        self.on_coin_inserted(coin_value)
 
     def on_bill_inserted(self, bill_value):
         """Handles bill insertion."""
@@ -883,6 +896,10 @@ class PaymentModel(QObject):
         if hasattr(self, 'total_cost') and self.total_cost > 0:
             print("DEBUG: About to call enable_payment_mode()")
             self.enable_payment_mode()
+            
+            # Test coin processing to verify UI updates work
+            print("DEBUG: Testing coin processing...")
+            self.test_coin_processing(1)
         else:
             print("DEBUG: No valid payment data yet, payment mode will be enabled when data is set")
         print("=== PAYMENT MODEL ON_ENTER END ===")
