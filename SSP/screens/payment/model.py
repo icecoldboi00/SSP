@@ -352,9 +352,13 @@ class PaymentModel(QObject):
             else:
                 print(f"ERROR: Auto-payment completion failed: {message}")
                 self.payment_status_updated.emit(f"Payment error: {message}")
+                # Reset the flag if payment failed
+                self._payment_completing = False
         else:
             print("ERROR: No main_app reference available for auto-payment completion")
             self.payment_status_updated.emit("Payment completion failed - no app reference")
+            # Reset the flag if no main_app reference
+            self._payment_completing = False
 
     def _check_payment_capabilities(self):
         """Check payment capabilities and emit suggestions to UI."""
@@ -547,6 +551,7 @@ class PaymentModel(QObject):
         self.amount_received = 0
         self.cash_received = {}
         self.payment_processing = False
+        self._payment_completing = False  # Reset payment completion flag
 
         self.amount_received_updated.emit(0)
         self.change_updated.emit(0, "")

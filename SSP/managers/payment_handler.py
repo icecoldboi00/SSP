@@ -58,6 +58,10 @@ class PaymentHandler(QObject):
         self.coin_cooldown_active = False
         self.coin_cooldown_duration = 0.5  # 500ms cooldown after coin detection
         
+        # Pulse aggregation
+        self.pulse_aggregation_timer = None
+        self.pulse_aggregation_timeout = 0.3  # 300ms to collect all pulses from one coin
+        
         # Callbacks
         self.coin_callback = None
         self.bill_callback = None
@@ -131,8 +135,28 @@ class PaymentHandler(QObject):
         
         print(f"PaymentHandler: Coin pulse detected - GPIO: {gpio}, Count: {self.coin_pulse_count}")
         
-        # Process coin immediately
+        # Start aggregation timer to collect all pulses from a single coin
+        self._start_pulse_aggregation()
+    
+    def _start_pulse_aggregation(self):
+        """Start pulse aggregation timer to collect all pulses from one coin."""
+        if self.pulse_aggregation_timer:
+            # Cancel existing timer
+            self.pulse_aggregation_timer.cancel()
+        
+        # Start new timer
+        self.pulse_aggregation_timer = threading.Timer(
+            self.pulse_aggregation_timeout, 
+            self._on_pulse_aggregation_timeout
+        )
+        self.pulse_aggregation_timer.start()
+        print(f"PaymentHandler: Started pulse aggregation timer ({self.pulse_aggregation_timeout}s)")
+    
+    def _on_pulse_aggregation_timeout(self):
+        """Called when pulse aggregation timeout occurs."""
+        print(f"PaymentHandler: Pulse aggregation timeout - processing {self.coin_pulse_count} pulses")
         self._process_coin_detection()
+        self.pulse_aggregation_timer = None
     
     def _bill_pulse_detected(self, gpio, level, tick):
         """Handle bill pulse detection."""
@@ -179,24 +203,33 @@ class PaymentHandler(QObject):
             self.bill_pulse_count = 0
     
     def _get_coin_value(self, pulses: int) -> int:
-        """Convert pulse count to coin value."""
+        """Convert pulse count to coin value based on actual coin acceptor behavior."""
+        print(f"PaymentHandler: Analyzing {pulses} pulses for coin value")
+        
+        # Based on your logs, coins generate multiple pulses:
+        # 1 peso = 1 pulse (correct)
+        # 5 peso = 2 pulses (detected as two 1 peso coins)
+        # 10 peso = 4 pulses (detected as four 1 peso coins)  
+        # 20 peso = many pulses (detected as many 1 peso coins)
+        
         if pulses == 1:
-            return 1  # ₱1 coin
-        elif pulses == 5:
-            return 5  # ₱5 coin
-        elif pulses == 10:
-            return 10  # ₱10 coin
-        elif pulses == 20:
-            return 20  # ₱20 coin
-        elif 4 <= pulses <= 6:
-            return 5  # ₱5 coin with variation
-        elif 9 <= pulses <= 11:
+            return 1  # ₱1 coin = 1 pulse
+        elif pulses == 2:
+            return 5  # ₱5 coin = 2 pulses
+        elif pulses == 4:
+            return 10  # ₱10 coin = 4 pulses
+        elif pulses >= 8:
+            return 20  # ₱20 coin = 8+ pulses
+        # Handle ranges for coins that might have slight variations
+        elif 1 <= pulses <= 2:
+            return 1 if pulses == 1 else 5  # ₱1 or ₱5 coin
+        elif 3 <= pulses <= 5:
             return 10  # ₱10 coin with variation
-        elif 18 <= pulses <= 22:
+        elif 6 <= pulses <= 10:
             return 20  # ₱20 coin with variation
         else:
-            print(f"PaymentHandler: Unknown coin pulse count: {pulses}")
-            return 0
+            print(f"PaymentHandler: Unknown coin pulse count: {pulses} - treating as ₱1")
+            return 1  # Default to ₱1 for unknown patterns
     
     def _get_bill_value(self, pulses: int) -> int:
         """Convert pulse count to bill value."""
@@ -355,6 +388,15 @@ class PaymentHandler(QObject):
                     print(f"PaymentHandler: Error stopping pigpio - {e}")
                 finally:
                     self.pi = None
+            
+            # Cancel pulse aggregation timer
+            if self.pulse_aggregation_timer:
+                try:
+                    self.pulse_aggregation_timer.cancel()
+                except Exception as e:
+                    print(f"PaymentHandler: Error canceling pulse aggregation timer - {e}")
+                finally:
+                    self.pulse_aggregation_timer = None
             
             # Reset all state
             self.coin_enabled = False
