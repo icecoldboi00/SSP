@@ -1,5 +1,3 @@
-# usb_file_manager.py
-
 import os
 import shutil
 import psutil
