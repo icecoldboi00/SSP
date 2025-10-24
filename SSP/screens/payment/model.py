@@ -61,6 +61,7 @@ class GPIOPaymentThread(QThread):
 
     def setup_gpio(self):
         try:
+            import pigpio
             print("DEBUG: Attempting to connect to pigpio daemon...")
             self.pi = pigpio.pi()
             print(f"DEBUG: pigpio.pi() returned: {self.pi}")
