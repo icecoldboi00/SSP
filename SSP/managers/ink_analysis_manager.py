@@ -61,7 +61,7 @@ class InkAnalysisManager:
             avg_k = total_k / analyzed_pages
             
             # Calculate job costs (percentage of cartridge used)
-            black_cost, color_cost = self._calculate_job_costs(
+            job_costs_dict = self._calculate_job_costs(
                 avg_k, avg_c, avg_m, avg_y, analyzed_pages
             )
             
@@ -82,10 +82,7 @@ class InkAnalysisManager:
                     'yellow': total_y,
                     'black': total_k
                 },
-                'job_costs': {
-                    'black_cartridge_percent': black_cost,
-                    'color_cartridge_percent': color_cost
-                },
+                'job_costs': job_costs_dict, # Assign the entire dictionary here
                 'timestamp': datetime.now()
             }
             
@@ -98,10 +95,6 @@ class InkAnalysisManager:
             return self._create_error_result(str(e))
     
     def _analyze_page_coverage_fitz(self, pix):
-        """
-        Analyzes a single fitz.Pixmap (rendered in CMYK) and returns its
-        average ink coverage percentages for each channel.
-        """
         if pix.width == 0 or pix.height == 0:
             return 0, 0, 0, 0
         
@@ -124,19 +117,6 @@ class InkAnalysisManager:
         return cyan_coverage, magenta_coverage, yellow_coverage, black_coverage
     
     def _calculate_channel_cost(self, avg_coverage_percent, total_pages_in_job, yield_pages_for_cartridge, standard_coverage_percent):
-        """
-        Calculates the percentage of a single ink cartridge used for a print job.
-
-        Args:
-            avg_coverage_percent (float): The average ink coverage percentage for this channel
-                                          across all pages of the current job.
-            total_pages_in_job (int): The number of physical pages in the current PDF document.
-            yield_pages_for_cartridge (int): The advertised yield (in standard pages) for this specific cartridge.
-            standard_coverage_percent (float): The ink coverage percentage of a "standard page" for this channel.
-
-        Returns:
-            float: The percentage of the cartridge capacity that this job will consume.
-        """
         if yield_pages_for_cartridge <= 0 or standard_coverage_percent <= 0:
             return 0.0 # Avoid division by zero, or if cartridge has no yield
 
@@ -156,10 +136,9 @@ class InkAnalysisManager:
         return cartridge_used_percent
 
     def _calculate_job_costs(self, avg_k, avg_c, avg_m, avg_y, total_pages, 
-                           yield_black=17000, yield_color=17000, standard_coverage=5.0):
+                           yield_black=7000, yield_color=7000, standard_coverage=5.0):
         """
-        Calculate job costs using individual channel calculations.
-        Returns both individual channel costs and combined color/black costs for compatibility.
+        Calculates the percentage of each individual cartridge used for a print job.
         """
         # Calculate individual channel costs
         c_cost = self._calculate_channel_cost(avg_c, total_pages, yield_color, self.STANDARD_CHANNEL_COVERAGE_PERCENT)
@@ -167,10 +146,13 @@ class InkAnalysisManager:
         y_cost = self._calculate_channel_cost(avg_y, total_pages, yield_color, self.STANDARD_CHANNEL_COVERAGE_PERCENT)
         k_cost = self._calculate_channel_cost(avg_k, total_pages, yield_black, self.STANDARD_CHANNEL_COVERAGE_PERCENT)
         
-        # For backward compatibility, calculate combined color cost
-        color_cost = max(c_cost, m_cost, y_cost)  # Use the highest color channel cost
-        
-        return k_cost, color_cost
+        # Return a dictionary with the cost for each separate cartridge
+        return {
+            'cyan': c_cost,
+            'magenta': m_cost,
+            'yellow': y_cost,
+            'black': k_cost
+        }
     
     def _create_empty_result(self):
         return {
@@ -180,7 +162,7 @@ class InkAnalysisManager:
             'selected_pages': None,
             'averages': {'cyan': 0, 'magenta': 0, 'yellow': 0, 'black': 0},
             'totals': {'cyan': 0, 'magenta': 0, 'yellow': 0, 'black': 0},
-            'job_costs': {'black_cartridge_percent': 0, 'color_cartridge_percent': 0},
+            'job_costs': {'cyan': 0, 'magenta': 0, 'yellow': 0, 'black': 0},
             'timestamp': datetime.now()
         }
     
@@ -194,7 +176,7 @@ class InkAnalysisManager:
             'selected_pages': None,
             'averages': {'cyan': 0, 'magenta': 0, 'yellow': 0, 'black': 0},
             'totals': {'cyan': 0, 'magenta': 0, 'yellow': 0, 'black': 0},
-            'job_costs': {'black_cartridge_percent': 0, 'color_cartridge_percent': 0},
+            'job_costs': {'cyan': 0, 'magenta': 0, 'yellow': 0, 'black': 0},
             'timestamp': datetime.now()
         }
     
@@ -222,17 +204,16 @@ class InkAnalysisManager:
             # Calculate new levels based on color mode          
             if color_mode.lower() == "monochrome" or color_mode.lower() == "black and white":
                 # For monochrome printing, only deduct from black (K)
-                new_cyan = current_levels['cyan']  # No change
-                new_magenta = current_levels['magenta']  # No change
-                new_yellow = current_levels['yellow']  # No change
-                new_black = max(0, current_levels['black'] - (job_costs['black_cartridge_percent'] * copies_factor))
+                new_cyan = current_levels['cyan']
+                new_magenta = current_levels['magenta']
+                new_yellow = current_levels['yellow']
+                new_black = max(0, current_levels['black'] - (job_costs['black'] * copies_factor))
             else:
-                # For color printing, deduct from all colors
-                new_cyan = max(0, current_levels['cyan'] - (job_costs['color_cartridge_percent'] * copies_factor))
-                new_magenta = max(0, current_levels['magenta'] - (job_costs['color_cartridge_percent'] * copies_factor))
-                new_yellow = max(0, current_levels['yellow'] - (job_costs['color_cartridge_percent'] * copies_factor))
-                new_black = max(0, current_levels['black'] - (job_costs['black_cartridge_percent'] * copies_factor))
-            
+                # For color printing, deduct from each cartridge individually
+                new_cyan = max(0, current_levels['cyan'] - (job_costs['cyan'] * copies_factor))
+                new_magenta = max(0, current_levels['magenta'] - (job_costs['magenta'] * copies_factor))
+                new_yellow = max(0, current_levels['yellow'] - (job_costs['yellow'] * copies_factor))
+                new_black = max(0, current_levels['black'] - (job_costs['black'] * copies_factor))
             
             # Update database
             success = self.db_manager.update_cmyk_ink_levels(
