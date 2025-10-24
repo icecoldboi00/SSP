@@ -86,6 +86,19 @@ class PaymentController(QWidget):
         print(f"DEBUG: Model type: {type(self.model)}")
         print(f"DEBUG: View type: {type(self.view)}")
         
+        # Reset payment state to prevent accumulation from previous sessions
+        print("DEBUG: Resetting payment state to prevent accumulation")
+        self.model.reset_payment_state()
+        
+        # Also reset persistent GPIO state to prevent pulse count accumulation
+        print("DEBUG: Resetting persistent GPIO state")
+        if hasattr(self.model, 'persistent_gpio') and self.model.persistent_gpio:
+            with self.model.persistent_gpio._state_lock:
+                self.model.persistent_gpio.coin_pulse_count = 0
+                self.model.persistent_gpio.bill_pulse_count = 0
+                self.model.persistent_gpio.coin_last_emit_time = 0
+                print("🔄 Reset persistent GPIO pulse counts")
+        
         # Start timeout timer (5 minutes)
         self.timeout_timer.start(300000)
         print("TIMEOUT: Payment screen timeout started (5 minutes)")
