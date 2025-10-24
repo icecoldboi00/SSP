@@ -297,19 +297,6 @@ class USBFileManager:
             print(f"Error getting temp folder info: {e}")
             return None
     
-    def estimate_pdf_pages_fast(self, file_size):
-        """Fast estimate of PDF pages based on file size"""
-        # Rough estimate: 1 page per 50KB for PDF
-        estimated_pages = max(1, file_size // 51200)
-        return min(estimated_pages, 100)
-    
-    def estimate_pdf_pages(self, file_path):
-        """Estimate number of pages in PDF based on file size"""
-        try:
-            file_size = os.path.getsize(file_path)
-            return self.estimate_pdf_pages_fast(file_size)
-        except:
-            return 1
 
     def get_drive_info(self, drive_path):
         """Get detailed information about a drive"""
