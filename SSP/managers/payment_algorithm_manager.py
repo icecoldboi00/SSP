@@ -6,11 +6,6 @@ from database.db_manager import DatabaseManager
 
 
 class PaymentAlgorithmManager:
-    """
-    Manages payment processing with intelligent change availability checking.
-    Considers limited coin inventory to suggest optimal payment amounts.
-    """
-    
     def __init__(self, db_manager: DatabaseManager):
         self.db_manager = db_manager
         # Coin denominations available in the system
@@ -65,10 +60,6 @@ class PaymentAlgorithmManager:
             return {1: 0, 5: 0}
     
     def calculate_change_breakdown(self, change_amount: float) -> Dict[int, int]:
-        """
-        Calculate how many coins of each denomination are needed for change.
-        Returns dictionary with denomination as key and count as value.
-        """
         if change_amount <= 0:
             return {1: 0, 5: 0}
         
@@ -82,10 +73,6 @@ class PaymentAlgorithmManager:
         return {1: coins_1, 5: coins_5}
     
     def can_dispense_change(self, change_amount: float) -> Tuple[bool, str, Dict[int, int]]:
-        """
-        Check if the system can dispense the required change.
-        Returns: (can_dispense, reason, required_coins)
-        """
         if change_amount <= 0:
             return True, "No change needed", {1: 0, 5: 0}
         
@@ -114,10 +101,6 @@ class PaymentAlgorithmManager:
         return True, "Change can be dispensed", required_coins
     
     def find_optimal_payment_amounts(self, total_cost: float) -> List[Dict]:
-        """
-        Find optimal payment amounts that can be processed with available change.
-        Returns list of suggested payment amounts with reasons.
-        """
         suggestions = []
         coin_inventory = self.get_coin_inventory()
         
@@ -188,10 +171,6 @@ class PaymentAlgorithmManager:
         return suggestions[:5]  # Return top 5 suggestions
     
     def validate_payment(self, total_cost: float, payment_amount: float) -> Tuple[bool, str, Dict]:
-        """
-        Validate if a payment can be processed with available change.
-        Returns: (is_valid, message, payment_info)
-        """
         if payment_amount < total_cost:
             return False, f"Payment amount ₱{payment_amount:.2f} is less than total cost ₱{total_cost:.2f}", {}
         
@@ -214,17 +193,6 @@ class PaymentAlgorithmManager:
         return True, f"Payment can be processed. Change: ₱{change_amount:.2f}", payment_info
 
     def find_best_payment_amount(self, total_cost: float) -> Dict:
-        """
-        Compute the single suggested payment as the GREATEST amount the user can pay
-        while the machine can still dispense the change, given current hopper coins.
-
-        Logic:
-        - Determine the maximum dispensable change by testing from dynamic inventory limit down to 0
-        - Compute a ceiling = floor(total_cost) + max_feasible_change
-        - From accepted denominations [1, 5, 10, 20, 50, 100], choose the largest
-          denomination A such that total_cost <= A <= ceiling and change (A - total_cost) is feasible
-        - If no denomination fits, suggest exact payment
-        """
         # We operate in whole pesos. Determine dynamic maximum change from inventory.
         coin_inventory = self.get_coin_inventory()
         th5 = self.MIN_COIN_THRESHOLDS.get(5, 0)
@@ -291,9 +259,6 @@ class PaymentAlgorithmManager:
         }
     
     def get_payment_status_message(self, total_cost: float) -> str:
-        """
-        Get a status message about payment capabilities.
-        """
         coin_inventory = self.get_coin_inventory()
         
         # Calculate available change capacity
@@ -314,9 +279,6 @@ class PaymentAlgorithmManager:
             return f"✅ Change available up to ₱{max_change_amount:.2f}"
     
     def suggest_payment_prompt(self, total_cost: float) -> str:
-        """
-        Generate a user-friendly payment prompt with suggestions.
-        """
         suggestions = self.find_optimal_payment_amounts(total_cost)
         status_message = self.get_payment_status_message(total_cost)
         
@@ -333,9 +295,6 @@ class PaymentAlgorithmManager:
         return prompt
     
     def update_coin_inventory_after_dispense(self, dispensed_coins: Dict[int, int]) -> bool:
-        """
-        Update coin inventory after dispensing change.
-        """
         try:
             current_inventory = self.get_coin_inventory()
             

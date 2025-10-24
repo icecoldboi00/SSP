@@ -1,19 +1,3 @@
-"""
-Printer Manager Module
-
-Manages print job execution via CUPS (Common Unix Printing System) in background threads.
-Handles PDF page selection, print queue monitoring, and error detection (paper jams, 
-offline status, etc.).
-
-Key Components:
-- PrinterThread: Background thread for executing print jobs
-- PrinterManager: Coordinates print jobs and manages printer availability
-- Status Monitoring: Active monitoring for paper jams, offline status, and errors
-
-Note: Ink analysis is handled separately by the main application after print completion.
-This keeps printing concerns separate from ink consumption tracking.
-"""
-
 import os
 import subprocess
 import tempfile
@@ -34,36 +18,11 @@ except ImportError:
 
 
 class PrinterThread(QThread):
-    """
-    Executes print jobs in a background thread to prevent GUI freezing.
-    
-    Handles the complete print workflow:
-    1. Creates temporary PDF with selected pages
-    2. Sends print job to CUPS
-    3. Monitors print queue and printer status
-    4. Cleans up temporary files
-    
-    Signals:
-        print_success(str): Emitted with temp_pdf_path when print completes successfully
-        print_failed(str): Emitted with error message when print job fails
-        print_waiting: Emitted when job is sent and waiting for completion
-    """
-    
     print_success = pyqtSignal(str)  # Emits temp_pdf_path for ink analysis
     print_failed = pyqtSignal(str)
     print_waiting = pyqtSignal()
 
     def __init__(self, file_path, copies, color_mode, selected_pages, printer_name):
-        """
-        Initialize print thread.
-        
-        Args:
-            file_path: Path to PDF file to print
-            copies: Number of copies to print
-            color_mode: 'Color' or 'Black and White'
-            selected_pages: List of page numbers to print
-            printer_name: CUPS printer name
-        """
         super().__init__()
         self.file_path = file_path
         self.copies = copies
@@ -146,15 +105,6 @@ class PrinterThread(QThread):
                 self.cleanup_temp_pdf()
 
     def _extract_job_id(self, cups_output):
-        """
-        Extract job ID from CUPS command output.
-        
-        Args:
-            cups_output: stdout from CUPS lp command
-            
-        Returns:
-            Job ID string or None if extraction fails
-        """
         try:
             parts = cups_output.split("request id is")
             if len(parts) > 1:
@@ -171,12 +121,6 @@ class PrinterThread(QThread):
             return None
 
     def _handle_print_error(self, error_message):
-        """
-        Handle print errors with SMS notification and database logging.
-        
-        Args:
-            error_message: Description of the error
-        """
         print(f"❌ {error_message}")
         
         # Send SMS notification
@@ -195,12 +139,6 @@ class PrinterThread(QThread):
         self.print_failed.emit(error_message)
 
     def create_temp_pdf_with_selected_pages(self):
-        """
-        Create a temporary PDF containing only the selected pages.
-        
-        Uses PyMuPDF to extract pages from the original PDF.
-        Sets self.temp_pdf_path to the temporary file path on success.
-        """
         try:
             print(f"🔍 Creating temp PDF with pages: {self.selected_pages}")
             print(f"🔍 Source file: {self.file_path}")
@@ -249,19 +187,6 @@ class PrinterThread(QThread):
             self.temp_pdf_path = None
 
     def wait_for_print_completion(self, job_id):
-        """
-        Wait for print job to complete by monitoring printer status.
-        
-        Simply checks if any printer is actively printing using lpstat -p.
-        When no printer shows "now printing", considers the job complete.
-        Much simpler and more reliable than tracking individual job IDs.
-        
-        Args:
-            job_id: CUPS job ID (kept for compatibility, but not used)
-            
-        Returns:
-            True if print job completed successfully, False otherwise
-        """
         import time
         
         config = get_config()
@@ -355,12 +280,6 @@ class PrinterThread(QThread):
         return False
 
     def build_print_command(self):
-        """
-        Build CUPS lp command for printing.
-        
-        Returns:
-            List of command arguments for subprocess.run()
-        """
         mode_str = "color" if self.color_mode == "Color" else "monochrome"
         
         command = [
@@ -379,17 +298,6 @@ class PrinterThread(QThread):
 
 
     def _check_printer_status(self):
-        """
-        Check current printer status using lpstat.
-        
-        Improved to handle multiple printers and detect errors across the system.
-        
-        Returns:
-            Dictionary with keys:
-                - status: 'ready', 'paper_jam', 'offline', 'error', or 'unknown'
-                - message: Human-readable status message
-                - details: Additional status details
-        """
         try:
             # First check the specific configured printer
             result = subprocess.run(['lpstat', '-p', self.printer_name], 
@@ -442,12 +350,6 @@ class PrinterThread(QThread):
             }
     
     def _check_all_printers_status(self):
-        """
-        Check status across all printers when configured printer is not found.
-        
-        Returns:
-            Dictionary with status information from all printers
-        """
         try:
             result = subprocess.run(['lpstat', '-p'], capture_output=True, text=True)
             
@@ -503,23 +405,6 @@ class PrinterThread(QThread):
 
 
 class PrinterManager(QObject):
-    """
-    Manages print jobs and printer availability.
-    
-    Creates and manages PrinterThread instances for executing print jobs.
-    Checks printer availability before starting jobs and forwards signals
-    from print threads to the main application.
-    
-    Signals:
-        print_job_successful: Emitted when a print job completes successfully
-        print_job_failed(str): Emitted with error message when a print job fails
-        print_job_waiting: Emitted when job is sent and waiting for completion
-    
-    Note:
-        After print_job_successful, the temporary PDF is kept alive for ink analysis.
-        Call cleanup_last_temp_pdf() after ink analysis completes to remove it.
-    """
-    
     print_job_successful = pyqtSignal()
     print_job_failed = pyqtSignal(str)
     print_job_waiting = pyqtSignal()
@@ -533,15 +418,6 @@ class PrinterManager(QObject):
         self.check_printer_availability()
 
     def print_file(self, file_path, copies, color_mode, selected_pages):
-        """
-        Initiate a new print job in a background thread.
-        
-        Args:
-            file_path: Path to PDF file to print
-            copies: Number of copies to print
-            color_mode: 'Color' or 'Black and White'
-            selected_pages: List of page numbers to print
-        """
         print(f"📄 Print request: {len(selected_pages)} pages × {copies} copies ({color_mode})")
         
         # Prevent duplicate print jobs
@@ -574,18 +450,6 @@ class PrinterManager(QObject):
         self.print_thread.start()
 
     def check_printer_availability(self):
-        """
-        Check if the configured printer is available and ready.
-        
-        Verifies:
-        - CUPS lp command is available
-        - CUPS daemon (cupsd) is running
-        - Printer exists in CUPS
-        - Printer is not in error state (offline, jammed, etc.)
-        
-        Returns:
-            True if printer is available and ready, False otherwise
-        """
         try:
             print(f"🔍 Checking printer availability for: {self.printer_name}")
             
@@ -655,12 +519,6 @@ class PrinterManager(QObject):
             return False
 
     def check_printer_status(self):
-        """
-        Get detailed printer status.
-        
-        Returns:
-            Dictionary with status information (see PrinterThread._check_printer_status)
-        """
         try:
             result = subprocess.run(['lpstat', '-p', self.printer_name], 
                                   capture_output=True, text=True)
@@ -713,22 +571,10 @@ class PrinterManager(QObject):
             }
 
     def check_for_paper_jam(self):
-        """
-        Check specifically for paper jam condition.
-        
-        Returns:
-            True if paper jam detected, False otherwise
-        """
         status = self.check_printer_status()
         return status['status'] == 'paper_jam'
 
     def _on_print_success(self, temp_pdf_path):
-        """
-        Handle print success and forward temp PDF path.
-        
-        Args:
-            temp_pdf_path: Path to temporary PDF file (needs to be kept for ink analysis)
-        """
         print(f"DEBUG: _on_print_success called with temp_pdf_path: {temp_pdf_path}")
         # Store temp PDF path so main app can clean it up after ink analysis
         self.last_temp_pdf_path = temp_pdf_path
@@ -737,11 +583,6 @@ class PrinterManager(QObject):
         print(f"DEBUG: print_job_successful signal emitted")
     
     def cleanup_last_temp_pdf(self):
-        """
-        Clean up the last temporary PDF file after ink analysis completes.
-        
-        This should be called by the main app after ink analysis finishes.
-        """
         if hasattr(self, 'last_temp_pdf_path') and self.last_temp_pdf_path:
             try:
                 import os

@@ -1,17 +1,3 @@
-"""
-Ink Analysis Threader
-
-Manages ink usage analysis operations in a dedicated thread with its own database connection.
-Analyzes printed pages to calculate CMYK ink consumption and updates the database with
-new ink levels.
-
-Key Features:
-- Thread-safe ink analysis operations
-- Independent database connection for thread safety
-- Queue-based operation management
-- Real-time CMYK level updates via signals
-"""
-
 import threading
 import queue
 from PyQt5.QtCore import QObject, pyqtSignal
@@ -20,17 +6,6 @@ from database.db_manager import DatabaseManager
 
 
 class InkAnalysisOperation:
-    """
-    Represents an ink analysis operation to be executed.
-    
-    Attributes:
-        operation_type: Type of operation (currently only 'analyze_and_update')
-        data: Dictionary containing analysis parameters
-        callback: Optional callback function called when operation completes
-        result: Operation result dictionary (set after execution)
-        error: Error message if operation fails
-    """
-    
     def __init__(self, operation_type, data, callback=None):
         self.operation_type = operation_type
         self.data = data
@@ -40,21 +15,6 @@ class InkAnalysisOperation:
 
 
 class InkAnalysisThreadManager(QObject):
-    """
-    Manages ink analysis operations in a dedicated thread.
-    
-    Creates its own database connection to avoid SQLite thread safety issues.
-    Analyzes PDF pages to calculate ink usage and updates CMYK levels in the database.
-    
-    Signals:
-        analysis_completed(dict): Emits analysis results with keys:
-            - success: Boolean indicating if analysis succeeded
-            - database_updated: Boolean indicating if database was updated
-            - cmyk_levels: Dictionary with updated C, M, Y, K percentages
-            - error: Error message if analysis failed
-        database_updated(bool): Emits database update success status
-    """
-    
     analysis_completed = pyqtSignal(dict)
     database_updated = pyqtSignal(bool)
     
@@ -86,12 +46,6 @@ class InkAnalysisThreadManager(QObject):
             print("Database connection closed in ink analysis thread manager")
     
     def _ink_analysis_worker(self):
-        """
-        Worker method that runs in the dedicated ink analysis thread.
-        
-        Creates database and ink analysis managers in this thread for thread safety.
-        Processes queued operations sequentially.
-        """
         # Create managers in this thread
         self.db_manager = DatabaseManager()
         self.ink_analysis_manager = InkAnalysisManager(self.db_manager)
@@ -127,12 +81,6 @@ class InkAnalysisThreadManager(QObject):
                     operation.callback(operation)
     
     def _handle_analyze_and_update(self, operation):
-        """
-        Handle ink analysis and database update operation.
-        
-        Args:
-            operation: InkAnalysisOperation with PDF path and analysis parameters
-        """
         try:
             pdf_path = operation.data['pdf_path']
             selected_pages = operation.data.get('selected_pages')
@@ -173,20 +121,6 @@ class InkAnalysisThreadManager(QObject):
             self.database_updated.emit(False)
     
     def analyze_and_update(self, pdf_path, selected_pages=None, copies=1, dpi=150, color_mode="Color", callback=None):
-        """
-        Queue an ink analysis and database update operation.
-        
-        Args:
-            pdf_path: Path to PDF file that was printed
-            selected_pages: List of page numbers that were printed (None for all pages)
-            copies: Number of copies that were printed
-            dpi: DPI used for rendering pages during analysis
-            color_mode: 'Color' or 'Black and White'
-            callback: Optional callback function(operation) called when complete
-            
-        Returns:
-            InkAnalysisOperation object
-        """
         operation = InkAnalysisOperation("analyze_and_update", {
             'pdf_path': pdf_path,
             'selected_pages': selected_pages,
