@@ -31,7 +31,7 @@ from managers.printer_manager import PrinterManager
 from managers.db_threader import DatabaseThreadManager
 from managers.ink_analysis_threader import InkAnalysisThreadManager
 from managers.sms_manager import cleanup_sms
-from managers.persistent_gpio import cleanup_persistent_gpio
+# Removed persistent GPIO import - using GPIOPaymentThread instead
 from config import get_config
 
 try:
@@ -942,7 +942,7 @@ class PrintingSystemApp(QMainWindow):
             
             # Clean up persistent GPIO last
             print("🔄 Cleaning up persistent GPIO...")
-            cleanup_persistent_gpio()
+            # GPIO threads are cleaned up by individual screens
             
             print("✅ Application cleanup completed")
                 

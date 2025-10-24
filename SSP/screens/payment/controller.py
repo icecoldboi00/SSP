@@ -74,8 +74,14 @@ class PaymentController(QWidget):
     
     def set_payment_data(self, payment_data):
         """Sets payment data in the model."""
+        print(f"DEBUG: set_payment_data called with: {payment_data}")
         self.model.set_payment_data(payment_data)
         self.view.set_buttons_enabled(True)
+        
+        # If payment screen is already active, enable payment mode now
+        if hasattr(self.model, 'payment_ready') and self.model.payment_ready:
+            print("DEBUG: Payment screen already active, enabling payment mode now")
+            self.model.enable_payment_mode()
     
     def on_enter(self):
         """Called when the payment screen is shown."""
@@ -90,14 +96,8 @@ class PaymentController(QWidget):
         print("DEBUG: Resetting payment state to prevent accumulation")
         self.model.reset_payment_state()
         
-        # Also reset persistent GPIO state to prevent pulse count accumulation
-        print("DEBUG: Resetting persistent GPIO state")
-        if hasattr(self.model, 'persistent_gpio') and self.model.persistent_gpio:
-            with self.model.persistent_gpio._state_lock:
-                self.model.persistent_gpio.coin_pulse_count = 0
-                self.model.persistent_gpio.bill_pulse_count = 0
-                self.model.persistent_gpio.coin_last_emit_time = 0
-                print("🔄 Reset persistent GPIO pulse counts")
+        # GPIO thread will be reset when created in setup_gpio()
+        print("DEBUG: GPIO thread will be reset when created")
         
         # Start timeout timer (5 minutes)
         self.timeout_timer.start(300000)
