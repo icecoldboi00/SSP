@@ -23,6 +23,9 @@ class PaymentGPIOController(QObject):
     def initialize(self):
         """Initialize the payment handler."""
         try:
+            # Clean up any existing handler first
+            cleanup_payment_handler()
+            
             self.payment_handler = get_payment_handler()
             if self.payment_handler:
                 # Connect signals
@@ -573,6 +576,10 @@ class PaymentModel(QObject):
             print("DEBUG: GPIO controller cleaned up")
         else:
             print("DEBUG: No GPIO controller to cleanup")
+        
+        # Clean up global payment handler to prevent conflicts
+        print("DEBUG: Cleaning up global payment handler")
+        cleanup_payment_handler()
         print("Payment screen cleanup completed")
 
         # Stop any running dispense thread

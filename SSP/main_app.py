@@ -981,6 +981,11 @@ def main():
         # Show window (size and mode determined by _setup_display)
         window.show()
         
+        # Set up cleanup on exit
+        import atexit
+        from managers.payment_handler import cleanup_payment_handler
+        atexit.register(cleanup_payment_handler)
+        
         sys.exit(app.exec_())
     except Exception as e:
         print(f"❌ Error during initialization: {str(e)}")

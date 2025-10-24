@@ -321,27 +321,56 @@ class PaymentHandler(QObject):
     def cleanup(self):
         """Clean up GPIO resources."""
         try:
+            print("PaymentHandler: Starting cleanup...")
+            
+            # Disable all acceptors first
             if self.gpio_available and self.pi:
-                # Disable all acceptors
-                self.disable_all_acceptors()
+                try:
+                    self.disable_all_acceptors()
+                except Exception as e:
+                    print(f"PaymentHandler: Error disabling acceptors - {e}")
                 
                 # Clean up callbacks
                 if self.coin_callback:
-                    self.coin_callback.cancel()
-                    self.coin_callback = None
+                    try:
+                        self.coin_callback.cancel()
+                    except Exception as e:
+                        print(f"PaymentHandler: Error canceling coin callback - {e}")
+                    finally:
+                        self.coin_callback = None
                 
                 if self.bill_callback:
-                    self.bill_callback.cancel()
-                    self.bill_callback = None
+                    try:
+                        self.bill_callback.cancel()
+                    except Exception as e:
+                        print(f"PaymentHandler: Error canceling bill callback - {e}")
+                    finally:
+                        self.bill_callback = None
                 
                 # Close pigpio connection
-                self.pi.stop()
-                self.pi = None
-                
-                print("PaymentHandler: Cleanup complete")
+                try:
+                    if self.pi.connected:
+                        self.pi.stop()
+                except Exception as e:
+                    print(f"PaymentHandler: Error stopping pigpio - {e}")
+                finally:
+                    self.pi = None
+            
+            # Reset all state
+            self.coin_enabled = False
+            self.bill_enabled = False
+            self.accepting_payments = False
+            self.coin_cooldown_active = False
+            self.coin_pulse_count = 0
+            self.bill_pulse_count = 0
+            
+            print("PaymentHandler: Cleanup complete")
                 
         except Exception as e:
             print(f"PaymentHandler: Cleanup error - {e}")
+        finally:
+            # Ensure we're in a clean state
+            self.gpio_available = False
     
     def __del__(self):
         """Destructor to ensure cleanup."""
@@ -356,12 +385,20 @@ def get_payment_handler() -> PaymentHandler:
     global _payment_handler_instance
     if _payment_handler_instance is None:
         _payment_handler_instance = PaymentHandler()
-        _payment_handler_instance.initialize()
+        if not _payment_handler_instance.initialize():
+            print("PaymentHandler: Initialization failed, cleaning up")
+            _payment_handler_instance.cleanup()
+            _payment_handler_instance = None
+            return None
     return _payment_handler_instance
 
 def cleanup_payment_handler():
     """Clean up the global payment handler instance."""
     global _payment_handler_instance
     if _payment_handler_instance:
-        _payment_handler_instance.cleanup()
-        _payment_handler_instance = None
+        try:
+            _payment_handler_instance.cleanup()
+        except Exception as e:
+            print(f"PaymentHandler: Error during cleanup - {e}")
+        finally:
+            _payment_handler_instance = None
