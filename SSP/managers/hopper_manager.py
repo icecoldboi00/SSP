@@ -340,10 +340,12 @@ class ChangeDispenser:
             num_fives = int(required_coins.get(5, 0))
             num_ones = int(required_coins.get(1, 0))
         else:
-            num_fives = int(amount // 5)
-            num_ones = int(round(amount % 5))
+            # Fix: Use proper integer division and modulo for change calculation
+            num_fives = int(amount // 5)  # Number of ₱5 coins needed
+            num_ones = int(amount % 5)    # Number of ₱1 coins needed (no rounding needed)
         
         print(f"Dispensing ₱{amount:.2f}: {num_fives}x ₱5, {num_ones}x ₱1")
+        print(f"DEBUG: Change calculation - Amount: {amount}, ₱5 coins: {num_fives}, ₱1 coins: {num_ones}")
         if status_callback:
             status_callback(f"Preparing to dispense ₱{amount:.2f}...")
 
@@ -352,6 +354,7 @@ class ChangeDispenser:
         actual_ones = 0
 
         # Dispense 5-peso coins
+        print(f"DEBUG: Starting to dispense {num_fives} ₱5 coins using Hopper B")
         for i in range(num_fives):
             msg = f"Dispensing ₱5 coin ({i + 1} of {num_fives})"
             if status_callback: status_callback(msg)
@@ -360,8 +363,11 @@ class ChangeDispenser:
             if self.simulated:
                 time.sleep(1.5) # Simulate dispense time
                 success = True
+                print(f"DEBUG: Simulated ₱5 coin dispense successful")
             else:
+                print(f"DEBUG: Calling hoppers['B'].dispense_single_coin() for ₱5 coin {i + 1}")
                 success = self.hoppers['B'].dispense_single_coin()
+                print(f"DEBUG: Hopper B dispense result: {success}")
 
             if success:
                 actual_fives += 1
@@ -403,6 +409,11 @@ class ChangeDispenser:
         # Calculate actual change dispensed
         actual_change = (actual_fives * 5) + (actual_ones * 1)
         expected_change = (num_fives * 5) + (num_ones * 1)
+        
+        print(f"DEBUG: Final change calculation:")
+        print(f"DEBUG: Expected: {num_fives}x₱5 + {num_ones}x₱1 = ₱{expected_change}")
+        print(f"DEBUG: Actual: {actual_fives}x₱5 + {actual_ones}x₱1 = ₱{actual_change}")
+        print(f"DEBUG: Difference: ₱{expected_change - actual_change}")
         
         final_msg = f"Change dispensing complete. Dispensed ₱{actual_change:.2f} (₱{actual_fives}x5 + ₱{actual_ones}x1) of ₱{expected_change:.2f} expected."
         if status_callback: status_callback(final_msg)
