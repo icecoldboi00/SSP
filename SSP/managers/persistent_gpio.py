@@ -50,10 +50,10 @@ class PersistentGPIO(QObject):
         self.COIN_INHIBIT_PIN = 22
         
         # Timing constants (matching original GPIOPaymentThread)
-        self.DEBOUNCE_TIME = 0.1   # Minimum time between pulses
-        self.COIN_TIMEOUT = 0.5    # seconds without pulses = end of coin
-        self.BILL_TIMEOUT = 0.5    # Time to wait for additional bill pulses (PULSE_TIMEOUT)
-        self.COIN_COOLDOWN = 0.3   # Ignore new pulses for this window after a coin is emitted
+        self.DEBOUNCE_TIME = 0.2   # Minimum time between pulses (increased for better debouncing)
+        self.COIN_TIMEOUT = 1.0     # seconds without pulses = end of coin (increased)
+        self.BILL_TIMEOUT = 1.0     # Time to wait for additional bill pulses (increased)
+        self.COIN_COOLDOWN = 1.0    # Ignore new pulses for this window after a coin is emitted (increased)
         
         # State tracking
         self.coin_pulse_count = 0
@@ -115,11 +115,17 @@ class PersistentGPIO(QObject):
         with self._state_lock:
             # Ignore pulses during cooldown after an emission (prevents one coin -> multiple reads)
             if (current_time - self.coin_last_emit_time) < self.COIN_COOLDOWN:
+                print(f"🔄 Coin pulse ignored - in cooldown period ({(current_time - self.coin_last_emit_time):.2f}s)")
                 return
-            if current_time - self.coin_last_pulse_time > self.DEBOUNCE_TIME:
+            
+            # Check debounce time
+            time_since_last = current_time - self.coin_last_pulse_time
+            if time_since_last > self.DEBOUNCE_TIME:
                 self.coin_pulse_count += 1
                 self.coin_last_pulse_time = current_time
-                print(f"Coin pulse detected: {self.coin_pulse_count}")
+                print(f"🪙 Coin pulse detected: {self.coin_pulse_count} (time since last: {time_since_last:.2f}s)")
+            else:
+                print(f"🔄 Coin pulse ignored - too soon (time since last: {time_since_last:.2f}s)")
     
     def _bill_pulse_detected(self, gpio, level, tick):
         """Handle bill pulse detection."""
@@ -171,6 +177,13 @@ class PersistentGPIO(QObject):
         self._set_acceptor_state(False)  # Disable bill acceptor
         print("DEBUG: About to disable coin acceptor")
         self._set_coin_acceptor_state(False)  # Disable coin acceptor
+        
+        # Reset pulse counts to prevent accumulation
+        with self._state_lock:
+            self.coin_pulse_count = 0
+            self.bill_pulse_count = 0
+            print("🔄 Reset pulse counts on payment disable")
+        
         self.payment_status.emit("Payment disabled")
         print("SUCCESS: Persistent GPIO payment disabled")
     
@@ -185,11 +198,14 @@ class PersistentGPIO(QObject):
             # Process coin timeout
             if self.coin_pulse_count > 0 and (current_time - self.coin_last_pulse_time > self.COIN_TIMEOUT):
                 coin_value = self._get_coin_value(self.coin_pulse_count)
+                print(f"🪙 Coin timeout processing: {self.coin_pulse_count} pulses -> ₱{coin_value}")
                 if coin_value > 0:
                     self.coin_inserted.emit(coin_value)
-                    print(f"Coin processed: ₱{coin_value}")
+                    print(f"✅ Coin processed: ₱{coin_value}")
                     # Start cooldown to avoid immediately counting the tail pulses of the same coin
                     self.coin_last_emit_time = current_time
+                else:
+                    print(f"⚠️ Invalid coin value for {self.coin_pulse_count} pulses")
                 self.coin_pulse_count = 0
             
             # Process bill timeout
