@@ -157,13 +157,6 @@ class USBScreenView(QWidget):
         self.blink_timer.stop()
     
     
-    def show_message(self, title, text):
-        """Shows a message to the user."""
-        QMessageBox.information(self, title, text)
-    
-    def show_warning(self, title, text):
-        """Shows a warning message to the user."""
-        QMessageBox.warning(self, title, text)
     
     def get_initial_status_style(self):
         """Returns the initial style for the status indicator."""

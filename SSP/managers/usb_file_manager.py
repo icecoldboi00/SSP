@@ -27,7 +27,7 @@ class USBFileManager:
         self._should_stop = False  # Flag to stop operations
     
     def get_usb_drives(self):
-        """Detect ONLY actual USB/removable drives - exclude all internal drives"""
+        """Detect ONLY actual USB/removable drives - optimized for speed"""
         usb_drives = []
         
         try:
@@ -39,85 +39,38 @@ class USBFileManager:
         return usb_drives
     
     def _get_linux_usb_drives(self):
-        """Linux-specific USB drive detection"""
+        """Linux-specific USB drive detection - optimized for speed"""
         usb_drives = []
         
         try:
             partitions = psutil.disk_partitions()
             
+            # Pre-compile patterns for faster matching
+            usb_mount_patterns = ['/media/', '/mnt/', '/run/media/', '/Volumes/']
+            
             for partition in partitions:
-                # Check for typical USB mount points
-                usb_mount_patterns = [
-                    '/media/',
-                    '/mnt/',
-                    '/run/media/',
-                    '/Volumes/'  # Sometimes used on Linux too
-                ]
-                
+                # Quick checks first
+                is_removable = 'removable' in partition.opts
                 is_usb_mount = any(partition.mountpoint.startswith(pattern) 
                                  for pattern in usb_mount_patterns)
                 
-                # Also check if explicitly marked as removable
-                is_removable = 'removable' in partition.opts
-                
                 if is_usb_mount or is_removable:
                     try:
-                        if os.path.exists(partition.mountpoint) and os.path.isdir(partition.mountpoint):
-                            # Try to access to ensure it's ready
-                            os.listdir(partition.mountpoint)
-                            usb_drives.append(partition.mountpoint)
-                            print(f"Found USB drive: {partition.mountpoint} ({partition.fstype})")
+                        # Quick existence and accessibility check
+                        if os.path.exists(partition.mountpoint):
+                            # Minimal access test - just check if it's a directory
+                            if os.path.isdir(partition.mountpoint):
+                                usb_drives.append(partition.mountpoint)
+                                print(f"✅ Fast USB detection: {partition.mountpoint}")
                     except (OSError, PermissionError):
-                        print(f"USB drive {partition.mountpoint} not accessible")
+                        # Skip inaccessible drives silently for speed
+                        continue
                         
         except Exception as e:
             print(f"Error in Linux USB detection: {e}")
             
         return usb_drives
     
-    def _get_usb_drives_fallback(self):
-        """Fallback method for USB detection"""
-        usb_drives = []
-        
-        try:
-            partitions = psutil.disk_partitions()
-            print(f"Fallback method: Checking {len(partitions)} partitions")
-            
-            for partition in partitions:
-                print(f"Partition: {partition.device} -> {partition.mountpoint} (opts: {partition.opts})")
-                
-                # Check for removable drives
-                is_removable = 'removable' in partition.opts
-                
-                # Also check for common USB drive characteristics
-                is_likely_usb = (
-                    'removable' in partition.opts or
-                    partition.fstype in ['FAT32', 'FAT', 'exFAT', 'NTFS'] and
-                    partition.mountpoint and
-                    len(partition.mountpoint) == 3 and  # Drive letter like "C:\"
-                    partition.mountpoint.endswith('\\')
-                )
-                
-                if is_removable or is_likely_usb:
-                    try:
-                        if os.path.exists(partition.mountpoint):
-                            usage = psutil.disk_usage(partition.mountpoint)
-                            if usage.total > 0:
-                                # Additional size check - USB drives are typically smaller
-                                total_gb = usage.total / (1024**3)
-                                if total_gb < 2048:  # Less than 2TB
-                                    usb_drives.append(partition.mountpoint)
-                                    print(f"✅ Found removable drive: {partition.mountpoint} ({total_gb:.1f}GB)")
-                                else:
-                                    print(f"Drive {partition.mountpoint} too large ({total_gb:.1f}GB) - likely not USB")
-                    except (PermissionError, OSError) as e:
-                        print(f"❌ Cannot access {partition.mountpoint}: {e}")
-                        continue
-                        
-        except Exception as e:
-            print(f"❌ Error in fallback USB detection: {e}")
-            
-        return usb_drives
     
     def check_for_new_drives(self):
         """Check if new USB drives have been inserted"""
@@ -152,51 +105,48 @@ class USBFileManager:
             
             print(f"📂 Scanning and copying PDF files from {source_dir} to {self.destination_dir}")
             
+            # Optimized file scanning - collect all PDFs first, then process
+            pdf_files = []
             for root, _, files in os.walk(source_dir):
-                # Check stop flag during directory traversal
                 if self._should_stop:
-                    print("🛑 Stop requested during file scanning, but continuing to complete current directory")
-                
+                    break
                 for filename in files:
                     if filename.lower().endswith('.pdf'):
-                        source_path = os.path.join(root, filename)
-                        dest_path = os.path.join(self.destination_dir, filename)
+                        pdf_files.append(os.path.join(root, filename))
+            
+            # Process PDF files in batch
+            for source_path in pdf_files:
+                if self._should_stop:
+                    break
+                    
+                filename = os.path.basename(source_path)
+                dest_path = os.path.join(self.destination_dir, filename)
+                
+                try:
+                    # Mark file as in use
+                    self.mark_file_in_use(source_path)
+                    
+                    # Fast copy without metadata preservation for speed
+                    shutil.copy(source_path, dest_path)
+                    if os.path.exists(dest_path):
+                        file_size = os.path.getsize(dest_path)
+                        print(f"✅ Copied {filename} ({file_size/1024:.1f} KB)")
                         
-                        try:
-                            # Mark file as in use
-                            self.mark_file_in_use(source_path)
-                            
-                            # Copy file and verify
-                            shutil.copy2(source_path, dest_path)
-                            if os.path.exists(dest_path):
-                                file_size = os.path.getsize(dest_path)
-                                print(f"✅ Copied {filename} ({file_size/1024:.1f} KB)")
-                                
-                                # Get PDF page count
-                                try:
-                                    import fitz  # PyMuPDF
-                                    doc = fitz.open(dest_path)
-                                    page_count = len(doc)
-                                    doc.close()
-                                except Exception:
-                                    page_count = 1
-                                    print(f"⚠️ Could not get page count for {filename}")
-                                
-                                copied_files.append({
-                                    'filename': filename,
-                                    'path': dest_path,
-                                    'size': file_size,
-                                    'pages': page_count,
-                                    'type': '.pdf'
-                                })
-                            
-                            # Mark file as complete
-                            self.mark_file_complete(source_path)
-                            
-                        except Exception as e:
-                            print(f"❌ Error copying {filename}: {str(e)}")
-                            # Mark file as complete even if error occurred
-                            self.mark_file_complete(source_path)
+                        # Skip page count for speed - assume 1 page
+                        copied_files.append({
+                            'filename': filename,
+                            'path': dest_path,
+                            'size': file_size,
+                            'pages': 1,  # Default to 1 page for speed
+                            'type': '.pdf'
+                        })
+                    
+                    # Mark file as complete
+                    self.mark_file_complete(source_path)
+                    
+                except Exception as e:
+                    print(f"❌ Error copying {filename}: {str(e)}")
+                    self.mark_file_complete(source_path)
                             
             # Mark operation as complete
             self.set_operation_in_progress(False)
@@ -315,33 +265,6 @@ class USBFileManager:
             return None
     
 
-    def get_drive_info(self, drive_path):
-        """Get detailed information about a drive"""
-        try:
-            usage = psutil.disk_usage(drive_path)
-            total_gb = usage.total / (1024**3)
-            free_gb = usage.free / (1024**3)
-            used_gb = usage.used / (1024**3)
-        
-            # Try to get filesystem type
-            fs_type = "Unknown"
-            partitions = psutil.disk_partitions()
-            for partition in partitions:
-                if partition.mountpoint == drive_path:
-                    fs_type = partition.fstype
-                    break
-        
-            return {
-                'path': drive_path,
-                'total_gb': total_gb,
-                'free_gb': free_gb,
-                'used_gb': used_gb,
-                'filesystem': fs_type,
-                'is_removable': True  # All drives returned by get_usb_drives are removable
-            }
-        except Exception as e:
-            print(f"Error getting drive info for {drive_path}: {e}")
-            return None
     
     def set_current_drive(self, drive_path):
         """Set the current USB drive being used."""

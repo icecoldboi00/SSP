@@ -33,19 +33,19 @@ class USBMonitorThread(QThread):
                 if removed_drives and self.monitoring:  # Check monitoring state before emitting
                     self.usb_removed.emit(removed_drives[0])
                 
-                # Use shorter sleep intervals and check for stop more frequently
-                for _ in range(20):  # 20 * 100ms = 2 seconds total
+                # Optimized sleep - shorter intervals for faster detection
+                for _ in range(10):  # 10 * 50ms = 500ms total (faster response)
                     if not self.monitoring or self._should_stop:
                         break
-                    self.msleep(100)
+                    self.msleep(50)
                     
             except Exception as e:
                 print(f"Error in USBMonitorThread: {e}")
-                # Shorter error sleep too
-                for _ in range(50):  # 50 * 100ms = 5 seconds total
+                # Shorter error sleep for faster recovery
+                for _ in range(20):  # 20 * 50ms = 1 second total
                     if not self.monitoring or self._should_stop:
                         break
-                    self.msleep(100)
+                    self.msleep(50)
         
         print("🛑 USBMonitorThread finished")
 
@@ -160,8 +160,10 @@ class USBScreenModel(QObject):
             print("✅ USB monitoring stopped")
     
     def check_current_drives(self):
-        """Checks for currently connected USB drives."""
+        """Checks for currently connected USB drives with immediate detection."""
         try:
+            print("🔍 Performing immediate USB drive detection...")
+            
             # Clear any existing monitoring state first
             self.stop_usb_monitoring()
             
@@ -170,55 +172,52 @@ class USBScreenModel(QObject):
                 self.usb_manager.last_known_drives = set()
                 print("🔄 Cleared USB manager's known drives cache")
             
-            current_drives = self.usb_manager.get_usb_drives()
+            # Perform immediate detection with multiple attempts
+            current_drives = self._immediate_usb_detection()
+            
             if current_drives:
+                print(f"✅ Found {len(current_drives)} USB drive(s) immediately: {current_drives}")
                 self.handle_usb_scan_result(current_drives)
             else:
+                print("📱 No USB drives detected, starting monitoring...")
                 self.start_usb_monitoring()
         except Exception as e:
             self.status_changed.emit("Error checking for USB drives.", 'error')
             print(f"Error during USB check: {e}")
     
-    def force_usb_scan(self):
-        """Force a comprehensive USB scan with detailed logging."""
+    def _immediate_usb_detection(self):
+        """Perform immediate USB detection with multiple methods."""
         try:
-            self.status_changed.emit("Performing comprehensive USB scan...", 'monitoring')
+            # Method 1: Standard USB manager detection
+            drives = self.usb_manager.get_usb_drives()
+            if drives:
+                return drives
             
-            # Stop monitoring temporarily
-            self.stop_usb_monitoring()
+            # Method 2: Direct psutil detection for faster results
+            import psutil
+            usb_drives = []
             
-            # Get all drives using multiple methods
-            usb_drives = self.usb_manager.get_usb_drives()
-            
-            if not usb_drives:
-                # Try alternative detection methods
-                import psutil
-                all_partitions = psutil.disk_partitions()
-                print(f"All available partitions: {[(p.device, p.mountpoint, p.opts) for p in all_partitions]}")
+            for partition in psutil.disk_partitions():
+                # Check for removable drives or common USB mount points
+                is_removable = 'removable' in partition.opts
+                is_usb_mount = any(partition.mountpoint.startswith(pattern) 
+                                 for pattern in ['/media/', '/mnt/', '/run/media/', '/Volumes/'])
                 
-                # Check for any accessible drives that might be USB
-                for partition in all_partitions:
-                    if partition.mountpoint and os.path.exists(partition.mountpoint):
-                        try:
-                            # Try to list contents to see if it's accessible
-                            contents = os.listdir(partition.mountpoint)
-                            print(f"Drive {partition.mountpoint} is accessible with {len(contents)} items")
-                            
-                            # If it's a single-letter drive (like D:, E:, F:), it might be USB
-                            if len(partition.mountpoint) == 3 and partition.mountpoint.endswith('\\'):
-                                drive_letter = partition.mountpoint[0]
-                                if drive_letter not in ['C', 'A', 'B']:  # Exclude system drives
-                                    usb_drives.append(partition.mountpoint)
-                                    print(f"✅ Added potential USB drive: {partition.mountpoint}")
-                        except Exception as e:
-                            print(f"❌ Cannot access {partition.mountpoint}: {e}")
+                if is_removable or is_usb_mount:
+                    try:
+                        if os.path.exists(partition.mountpoint) and os.path.isdir(partition.mountpoint):
+                            # Quick accessibility test
+                            os.listdir(partition.mountpoint)
+                            usb_drives.append(partition.mountpoint)
+                            print(f"✅ Fast detection found USB: {partition.mountpoint}")
+                    except (OSError, PermissionError):
+                        continue
             
-            self.handle_usb_scan_result(usb_drives)
+            return usb_drives
             
         except Exception as e:
-            self.status_changed.emit(f"Error during force scan: {str(e)}", 'error')
-            print(f"Error during force USB scan: {e}")
-    
+            print(f"⚠️ Error in immediate detection: {e}")
+            return []
     
     def handle_usb_scan_result(self, usb_drives):
         """Processes the results of a USB scan."""
@@ -265,11 +264,6 @@ class USBScreenModel(QObject):
         self.status_changed.emit("USB drive removed. You can insert another drive.", 'success')
         self.start_usb_monitoring()
     
-    def check_disk_safety(self):
-        """Check if the current USB drive is safe to remove - always safe after auto-eject."""
-        # After auto-eject, USB is always safe to remove
-        self.safety_warning_cleared.emit()
-        return True
     
     def set_returning_from_file_browser(self, returning=True):
         """Set flag to prevent auto-navigation when returning from file browser."""
