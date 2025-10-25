@@ -39,7 +39,7 @@ class USBFileManager:
         return usb_drives
     
     def _get_linux_usb_drives(self):
-        """Linux-specific USB drive detection - optimized for speed"""
+        """Linux-specific USB drive detection - safe and optimized"""
         usb_drives = []
         
         try:
@@ -48,23 +48,31 @@ class USBFileManager:
             # Pre-compile patterns for faster matching
             usb_mount_patterns = ['/media/', '/mnt/', '/run/media/', '/Volumes/']
             
-            for partition in partitions:
-                # Quick checks first
-                is_removable = 'removable' in partition.opts
-                is_usb_mount = any(partition.mountpoint.startswith(pattern) 
-                                 for pattern in usb_mount_patterns)
-                
-                if is_usb_mount or is_removable:
-                    try:
-                        # Quick existence and accessibility check
-                        if os.path.exists(partition.mountpoint):
-                            # Minimal access test - just check if it's a directory
-                            if os.path.isdir(partition.mountpoint):
-                                usb_drives.append(partition.mountpoint)
-                                print(f"✅ Fast USB detection: {partition.mountpoint}")
-                    except (OSError, PermissionError):
-                        # Skip inaccessible drives silently for speed
-                        continue
+            # Limit partitions to prevent system freeze
+            max_partitions = 15
+            
+            for i, partition in enumerate(partitions):
+                if i >= max_partitions:
+                    break
+                    
+                try:
+                    # Quick checks first
+                    is_removable = 'removable' in partition.opts
+                    is_usb_mount = any(partition.mountpoint.startswith(pattern) 
+                                     for pattern in usb_mount_patterns)
+                    
+                    if is_usb_mount or is_removable:
+                        # Quick existence check without heavy operations
+                        if os.path.exists(partition.mountpoint) and os.path.isdir(partition.mountpoint):
+                            usb_drives.append(partition.mountpoint)
+                            print(f"✅ Fast USB detection: {partition.mountpoint}")
+                            
+                except (OSError, PermissionError):
+                    # Skip inaccessible drives silently for speed
+                    continue
+                except Exception:
+                    # Skip any other errors to prevent hanging
+                    continue
                         
         except Exception as e:
             print(f"Error in Linux USB detection: {e}")

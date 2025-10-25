@@ -141,7 +141,7 @@ class HopperController:
                 elapsed = pigpio.tickDiff(self.last_sensor_change, current_time) / 1000000.0
                 if elapsed > 0.01:  # Debounce: Minimum time for valid coin passage (10ms)
                     self.coin_passage_count += 1
-                    print(f"[{self.name}] SENSOR: Coin passage complete (took {elapsed:.3f}s). Total passages in this cycle: {self.coin_passage_count}")
+                    # Removed console flooding print statement
 
     def _wait_for_coin_passage(self):
         """Wait for exactly one coin passage through the sensor."""

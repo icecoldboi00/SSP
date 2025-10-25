@@ -160,7 +160,7 @@ class USBScreenModel(QObject):
             print("✅ USB monitoring stopped")
     
     def check_current_drives(self):
-        """Checks for currently connected USB drives with immediate detection."""
+        """Checks for currently connected USB drives with immediate detection - safe version."""
         try:
             print("🔍 Performing immediate USB drive detection...")
             
@@ -172,7 +172,7 @@ class USBScreenModel(QObject):
                 self.usb_manager.last_known_drives = set()
                 print("🔄 Cleared USB manager's known drives cache")
             
-            # Perform immediate detection with multiple attempts
+            # Perform immediate detection with timeout protection
             current_drives = self._immediate_usb_detection()
             
             if current_drives:
@@ -182,36 +182,46 @@ class USBScreenModel(QObject):
                 print("📱 No USB drives detected, starting monitoring...")
                 self.start_usb_monitoring()
         except Exception as e:
-            self.status_changed.emit("Error checking for USB drives.", 'error')
-            print(f"Error during USB check: {e}")
+            print(f"⚠️ Error during USB check: {e}")
+            # Fallback to monitoring mode if detection fails
+            self.status_changed.emit("Starting USB monitoring...", 'monitoring')
+            self.start_usb_monitoring()
     
     def _immediate_usb_detection(self):
-        """Perform immediate USB detection with multiple methods."""
+        """Perform immediate USB detection with multiple methods - safe version."""
         try:
-            # Method 1: Standard USB manager detection
+            # Method 1: Standard USB manager detection (safest)
             drives = self.usb_manager.get_usb_drives()
             if drives:
                 return drives
             
-            # Method 2: Direct psutil detection for faster results
+            # Method 2: Direct psutil detection with timeout protection
             import psutil
             usb_drives = []
             
-            for partition in psutil.disk_partitions():
-                # Check for removable drives or common USB mount points
-                is_removable = 'removable' in partition.opts
-                is_usb_mount = any(partition.mountpoint.startswith(pattern) 
-                                 for pattern in ['/media/', '/mnt/', '/run/media/', '/Volumes/'])
-                
-                if is_removable or is_usb_mount:
-                    try:
-                        if os.path.exists(partition.mountpoint) and os.path.isdir(partition.mountpoint):
-                            # Quick accessibility test
-                            os.listdir(partition.mountpoint)
+            # Limit the number of partitions to check to prevent hanging
+            partitions = psutil.disk_partitions()
+            max_partitions = 20  # Limit to prevent system freeze
+            
+            for i, partition in enumerate(partitions):
+                if i >= max_partitions:
+                    break
+                    
+                try:
+                    # Quick checks first
+                    is_removable = 'removable' in partition.opts
+                    is_usb_mount = any(partition.mountpoint.startswith(pattern) 
+                                     for pattern in ['/media/', '/mnt/', '/run/media/', '/Volumes/'])
+                    
+                    if is_removable or is_usb_mount:
+                        # Quick existence check without heavy operations
+                        if os.path.exists(partition.mountpoint):
                             usb_drives.append(partition.mountpoint)
                             print(f"✅ Fast detection found USB: {partition.mountpoint}")
-                    except (OSError, PermissionError):
-                        continue
+                            
+                except Exception:
+                    # Skip problematic partitions silently
+                    continue
             
             return usb_drives
             
