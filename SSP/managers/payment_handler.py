@@ -137,14 +137,14 @@ class PaymentHandler(QObject):
             return
         
         if not self.accepting_payments or self.coin_cooldown_active:
-            print(f"PaymentHandler: Ignoring pulse - payments not accepting or cooldown active")
+            # Removed console flooding print statement
             return
         
         current_time = time.time()
         
         # Debounce check
         if current_time - self.coin_last_pulse_time < self.DEBOUNCE_TIME:
-            print(f"PaymentHandler: Ignoring pulse - too soon after last pulse ({current_time - self.coin_last_pulse_time:.3f}s)")
+            # Removed console flooding print statement
             return
         
         self.coin_pulse_count += 1
@@ -184,14 +184,14 @@ class PaymentHandler(QObject):
             return
         
         if not self.accepting_payments:
-            print(f"PaymentHandler: Ignoring bill pulse - payments not accepting")
+            # Removed console flooding print statement
             return
         
         current_time = time.time()
         
         # Debounce check
         if current_time - self.bill_last_pulse_time < self.DEBOUNCE_TIME:
-            print(f"PaymentHandler: Ignoring bill pulse - too soon after last pulse ({current_time - self.bill_last_pulse_time:.3f}s)")
+            # Removed console flooding print statement
             return
         
         self.bill_pulse_count += 1

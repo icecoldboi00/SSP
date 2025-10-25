@@ -188,45 +188,56 @@ class USBScreenModel(QObject):
             self.start_usb_monitoring()
     
     def _immediate_usb_detection(self):
-        """Perform immediate USB detection with multiple methods - safe version."""
+        """Perform immediate USB detection with multiple methods - enhanced for existing drives."""
         try:
-            # Method 1: Standard USB manager detection (safest)
-            drives = self.usb_manager.get_usb_drives()
-            if drives:
-                return drives
-            
-            # Method 2: Direct psutil detection with timeout protection
             import psutil
             usb_drives = []
             
-            # Limit the number of partitions to check to prevent hanging
+            print("🔍 Enhanced USB detection - checking all partitions...")
             partitions = psutil.disk_partitions()
-            max_partitions = 20  # Limit to prevent system freeze
+            print(f"📊 Found {len(partitions)} total partitions to check")
             
-            for i, partition in enumerate(partitions):
-                if i >= max_partitions:
-                    break
-                    
+            # Check all partitions for USB drives with multiple criteria
+            for partition in partitions:
                 try:
-                    # Quick checks first
+                    # Skip system partitions
+                    if partition.mountpoint in ['/', '/boot', '/home', '/var', '/tmp']:
+                        continue
+                    
+                    # Check for USB characteristics
                     is_removable = 'removable' in partition.opts
                     is_usb_mount = any(partition.mountpoint.startswith(pattern) 
                                      for pattern in ['/media/', '/mnt/', '/run/media/', '/Volumes/'])
+                    is_external = partition.fstype in ['FAT32', 'FAT', 'exFAT', 'NTFS', 'vfat']
                     
-                    if is_removable or is_usb_mount:
-                        # Quick existence check without heavy operations
-                        if os.path.exists(partition.mountpoint):
-                            usb_drives.append(partition.mountpoint)
-                            print(f"✅ Fast detection found USB: {partition.mountpoint}")
-                            
-                except Exception:
-                    # Skip problematic partitions silently
+                    # More comprehensive USB detection
+                    is_likely_usb = (
+                        is_removable or 
+                        is_usb_mount or 
+                        (is_external and partition.mountpoint and len(partition.mountpoint) > 1)
+                    )
+                    
+                    if is_likely_usb:
+                        # Test accessibility
+                        if os.path.exists(partition.mountpoint) and os.path.isdir(partition.mountpoint):
+                            try:
+                                # Quick access test
+                                os.listdir(partition.mountpoint)
+                                usb_drives.append(partition.mountpoint)
+                                print(f"✅ USB detected: {partition.mountpoint} (fstype: {partition.fstype}, opts: {partition.opts})")
+                            except (OSError, PermissionError):
+                                print(f"⚠️ USB drive {partition.mountpoint} not accessible")
+                                continue
+                                
+                except Exception as e:
+                    print(f"⚠️ Error checking partition {partition.mountpoint}: {e}")
                     continue
             
+            print(f"🎯 Enhanced detection found {len(usb_drives)} USB drives: {usb_drives}")
             return usb_drives
             
         except Exception as e:
-            print(f"⚠️ Error in immediate detection: {e}")
+            print(f"⚠️ Error in enhanced detection: {e}")
             return []
     
     def handle_usb_scan_result(self, usb_drives):

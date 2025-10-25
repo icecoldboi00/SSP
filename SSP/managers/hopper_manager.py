@@ -122,6 +122,7 @@ class HopperController:
         try:
             self.pi.write(self.enable_pin, 1) # Inactive high
             self.enabled = False
+            print(f"[{self.name}] Hopper motor DISABLED")
             return True
         except Exception as e:
             print(f"[{self.name}] ERROR: Failed to disable hopper: {e}")
