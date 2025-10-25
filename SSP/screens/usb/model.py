@@ -188,48 +188,76 @@ class USBScreenModel(QObject):
             self.start_usb_monitoring()
     
     def _immediate_usb_detection(self):
-        """Perform immediate USB detection with multiple methods - enhanced for existing drives."""
+        """Perform immediate USB detection with retry mechanism for already-inserted drives."""
         try:
             import psutil
-            usb_drives = []
+            import time
             
             print("🔍 Enhanced USB detection - checking all partitions...")
-            partitions = psutil.disk_partitions()
-            print(f"📊 Found {len(partitions)} total partitions to check")
             
-            # Check all partitions for USB drives with strict criteria
-            for partition in partitions:
-                try:
-                    # Skip system partitions and internal drives
-                    if partition.mountpoint in ['/', '/boot', '/home', '/var', '/tmp', '/sys', '/proc', '/dev']:
+            # Try multiple times with delays to catch drives that are still mounting
+            for attempt in range(3):
+                usb_drives = []
+                partitions = psutil.disk_partitions()
+                print(f"📊 Attempt {attempt + 1}: Found {len(partitions)} total partitions to check")
+                
+                # Debug: Show all partitions being checked
+                print(f"🔍 All partitions: {[(p.device, p.mountpoint, p.fstype, p.opts) for p in partitions]}")
+                
+                # Check all partitions for USB drives with strict criteria
+                for partition in partitions:
+                    try:
+                        # Skip system partitions, internal drives, and non-storage devices
+                        if (partition.mountpoint in ['/', '/boot', '/home', '/var', '/tmp', '/sys', '/proc', '/dev'] or
+                            partition.mountpoint.startswith('/dev/') or
+                            partition.mountpoint.startswith('/sys/') or
+                            partition.mountpoint.startswith('/proc/') or
+                            not partition.mountpoint or  # Skip unmounted devices
+                            partition.fstype in ['tmpfs', 'devtmpfs', 'sysfs', 'proc', 'devpts', 'cgroup', 'cgroup2']):
+                            print(f"🚫 Skipping non-storage: {partition.mountpoint} (fstype: {partition.fstype})")
+                            continue
+                        
+                        # Only consider drives that are explicitly removable or in USB mount locations
+                        is_removable = 'removable' in partition.opts
+                        is_usb_mount = any(partition.mountpoint.startswith(pattern) 
+                                         for pattern in ['/media/', '/mnt/', '/run/media/', '/Volumes/'])
+                        
+                        # Additional storage device checks
+                        is_storage_device = (
+                            partition.fstype in ['FAT32', 'FAT', 'exFAT', 'NTFS', 'vfat', 'ext2', 'ext3', 'ext4'] or
+                            'rw' in partition.opts  # Read-write capable
+                        )
+                        
+                        # Strict USB storage detection - must be removable OR in USB mount location AND be a storage device
+                        is_likely_usb_storage = (is_removable or is_usb_mount) and is_storage_device
+                        
+                        if is_likely_usb_storage:
+                            # Test accessibility and ensure it's actually a storage device
+                            if os.path.exists(partition.mountpoint) and os.path.isdir(partition.mountpoint):
+                                try:
+                                    # Quick access test to ensure it's a readable storage device
+                                    files = os.listdir(partition.mountpoint)
+                                    # Additional check: ensure it's not a system device
+                                    if not any(partition.mountpoint.startswith(sys_path) for sys_path in ['/sys/', '/proc/', '/dev/']):
+                                        usb_drives.append(partition.mountpoint)
+                                        print(f"✅ USB storage detected: {partition.mountpoint} (fstype: {partition.fstype}, opts: {partition.opts})")
+                                except (OSError, PermissionError):
+                                    print(f"⚠️ USB drive {partition.mountpoint} not accessible")
+                                    continue
+                                    
+                    except Exception as e:
+                        print(f"⚠️ Error checking partition {partition.mountpoint}: {e}")
                         continue
-                    
-                    # Only consider drives that are explicitly removable or in USB mount locations
-                    is_removable = 'removable' in partition.opts
-                    is_usb_mount = any(partition.mountpoint.startswith(pattern) 
-                                     for pattern in ['/media/', '/mnt/', '/run/media/', '/Volumes/'])
-                    
-                    # Strict USB detection - must be removable OR in USB mount location
-                    is_likely_usb = is_removable or is_usb_mount
-                    
-                    if is_likely_usb:
-                        # Test accessibility
-                        if os.path.exists(partition.mountpoint) and os.path.isdir(partition.mountpoint):
-                            try:
-                                # Quick access test
-                                os.listdir(partition.mountpoint)
-                                usb_drives.append(partition.mountpoint)
-                                print(f"✅ USB detected: {partition.mountpoint} (fstype: {partition.fstype}, opts: {partition.opts})")
-                            except (OSError, PermissionError):
-                                print(f"⚠️ USB drive {partition.mountpoint} not accessible")
-                                continue
-                                
-                except Exception as e:
-                    print(f"⚠️ Error checking partition {partition.mountpoint}: {e}")
-                    continue
+                
+                if usb_drives:
+                    print(f"🎯 Enhanced detection found {len(usb_drives)} USB drives: {usb_drives}")
+                    return usb_drives
+                elif attempt < 2:  # Don't wait on last attempt
+                    print(f"⏳ No USB drives found on attempt {attempt + 1}, waiting 1 second before retry...")
+                    time.sleep(1.0)
             
-            print(f"🎯 Enhanced detection found {len(usb_drives)} USB drives: {usb_drives}")
-            return usb_drives
+            print(f"🎯 Enhanced detection found 0 USB drives after 3 attempts")
+            return []
             
         except Exception as e:
             print(f"⚠️ Error in enhanced detection: {e}")

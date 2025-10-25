@@ -46,13 +46,22 @@ class USBFileManager:
             partitions = psutil.disk_partitions()
             print(f"🔍 USB Manager: Checking {len(partitions)} partitions for USB drives...")
             
+            # Debug: Show all partitions being checked
+            print(f"🔍 All partitions: {[(p.device, p.mountpoint, p.fstype, p.opts) for p in partitions]}")
+            
             # Pre-compile patterns for faster matching
             usb_mount_patterns = ['/media/', '/mnt/', '/run/media/', '/Volumes/']
             
             for partition in partitions:
                 try:
-                    # Skip system partitions and internal drives
-                    if partition.mountpoint in ['/', '/boot', '/home', '/var', '/tmp', '/sys', '/proc', '/dev']:
+                    # Skip system partitions, internal drives, and non-storage devices
+                    if (partition.mountpoint in ['/', '/boot', '/home', '/var', '/tmp', '/sys', '/proc', '/dev'] or
+                        partition.mountpoint.startswith('/dev/') or
+                        partition.mountpoint.startswith('/sys/') or
+                        partition.mountpoint.startswith('/proc/') or
+                        not partition.mountpoint or  # Skip unmounted devices
+                        partition.fstype in ['tmpfs', 'devtmpfs', 'sysfs', 'proc', 'devpts', 'cgroup', 'cgroup2']):
+                        print(f"🚫 USB Manager skipping non-storage: {partition.mountpoint} (fstype: {partition.fstype})")
                         continue
                     
                     # Only consider drives that are explicitly removable or in USB mount locations
@@ -60,17 +69,25 @@ class USBFileManager:
                     is_usb_mount = any(partition.mountpoint.startswith(pattern) 
                                      for pattern in usb_mount_patterns)
                     
-                    # Strict USB detection - must be removable OR in USB mount location
-                    is_likely_usb = is_removable or is_usb_mount
+                    # Additional storage device checks
+                    is_storage_device = (
+                        partition.fstype in ['FAT32', 'FAT', 'exFAT', 'NTFS', 'vfat', 'ext2', 'ext3', 'ext4'] or
+                        'rw' in partition.opts  # Read-write capable
+                    )
                     
-                    if is_likely_usb:
-                        # Test accessibility
+                    # Strict USB storage detection - must be removable OR in USB mount location AND be a storage device
+                    is_likely_usb_storage = (is_removable or is_usb_mount) and is_storage_device
+                    
+                    if is_likely_usb_storage:
+                        # Test accessibility and ensure it's actually a storage device
                         if os.path.exists(partition.mountpoint) and os.path.isdir(partition.mountpoint):
                             try:
-                                # Quick access test
-                                os.listdir(partition.mountpoint)
-                                usb_drives.append(partition.mountpoint)
-                                print(f"✅ USB Manager found: {partition.mountpoint} (fstype: {partition.fstype})")
+                                # Quick access test to ensure it's a readable storage device
+                                files = os.listdir(partition.mountpoint)
+                                # Additional check: ensure it's not a system device
+                                if not any(partition.mountpoint.startswith(sys_path) for sys_path in ['/sys/', '/proc/', '/dev/']):
+                                    usb_drives.append(partition.mountpoint)
+                                    print(f"✅ USB storage found: {partition.mountpoint} (fstype: {partition.fstype})")
                             except (OSError, PermissionError):
                                 print(f"⚠️ USB drive {partition.mountpoint} not accessible")
                                 continue
