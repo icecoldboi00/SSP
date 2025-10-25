@@ -186,4 +186,8 @@ class USBScreenView(QWidget):
     def hide_safety_warning(self):
         """Hides the safety warning message."""
         self.safety_warning.hide()
+    
+    def show_message(self, title, text):
+        """Shows a message to the user."""
+        QMessageBox.information(self, title, text)
 
