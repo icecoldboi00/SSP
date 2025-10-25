@@ -140,12 +140,21 @@ class USBFileManager:
                         file_size = os.path.getsize(dest_path)
                         print(f"✅ Copied {filename} ({file_size/1024:.1f} KB)")
                         
-                        # Skip page count for speed - assume 1 page
+                        # Get actual PDF page count
+                        try:
+                            import fitz  # PyMuPDF
+                            doc = fitz.open(dest_path)
+                            page_count = len(doc)
+                            doc.close()
+                        except Exception:
+                            page_count = 1
+                            print(f"⚠️ Could not get page count for {filename}, defaulting to 1")
+                        
                         copied_files.append({
                             'filename': filename,
                             'path': dest_path,
                             'size': file_size,
-                            'pages': 1,  # Default to 1 page for speed
+                            'pages': page_count,
                             'type': '.pdf'
                         })
                     
