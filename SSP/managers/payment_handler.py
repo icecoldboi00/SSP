@@ -133,7 +133,7 @@ class PaymentHandler(QObject):
         # CRITICAL: Only process pulses from the actual coin acceptor pin (5)
         # Ignore all hopper sensor pulses (pins 10, 13) to prevent interference
         if gpio != self.COIN_PIN:
-            print(f"PaymentHandler: Ignoring pulse from GPIO {gpio} (not coin acceptor pin {self.COIN_PIN})")
+            # Removed console flooding print statement
             return
         
         if not self.accepting_payments or self.coin_cooldown_active:
@@ -180,7 +180,7 @@ class PaymentHandler(QObject):
         # CRITICAL: Only process pulses from the actual bill acceptor pin (18)
         # Ignore all hopper sensor pulses (pins 10, 13) to prevent interference
         if gpio != self.BILL_PIN:
-            print(f"PaymentHandler: Ignoring bill pulse from GPIO {gpio} (not bill acceptor pin {self.BILL_PIN})")
+            # Removed console flooding print statement
             return
         
         if not self.accepting_payments:
