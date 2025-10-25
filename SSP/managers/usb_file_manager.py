@@ -51,22 +51,17 @@ class USBFileManager:
             
             for partition in partitions:
                 try:
-                    # Skip system partitions
-                    if partition.mountpoint in ['/', '/boot', '/home', '/var', '/tmp']:
+                    # Skip system partitions and internal drives
+                    if partition.mountpoint in ['/', '/boot', '/home', '/var', '/tmp', '/sys', '/proc', '/dev']:
                         continue
                     
-                    # Multiple USB detection criteria
+                    # Only consider drives that are explicitly removable or in USB mount locations
                     is_removable = 'removable' in partition.opts
                     is_usb_mount = any(partition.mountpoint.startswith(pattern) 
                                      for pattern in usb_mount_patterns)
-                    is_external_fs = partition.fstype in ['FAT32', 'FAT', 'exFAT', 'NTFS', 'vfat']
                     
-                    # Comprehensive USB detection
-                    is_likely_usb = (
-                        is_removable or 
-                        is_usb_mount or 
-                        (is_external_fs and partition.mountpoint and len(partition.mountpoint) > 1)
-                    )
+                    # Strict USB detection - must be removable OR in USB mount location
+                    is_likely_usb = is_removable or is_usb_mount
                     
                     if is_likely_usb:
                         # Test accessibility
@@ -125,12 +120,23 @@ class USBFileManager:
             
             # Optimized file scanning - collect all PDFs first, then process
             pdf_files = []
+            print(f"🔍 Scanning directory: {source_dir}")
+            try:
+                all_files = os.listdir(source_dir)
+                print(f"📁 Found {len(all_files)} files in directory: {all_files}")
+            except Exception as e:
+                print(f"⚠️ Error listing directory: {e}")
+            
             for root, _, files in os.walk(source_dir):
                 if self._should_stop:
                     break
+                print(f"🔍 Scanning subdirectory: {root} (found {len(files)} files)")
                 for filename in files:
                     if filename.lower().endswith('.pdf'):
                         pdf_files.append(os.path.join(root, filename))
+                        print(f"✅ Found PDF: {filename}")
+            
+            print(f"📊 Total PDF files found: {len(pdf_files)}")
             
             # Process PDF files in batch
             for source_path in pdf_files:

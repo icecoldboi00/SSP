@@ -197,25 +197,20 @@ class USBScreenModel(QObject):
             partitions = psutil.disk_partitions()
             print(f"📊 Found {len(partitions)} total partitions to check")
             
-            # Check all partitions for USB drives with multiple criteria
+            # Check all partitions for USB drives with strict criteria
             for partition in partitions:
                 try:
-                    # Skip system partitions
-                    if partition.mountpoint in ['/', '/boot', '/home', '/var', '/tmp']:
+                    # Skip system partitions and internal drives
+                    if partition.mountpoint in ['/', '/boot', '/home', '/var', '/tmp', '/sys', '/proc', '/dev']:
                         continue
                     
-                    # Check for USB characteristics
+                    # Only consider drives that are explicitly removable or in USB mount locations
                     is_removable = 'removable' in partition.opts
                     is_usb_mount = any(partition.mountpoint.startswith(pattern) 
                                      for pattern in ['/media/', '/mnt/', '/run/media/', '/Volumes/'])
-                    is_external = partition.fstype in ['FAT32', 'FAT', 'exFAT', 'NTFS', 'vfat']
                     
-                    # More comprehensive USB detection
-                    is_likely_usb = (
-                        is_removable or 
-                        is_usb_mount or 
-                        (is_external and partition.mountpoint and len(partition.mountpoint) > 1)
-                    )
+                    # Strict USB detection - must be removable OR in USB mount location
+                    is_likely_usb = is_removable or is_usb_mount
                     
                     if is_likely_usb:
                         # Test accessibility
@@ -259,12 +254,15 @@ class USBScreenModel(QObject):
     
     def scan_files_from_drive(self, drive_path):
         """Scans the given drive for PDF files."""
+        print(f"🔍 USB Screen: Starting PDF scan for drive: {drive_path}")
         pdf_files = self.usb_manager.scan_and_copy_pdf_files(drive_path)
+        print(f"📊 USB Screen: PDF scan returned {len(pdf_files)} files")
         
         if pdf_files:
             self.status_changed.emit(f"Success! Found {len(pdf_files)} PDF file(s). USB is now safe to remove.", 'success')
             self.pdf_files_found.emit(pdf_files)
         else:
+            print("⚠️ USB Screen: No PDF files found, showing warning message")
             self.status_changed.emit("No PDF files found on this drive.", 'warning')
     
     def on_usb_detected(self, drive_path):
