@@ -39,62 +39,36 @@ class USBFileManager:
         return usb_drives
     
     def _get_linux_usb_drives(self):
-        """Linux-specific USB drive detection - comprehensive for existing drives"""
+        """Linux-specific USB drive detection"""
         usb_drives = []
         
         try:
             partitions = psutil.disk_partitions()
-            print(f"🔍 USB Manager: Checking {len(partitions)} partitions for USB drives...")
-            
-            # Debug: Show all partitions being checked
-            print(f"🔍 All partitions: {[(p.device, p.mountpoint, p.fstype, p.opts) for p in partitions]}")
-            
-            # Pre-compile patterns for faster matching
-            usb_mount_patterns = ['/media/', '/mnt/', '/run/media/', '/Volumes/']
             
             for partition in partitions:
-                try:
-                    # Skip system partitions, internal drives, and non-storage devices
-                    if (partition.mountpoint in ['/', '/boot', '/home', '/var', '/tmp', '/sys', '/proc', '/dev'] or
-                        partition.mountpoint.startswith('/dev/') or
-                        partition.mountpoint.startswith('/sys/') or
-                        partition.mountpoint.startswith('/proc/') or
-                        not partition.mountpoint or  # Skip unmounted devices
-                        partition.fstype in ['tmpfs', 'devtmpfs', 'sysfs', 'proc', 'devpts', 'cgroup', 'cgroup2']):
-                        print(f"🚫 USB Manager skipping non-storage: {partition.mountpoint} (fstype: {partition.fstype})")
-                        continue
-                    
-                    # Only consider drives that are explicitly removable or in USB mount locations
-                    is_removable = 'removable' in partition.opts
-                    is_usb_mount = any(partition.mountpoint.startswith(pattern) 
-                                     for pattern in usb_mount_patterns)
-                    
-                    # Additional storage device checks
-                    is_storage_device = (
-                        partition.fstype in ['FAT32', 'FAT', 'exFAT', 'NTFS', 'vfat', 'ext2', 'ext3', 'ext4'] or
-                        'rw' in partition.opts  # Read-write capable
-                    )
-                    
-                    # Strict USB storage detection - must be removable OR in USB mount location AND be a storage device
-                    is_likely_usb_storage = (is_removable or is_usb_mount) and is_storage_device
-                    
-                    if is_likely_usb_storage:
-                        # Test accessibility and ensure it's actually a storage device
+                # Check for typical USB mount points
+                usb_mount_patterns = [
+                    '/media/',
+                    '/mnt/',
+                    '/run/media/',
+                    '/Volumes/'  # Sometimes used on Linux too
+                ]
+                
+                is_usb_mount = any(partition.mountpoint.startswith(pattern) 
+                                 for pattern in usb_mount_patterns)
+                
+                # Also check if explicitly marked as removable
+                is_removable = 'removable' in partition.opts
+                
+                if is_usb_mount or is_removable:
+                    try:
                         if os.path.exists(partition.mountpoint) and os.path.isdir(partition.mountpoint):
-                            try:
-                                # Quick access test to ensure it's a readable storage device
-                                files = os.listdir(partition.mountpoint)
-                                # Additional check: ensure it's not a system device
-                                if not any(partition.mountpoint.startswith(sys_path) for sys_path in ['/sys/', '/proc/', '/dev/']):
-                                    usb_drives.append(partition.mountpoint)
-                                    print(f"✅ USB storage found: {partition.mountpoint} (fstype: {partition.fstype})")
-                            except (OSError, PermissionError):
-                                print(f"⚠️ USB drive {partition.mountpoint} not accessible")
-                                continue
-                                
-                except Exception as e:
-                    print(f"⚠️ Error checking partition {partition.mountpoint}: {e}")
-                    continue
+                            # Try to access to ensure it's ready
+                            os.listdir(partition.mountpoint)
+                            usb_drives.append(partition.mountpoint)
+                            print(f"Found USB drive: {partition.mountpoint} ({partition.fstype})")
+                    except (OSError, PermissionError):
+                        print(f"USB drive {partition.mountpoint} not accessible")
                         
         except Exception as e:
             print(f"Error in Linux USB detection: {e}")
@@ -135,68 +109,51 @@ class USBFileManager:
             
             print(f"📂 Scanning and copying PDF files from {source_dir} to {self.destination_dir}")
             
-            # Optimized file scanning - collect all PDFs first, then process
-            pdf_files = []
-            print(f"🔍 Scanning directory: {source_dir}")
-            try:
-                all_files = os.listdir(source_dir)
-                print(f"📁 Found {len(all_files)} files in directory: {all_files}")
-            except Exception as e:
-                print(f"⚠️ Error listing directory: {e}")
-            
             for root, _, files in os.walk(source_dir):
+                # Check stop flag during directory traversal
                 if self._should_stop:
-                    break
-                print(f"🔍 Scanning subdirectory: {root} (found {len(files)} files)")
+                    print("🛑 Stop requested during file scanning, but continuing to complete current directory")
+                
                 for filename in files:
                     if filename.lower().endswith('.pdf'):
-                        pdf_files.append(os.path.join(root, filename))
-                        print(f"✅ Found PDF: {filename}")
-            
-            print(f"📊 Total PDF files found: {len(pdf_files)}")
-            
-            # Process PDF files in batch
-            for source_path in pdf_files:
-                if self._should_stop:
-                    break
-                    
-                filename = os.path.basename(source_path)
-                dest_path = os.path.join(self.destination_dir, filename)
-                
-                try:
-                    # Mark file as in use
-                    self.mark_file_in_use(source_path)
-                    
-                    # Fast copy without metadata preservation for speed
-                    shutil.copy(source_path, dest_path)
-                    if os.path.exists(dest_path):
-                        file_size = os.path.getsize(dest_path)
-                        print(f"✅ Copied {filename} ({file_size/1024:.1f} KB)")
+                        source_path = os.path.join(root, filename)
+                        dest_path = os.path.join(self.destination_dir, filename)
                         
-                        # Get actual PDF page count
                         try:
-                            import fitz  # PyMuPDF
-                            doc = fitz.open(dest_path)
-                            page_count = len(doc)
-                            doc.close()
-                        except Exception:
-                            page_count = 1
-                            print(f"⚠️ Could not get page count for {filename}, defaulting to 1")
-                        
-                        copied_files.append({
-                            'filename': filename,
-                            'path': dest_path,
-                            'size': file_size,
-                            'pages': page_count,
-                            'type': '.pdf'
-                        })
-                    
-                    # Mark file as complete
-                    self.mark_file_complete(source_path)
-                    
-                except Exception as e:
-                    print(f"❌ Error copying {filename}: {str(e)}")
-                    self.mark_file_complete(source_path)
+                            # Mark file as in use
+                            self.mark_file_in_use(source_path)
+                            
+                            # Copy file and verify
+                            shutil.copy2(source_path, dest_path)
+                            if os.path.exists(dest_path):
+                                file_size = os.path.getsize(dest_path)
+                                print(f"✅ Copied {filename} ({file_size/1024:.1f} KB)")
+                                
+                                # Get PDF page count
+                                try:
+                                    import fitz  # PyMuPDF
+                                    doc = fitz.open(dest_path)
+                                    page_count = len(doc)
+                                    doc.close()
+                                except Exception:
+                                    page_count = 1
+                                    print(f"⚠️ Could not get page count for {filename}")
+                                
+                                copied_files.append({
+                                    'filename': filename,
+                                    'path': dest_path,
+                                    'size': file_size,
+                                    'pages': page_count,
+                                    'type': '.pdf'
+                                })
+                            
+                            # Mark file as complete
+                            self.mark_file_complete(source_path)
+                            
+                        except Exception as e:
+                            print(f"❌ Error copying {filename}: {str(e)}")
+                            # Mark file as complete even if error occurred
+                            self.mark_file_complete(source_path)
                             
             # Mark operation as complete
             self.set_operation_in_progress(False)
