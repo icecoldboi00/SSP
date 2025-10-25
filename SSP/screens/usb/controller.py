@@ -68,37 +68,38 @@ class USBController(QWidget):
     # --- Public API for main_app ---
     
     def on_enter(self):
-        """Called by main_app when this screen becomes active - optimized for speed."""
+        """Called by main_app when this screen becomes active - ultra-light for stability."""
         try:
-            print("🔄 Entering USB screen, performing fast initial check...")
+            print("🔄 Entering USB screen (light mode)...")
             
-            # Light system resource check only
+            # Minimal system check - only check if system is critically low
             if not self._check_system_resources():
-                print("⚠️ System resources low, performing quick cleanup...")
-                self.model.force_cleanup()
+                print("⚠️ System critically low, skipping USB operations")
+                self.main_app.show_screen('idle')
+                return
             
             self.view.start_blinking()
             
             # Reset the returning flag when entering normally
             self.model.set_returning_from_file_browser(False)
             
-            # Quick USB manager state reset
+            # Ultra-light USB manager state reset
             self.model.reset_usb_manager_state()
             
-            # Immediate USB detection - this is the key optimization
-            self.model.check_current_drives()
+            # Start timeout timer (3 minutes) - reduced for faster exit
+            self.timeout_timer.start(180000)
+            print("⏰ USB screen timeout started (3 minutes)")
             
-            # Start timeout timer (5 minutes)
-            self.timeout_timer.start(300000)
-            print("⏰ USB screen timeout started (5 minutes)")
+            # Start operation timeout (30 seconds) - much shorter for stability
+            self.operation_timeout.start(30000)
+            print("⏰ USB operation timeout started (30 seconds)")
             
-            # Start operation timeout (1 minute) - reduced for faster response
-            self.operation_timeout.start(60000)
-            print("⏰ USB operation timeout started (1 minute)")
+            # Start monitoring in background - no immediate heavy operations
+            self.model.start_usb_monitoring()
             
         except Exception as e:
             print(f"❌ Error entering USB screen: {e}")
-            # Quick error handling - no heavy logging
+            # Immediate fallback to idle screen
             self.main_app.show_screen('idle')
     
     def on_leave(self):
@@ -150,16 +151,16 @@ class USBController(QWidget):
         self.model.reset_usb_state()
     
     def _check_system_resources(self):
-        """Ultra-light system resource check to avoid any delays."""
+        """Ultra-minimal system resource check to prevent crashes."""
         try:
             import psutil
             
-            # Minimal memory check only
+            # Only check memory - skip CPU, disk, etc.
             memory = psutil.virtual_memory()
             free_memory_mb = memory.available / (1024 * 1024)
             
-            # Only fail if memory is critically low (less than 25MB)
-            if free_memory_mb < 25:
+            # Only fail if memory is critically low (less than 50MB)
+            if free_memory_mb < 50:
                 print(f"⚠️ Critically low memory: {free_memory_mb:.1f}MB")
                 return False
             
