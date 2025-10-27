@@ -47,7 +47,7 @@ class USBScreenView(QWidget):
         title.setStyleSheet("color: #36454F; font-size: 38px; font-weight: bold;")
         title.setWordWrap(True)
 
-        instruction = QLabel("The system will automatically detect your storage device.")
+        instruction = QLabel("The system will automatically detect your device.")
         instruction.setAlignment(Qt.AlignCenter)
         instruction.setWordWrap(True)
         instruction.setStyleSheet("color: #36454F; font-size: 22px; line-height: 1.4;")
