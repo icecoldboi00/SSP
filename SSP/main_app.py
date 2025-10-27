@@ -412,12 +412,12 @@ class PrintingSystemApp(QMainWindow):
         # Clean up session directory after successful printing
         self._cleanup_session_directory_after_print()
         
+        # Trigger ink analysis for the printed job (before clearing print job info)
+        self._trigger_ink_analysis()
+        
         # Clear the print job after successful completion to prevent re-printing
         print(f"DEBUG: Clearing current_print_job after successful completion")
         self.current_print_job = None
-        
-        # Trigger ink analysis for the printed job (if print job info available)
-        self._trigger_ink_analysis()
         
         current_screen = self.stacked_widget.currentWidget()
         
