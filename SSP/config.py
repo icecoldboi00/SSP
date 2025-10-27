@@ -70,6 +70,10 @@ class Config:
                     key = key.strip()
                     value = value.strip()
                     
+                    # Remove inline comments (everything after #)
+                    if '#' in value:
+                        value = value.split('#')[0].strip()
+                    
                     # Remove quotes if present
                     if value.startswith('"') and value.endswith('"'):
                         value = value[1:-1]
