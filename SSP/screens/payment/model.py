@@ -546,12 +546,24 @@ class PaymentModel(QObject):
         print("DEBUG: main_app available:", hasattr(self, 'main_app') and self.main_app is not None)
 
         try:
-            # Emit payment completed signal now that everything is done
-            if hasattr(self, 'payment_info') and self.payment_info:
-                print("DEBUG: Emitting payment_completed signal with stored payment info")
+            # Create payment_info with all necessary data including cash_received
+            if hasattr(self, 'payment_data') and self.payment_data:
+                print("DEBUG: Creating payment_info with cash_received data")
+                self.payment_info = {
+                    'pdf_data': self.payment_data.get('pdf_data', {}),
+                    'selected_pages': self.payment_data.get('selected_pages', []),
+                    'copies': self.payment_data.get('copies', 1),
+                    'color_mode': self.payment_data.get('color_mode', 'Color'),
+                    'total_cost': self.total_cost,
+                    'amount_received': self.amount_received,
+                    'cash_received': self.cash_received.copy(),  # Include coin data for database update
+                    'change_dispensed': getattr(self, 'change_dispensed', None)
+                }
+                print(f"DEBUG: Created payment_info with cash_received: {self.cash_received}")
+                print("DEBUG: Emitting payment_completed signal with payment info")
                 self.payment_completed.emit(self.payment_info)
             else:
-                print("DEBUG: No payment info available to emit")
+                print("DEBUG: No payment data available to create payment info")
 
             if hasattr(self, 'main_app') and self.main_app:
                 print("DEBUG: Navigating to thank you screen")
