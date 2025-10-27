@@ -29,6 +29,13 @@ class PaymentGPIOController(QObject):
             
             self.payment_handler = get_payment_handler()
             if self.payment_handler:
+                # Debug: Check if the special_coin_inserted signal exists
+                if hasattr(self.payment_handler, 'special_coin_inserted'):
+                    print("PaymentGPIOController: special_coin_inserted signal found")
+                else:
+                    print("PaymentGPIOController: ERROR - special_coin_inserted signal NOT found!")
+                    print(f"PaymentGPIOController: Available signals: {[attr for attr in dir(self.payment_handler) if 'Signal' in str(type(getattr(self.payment_handler, attr, None)))]}")
+                
                 # Connect signals
                 self.payment_handler.coin_inserted.connect(self.coin_inserted.emit)
                 self.payment_handler.special_coin_inserted.connect(self.special_coin_inserted.emit)

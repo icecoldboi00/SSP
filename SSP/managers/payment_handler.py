@@ -23,6 +23,7 @@ class PaymentHandler(QObject):
     
     # Signals for payment events
     coin_inserted = pyqtSignal(int)  # coin_value
+    special_coin_inserted = pyqtSignal(int)  # special coin_value (cannot be given as change)
     bill_inserted = pyqtSignal(int)  # bill_value
     payment_status = pyqtSignal(str)  # status_message
     acceptor_state_changed = pyqtSignal(bool)  # enabled/disabled
@@ -462,13 +463,25 @@ _payment_handler_instance = None
 def get_payment_handler() -> PaymentHandler:
     """Get the global payment handler instance."""
     global _payment_handler_instance
-    if _payment_handler_instance is None:
-        _payment_handler_instance = PaymentHandler()
-        if not _payment_handler_instance.initialize():
-            print("PaymentHandler: Initialization failed, cleaning up")
+    
+    # Always create a fresh instance to ensure we have the latest code
+    if _payment_handler_instance is not None:
+        print("PaymentHandler: Cleaning up existing instance before creating new one")
+        try:
             _payment_handler_instance.cleanup()
+        except Exception as e:
+            print(f"PaymentHandler: Error during cleanup - {e}")
+        finally:
             _payment_handler_instance = None
-            return None
+    
+    # Create new instance
+    _payment_handler_instance = PaymentHandler()
+    if not _payment_handler_instance.initialize():
+        print("PaymentHandler: Initialization failed, cleaning up")
+        _payment_handler_instance.cleanup()
+        _payment_handler_instance = None
+        return None
+    
     return _payment_handler_instance
 
 def cleanup_payment_handler():
