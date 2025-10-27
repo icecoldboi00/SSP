@@ -199,7 +199,7 @@ class USBScreenModel(QObject):
     
     def scan_files_from_drive(self, drive_path):
         """Scans the given drive for PDF files."""
-        pdf_files = self.usb_manager.scan_and_copy_pdf_files(drive_path)
+        pdf_files = self.usb_manager.scan_pdf_files(drive_path)
         
         if pdf_files:
             self.status_changed.emit(f"Success! Found {len(pdf_files)} PDF file(s). USB is now safe to remove.", 'success')

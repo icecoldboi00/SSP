@@ -101,10 +101,18 @@ class FileBrowserController(QWidget):
             QMessageBox.warning(self, "No Pages Selected", "Please select at least one page to print.")
             return
         
+        # Copy the selected file to temp directory
+        print(f"🔍 Copying selected file: {self.view.selected_pdf['filename']}")
+        copied_file = self.main_app.usb_screen.model.usb_manager.copy_selected_file(self.view.selected_pdf)
+        
+        if not copied_file:
+            QMessageBox.critical(self, "File Copy Error", "Failed to copy the selected PDF file.")
+            return
+        
         # Pass data to print options screen
-        print(f"🔍 Calling set_pdf_data with PDF: {self.view.selected_pdf['filename']} and pages: {selected_pages_list}")
+        print(f"🔍 Calling set_pdf_data with PDF: {copied_file['filename']} and pages: {selected_pages_list}")
         options_screen = self.main_app.printing_options_screen
-        options_screen.set_pdf_data(self.view.selected_pdf, selected_pages_list)
+        options_screen.set_pdf_data(copied_file, selected_pages_list)
         print(f"🔍 Switching to print options screen")
         self.main_app.show_screen('printing_options')
     

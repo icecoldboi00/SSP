@@ -136,10 +136,10 @@ class USBFileManager:
         
         return list(new_drives), list(removed_drives)
     
-    def scan_and_copy_pdf_files(self, source_dir):
-        """Scan for and copy PDF files from USB drive - light mode"""
-        print(f"\n🔍 Starting light scan_and_copy_pdf_files for {source_dir}")
-        copied_files = []
+    def scan_pdf_files(self, source_dir):
+        """Scan for PDF files from USB drive without copying them - light mode"""
+        print(f"\n🔍 Starting light PDF scan for {source_dir}")
+        scanned_files = []
 
         # Reset stop flag for new operation
         self._should_stop = False
@@ -157,7 +157,7 @@ class USBFileManager:
             self.set_current_drive(source_dir)
             self.set_operation_in_progress(True)
             
-            print(f"📂 Light scanning and copying PDF files from {source_dir} to {self.destination_dir}")
+            print(f"📂 Light scanning PDF files from {source_dir}")
             
             # Limit directory traversal to prevent system load
             max_directories = 5
@@ -187,7 +187,6 @@ class USBFileManager:
                     if filename.lower().endswith('.pdf'):
                         file_count += 1
                         source_path = os.path.join(root, filename)
-                        dest_path = os.path.join(self.destination_dir, filename)
                         
                         # Check file size to prevent memory issues
                         try:
@@ -200,62 +199,75 @@ class USBFileManager:
                             continue
                         
                         try:
-                            # Mark file as in use
-                            self.mark_file_in_use(source_path)
+                            # Get file info without copying
+                            file_size = source_size
+                            print(f"📄 Found {filename} ({file_size/1024:.1f} KB)")
                             
-                            # Light copy with error handling
-                            try:
-                                shutil.copy(source_path, dest_path)
-                            except Exception as copy_error:
-                                print(f"❌ Failed to copy {filename}: {copy_error}")
-                                self.mark_file_complete(source_path)
-                                continue
+                            # Safe PDF page count with timeout (read directly from USB)
+                            page_count = self._safe_pdf_page_count(source_path, timeout=3)
+                            print(f"📄 {filename}: {page_count} pages")
                             
-                            if os.path.exists(dest_path):
-                                file_size = os.path.getsize(dest_path)
-                                print(f"✅ Copied {filename} ({file_size/1024:.1f} KB)")
-                                
-                                # Safe PDF page count with timeout
-                                page_count = self._safe_pdf_page_count(dest_path, timeout=3)
-                                print(f"📄 {filename}: {page_count} pages")
-                                
-                                copied_files.append({
-                                    'filename': filename,
-                                    'path': dest_path,
-                                    'size': file_size,
-                                    'pages': page_count,
-                                    'type': '.pdf'
-                                })
-                            
-                            # Mark file as complete
-                            self.mark_file_complete(source_path)
+                            # Store file info without copying
+                            scanned_files.append({
+                                'filename': filename,
+                                'path': source_path,  # Keep original USB path
+                                'size': file_size,
+                                'pages': page_count,
+                                'type': '.pdf'
+                            })
                             
                         except Exception as e:
-                            print(f"❌ Error copying {filename}: {str(e)}")
-                            # Mark file as complete even if error occurred
-                            self.mark_file_complete(source_path)
+                            print(f"❌ Error processing {filename}: {str(e)}")
+                            continue
                             
             # Mark operation as complete
             self.set_operation_in_progress(False)
             
-            # After all files are processed, automatically "eject" the USB drive
-            if copied_files:
-                print(f"✅ Successfully copied {len(copied_files)} PDF files:")
-                for f in copied_files:
+            # After all files are processed
+            if scanned_files:
+                print(f"✅ Successfully scanned {len(scanned_files)} PDF files:")
+                for f in scanned_files:
                     print(f"   📄 {f['filename']} ({f['size']/1024:.1f} KB, {f['pages']} pages)")
-                
-                # Automatically eject USB drive after successful copy
-                self._auto_eject_usb_drive(source_dir)
             else:
-                print("❌ No PDF files found to copy")
+                print("❌ No PDF files found")
                 
-            return copied_files
+            return scanned_files
 
         except Exception as e:
-            print(f"❌ Error in scan_and_copy_pdf_files: {str(e)}")
+            print(f"❌ Error in scan_pdf_files: {str(e)}")
             # Ensure operation is marked as complete even on error
             self.set_operation_in_progress(False)
             return []
+    
+    def copy_selected_file(self, file_info):
+        """Copy only the selected file to temp directory for printing"""
+        try:
+            source_path = file_info['path']
+            filename = file_info['filename']
+            
+            # Create temp directory if it doesn't exist
+            if not hasattr(self, 'destination_dir') or not self.destination_dir:
+                self._create_new_session()
+            
+            dest_path = os.path.join(self.destination_dir, filename)
+            
+            print(f"📋 Copying selected file: {filename}")
+            shutil.copy(source_path, dest_path)
+            
+            if os.path.exists(dest_path):
+                file_size = os.path.getsize(dest_path)
+                print(f"✅ Copied {filename} ({file_size/1024:.1f} KB)")
+                
+                # Update file info with new path
+                file_info['path'] = dest_path
+                return file_info
+            else:
+                print(f"❌ Failed to copy {filename}")
+                return None
+                
+        except Exception as e:
+            print(f"❌ Error copying selected file: {e}")
+            return None
     
     def stop_all_operations(self):
         """Stop all file operations to prevent system freezes."""
