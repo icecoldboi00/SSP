@@ -51,8 +51,8 @@ class PaymentHandler(QObject):
         
         # Timing constants
         self.DEBOUNCE_TIME = 0.2      # Minimum time between pulses
-        self.COIN_TIMEOUT = 0.5       # Time to wait for coin completion
-        self.BILL_TIMEOUT = 1.0       # Time to wait for bill completion
+        self.COIN_TIMEOUT = 0.3       # Time to wait for coin completion
+        self.BILL_TIMEOUT = 0.5       # Time to wait for bill completion
         
         # Cooldown management
         self.coin_cooldown_active = False
@@ -205,10 +205,14 @@ class PaymentHandler(QObject):
     def _process_coin_detection(self):
         """Process detected coin and emit signal."""
         if self.coin_pulse_count >= 1:
-            value = self._get_coin_value(self.coin_pulse_count)
+            value, is_special = self._get_coin_value(self.coin_pulse_count)
             if value > 0:
-                print(f"PaymentHandler: Processing coin - {value} peso")
-                self.coin_inserted.emit(value)
+                if is_special:
+                    print(f"PaymentHandler: Processing special coin - {value} peso (cannot be given as change)")
+                    self.special_coin_inserted.emit(value)
+                else:
+                    print(f"PaymentHandler: Processing regular coin - {value} peso")
+                    self.coin_inserted.emit(value)
                 
                 # Start cooldown to prevent double detection
                 self._start_coin_cooldown()
@@ -227,7 +231,7 @@ class PaymentHandler(QObject):
             # Reset pulse count
             self.bill_pulse_count = 0
     
-    def _get_coin_value(self, pulses: int) -> int:
+    def _get_coin_value(self, pulses: int) -> tuple:
         """Convert pulse count to coin value based on actual coin acceptor behavior."""
         print(f"PaymentHandler: Analyzing {pulses} pulses for coin value")
         
@@ -237,24 +241,18 @@ class PaymentHandler(QObject):
         # 10 peso = 4 pulses (detected as four 1 peso coins)  
         # 20 peso = many pulses (detected as many 1 peso coins)
         
-        if pulses == 1:
-            return 1  # ₱1 coin = 1 pulse
-        elif pulses == 2:
-            return 5  # ₱5 coin = 2 pulses
-        elif pulses == 4:
-            return 10  # ₱10 coin = 4 pulses
-        elif pulses >= 8:
-            return 20  # ₱20 coin = 8+ pulses
-        # Handle ranges for coins that might have slight variations
-        elif 1 <= pulses <= 2:
-            return 1 if pulses == 1 else 5  # ₱1 or ₱5 coin
-        elif 3 <= pulses <= 5:
-            return 10  # ₱10 coin with variation
-        elif 6 <= pulses <= 10:
-            return 20  # ₱20 coin with variation
+        if 3 <= pulses <= 4:
+            return (1, False)  # (value, is_special)
+        elif 5 <= pulses <= 6:   
+            return (5, False)  # (value, is_special)
+        elif 8 <= pulses <= 9:
+            return (10, False)  # (value, is_special)
+        elif 11 <= pulses <= 12:
+            return (20, False)  # (value, is_special)
+        elif 14 <= pulses <= 15:
+            return (5, True)  # (value, is_special) - special 5 peso that cannot be given as change
         else:
-            print(f"PaymentHandler: Unknown coin pulse count: {pulses} - treating as ₱1")
-            return 1  # Default to ₱1 for unknown patterns
+            return (0, False)  # (value, is_special)
     
     def _get_bill_value(self, pulses: int) -> int:
         """Convert pulse count to bill value."""

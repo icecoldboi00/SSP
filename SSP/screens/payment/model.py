@@ -12,6 +12,7 @@ from managers.payment_handler import get_payment_handler, cleanup_payment_handle
 class PaymentGPIOController(QObject):
     """Simplified GPIO controller using the new payment handler."""
     coin_inserted = pyqtSignal(int)
+    special_coin_inserted = pyqtSignal(int)  # Special coins that cannot be given as change
     bill_inserted = pyqtSignal(int)
     payment_status = pyqtSignal(str)
     
@@ -30,6 +31,7 @@ class PaymentGPIOController(QObject):
             if self.payment_handler:
                 # Connect signals
                 self.payment_handler.coin_inserted.connect(self.coin_inserted.emit)
+                self.payment_handler.special_coin_inserted.connect(self.special_coin_inserted.emit)
                 self.payment_handler.bill_inserted.connect(self.bill_inserted.emit)
                 self.payment_handler.payment_status.connect(self.payment_status.emit)
                 
@@ -168,6 +170,7 @@ class PaymentModel(QObject):
             
             # Connect signals
             self.gpio_controller.coin_inserted.connect(self.on_coin_inserted)
+            self.gpio_controller.special_coin_inserted.connect(self.on_special_coin_inserted)
             self.gpio_controller.bill_inserted.connect(self.on_bill_inserted)
             self.gpio_controller.payment_status.connect(self.payment_status_updated.emit)
             print("DEBUG: Signals connected successfully")
@@ -258,6 +261,28 @@ class PaymentModel(QObject):
         self.payment_status_updated.emit(f"P{coin_value} coin received")
         
         print("DEBUG: UI signals emitted successfully")
+    
+    def on_special_coin_inserted(self, coin_value):
+        """Handles special coin insertion (coins that cannot be given as change)."""
+        print(f"DEBUG: on_special_coin_inserted called with value: {coin_value}")
+        print(f"DEBUG: payment_ready: {self.payment_ready}")
+        if not self.payment_ready:
+            print("DEBUG: Payment not ready, ignoring special coin")
+            return
+
+        print(f"DEBUG: Processing special coin - value: {coin_value} (will not be added to inventory)")
+        self.amount_received += coin_value
+        # Note: We don't add special coins to cash_received since they won't be added to database inventory
+        print(f"DEBUG: Amount received updated to: {self.amount_received}")
+        print(f"DEBUG: Total cost: {self.total_cost}")
+        print(f"DEBUG: Remaining: {self.total_cost - self.amount_received}")
+        
+        # Emit signals to update UI
+        self.amount_received_updated.emit(self.amount_received)
+        self._update_payment_status()
+        self.payment_status_updated.emit(f"P{coin_value} special coin received (not added to inventory)")
+        
+        print("DEBUG: Special coin UI signals emitted successfully")
     
 
     def on_bill_inserted(self, bill_value):
