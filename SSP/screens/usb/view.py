@@ -49,10 +49,9 @@ class USBScreenView(QWidget):
 
         instruction = QLabel("The system will automatically detect your storage device.")
         instruction.setAlignment(Qt.AlignCenter)
-        instruction.setWordWrap(True)
-        instruction.setStyleSheet("color: #36454F; font-size: 18px; line-height: 1.6; padding: 15px; margin: 10px;")
-        instruction.setMaximumWidth(1600)
-        instruction.setMinimumHeight(85)
+        instruction.setWordWrap(False)
+        instruction.setStyleSheet("color: #36454F; font-size: 22px; line-height: 1.4; padding: 10px;")
+        instruction.setMaximumWidth(1200)
 
         self.status_indicator = QLabel("Initializing...")
         self.status_indicator.setAlignment(Qt.AlignCenter)
