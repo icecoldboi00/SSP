@@ -52,7 +52,7 @@ class USBScreenView(QWidget):
         instruction.setWordWrap(True)
         instruction.setStyleSheet("color: #36454F; font-size: 18px; line-height: 1.6; padding: 15px; margin: 10px;")
         instruction.setMaximumWidth(1400)
-        instruction.setMinimumHeight(80)
+        instruction.setMinimumHeight(150)
 
         self.status_indicator = QLabel("Initializing...")
         self.status_indicator.setAlignment(Qt.AlignCenter)
