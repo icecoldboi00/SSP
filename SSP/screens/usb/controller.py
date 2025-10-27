@@ -68,43 +68,38 @@ class USBController(QWidget):
     # --- Public API for main_app ---
     
     def on_enter(self):
-        """Called by main_app when this screen becomes active."""
+        """Called by main_app when this screen becomes active - ultra-light for stability."""
         try:
-            print("🔄 Entering USB screen, performing initial check...")
+            print("🔄 Entering USB screen (light mode)...")
             
-            # Check system resources before proceeding
+            # Minimal system check - only check if system is critically low
             if not self._check_system_resources():
-                print("⚠️ System resources low, performing cleanup...")
-                self.model.force_cleanup()
+                print("⚠️ System critically low, skipping USB operations")
+                self.main_app.show_screen('idle')
+                return
             
             self.view.start_blinking()
             
             # Reset the returning flag when entering normally
             self.model.set_returning_from_file_browser(False)
             
-            # Reset USB manager state for new session
+            # Ultra-light USB manager state reset
             self.model.reset_usb_manager_state()
             
-            self.model.check_current_drives()
+            # Start timeout timer (3 minutes) - reduced for faster exit
+            self.timeout_timer.start(180000)
+            print("⏰ USB screen timeout started (3 minutes)")
             
-            # Start timeout timer (5 minutes)
-            self.timeout_timer.start(300000)
-            print("⏰ USB screen timeout started (5 minutes)")
+            # Start operation timeout (30 seconds) - much shorter for stability
+            self.operation_timeout.start(30000)
+            print("⏰ USB operation timeout started (30 seconds)")
             
-            # Start operation timeout (2 minutes) to prevent long-running operations
-            self.operation_timeout.start(120000)
-            print("⏰ USB operation timeout started (2 minutes)")
+            # Start monitoring in background - no immediate heavy operations
+            self.model.start_usb_monitoring()
             
         except Exception as e:
             print(f"❌ Error entering USB screen: {e}")
-            # Log error for debugging
-            try:
-                from utils.error_logger import log_error
-                log_error("USB Screen Enter Error", str(e), "usb_controller")
-            except Exception as log_error:
-                print(f"⚠️ Failed to log error: {log_error}")
-            
-            # Show error to user and return to idle
+            # Immediate fallback to idle screen
             self.main_app.show_screen('idle')
     
     def on_leave(self):
@@ -156,23 +151,21 @@ class USBController(QWidget):
         self.model.reset_usb_state()
     
     def _check_system_resources(self):
-        """Light system resource check to avoid freezes."""
+        """Ultra-minimal system resource check to prevent crashes."""
         try:
             import psutil
             
-            # Quick memory check only (no CPU check to avoid blocking)
+            # Only check memory - skip CPU, disk, etc.
             memory = psutil.virtual_memory()
             free_memory_mb = memory.available / (1024 * 1024)
             
-            # Only check if memory is critically low (less than 50MB)
+            # Only fail if memory is critically low (less than 50MB)
             if free_memory_mb < 50:
-                print(f"⚠️ Critically low memory: {free_memory_mb:.1f}MB available")
+                print(f"⚠️ Critically low memory: {free_memory_mb:.1f}MB")
                 return False
             
-            print(f"✅ System resources OK - Memory: {free_memory_mb:.1f}MB")
             return True
             
-        except Exception as e:
-            print(f"⚠️ Error checking system resources: {e}")
-            # If we can't check resources, assume they're OK
+        except Exception:
+            # If we can't check resources, assume they're OK for speed
             return True

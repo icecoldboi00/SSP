@@ -47,11 +47,11 @@ class USBScreenView(QWidget):
         title.setStyleSheet("color: #36454F; font-size: 38px; font-weight: bold;")
         title.setWordWrap(True)
 
-        instruction = QLabel("The system will automatically detect the flashdrive")
+        instruction = QLabel("test")
         instruction.setAlignment(Qt.AlignCenter)
         instruction.setWordWrap(True)
         instruction.setStyleSheet("color: #36454F; font-size: 22px; line-height: 1.4;")
-        instruction.setMaximumWidth(800)
+        instruction.setMaximumWidth(1000)
 
         self.status_indicator = QLabel("Initializing...")
         self.status_indicator.setAlignment(Qt.AlignCenter)
@@ -157,13 +157,6 @@ class USBScreenView(QWidget):
         self.blink_timer.stop()
     
     
-    def show_message(self, title, text):
-        """Shows a message to the user."""
-        QMessageBox.information(self, title, text)
-    
-    def show_warning(self, title, text):
-        """Shows a warning message to the user."""
-        QMessageBox.warning(self, title, text)
     
     def get_initial_status_style(self):
         """Returns the initial style for the status indicator."""
@@ -193,4 +186,8 @@ class USBScreenView(QWidget):
     def hide_safety_warning(self):
         """Hides the safety warning message."""
         self.safety_warning.hide()
+    
+    def show_message(self, title, text):
+        """Shows a message to the user."""
+        QMessageBox.information(self, title, text)
 

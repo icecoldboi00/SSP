@@ -133,18 +133,18 @@ class PaymentHandler(QObject):
         # CRITICAL: Only process pulses from the actual coin acceptor pin (5)
         # Ignore all hopper sensor pulses (pins 10, 13) to prevent interference
         if gpio != self.COIN_PIN:
-            print(f"PaymentHandler: Ignoring pulse from GPIO {gpio} (not coin acceptor pin {self.COIN_PIN})")
+            # Removed console flooding print statement
             return
         
         if not self.accepting_payments or self.coin_cooldown_active:
-            print(f"PaymentHandler: Ignoring pulse - payments not accepting or cooldown active")
+            # Removed console flooding print statement
             return
         
         current_time = time.time()
         
         # Debounce check
         if current_time - self.coin_last_pulse_time < self.DEBOUNCE_TIME:
-            print(f"PaymentHandler: Ignoring pulse - too soon after last pulse ({current_time - self.coin_last_pulse_time:.3f}s)")
+            # Removed console flooding print statement
             return
         
         self.coin_pulse_count += 1
@@ -180,18 +180,18 @@ class PaymentHandler(QObject):
         # CRITICAL: Only process pulses from the actual bill acceptor pin (18)
         # Ignore all hopper sensor pulses (pins 10, 13) to prevent interference
         if gpio != self.BILL_PIN:
-            print(f"PaymentHandler: Ignoring bill pulse from GPIO {gpio} (not bill acceptor pin {self.BILL_PIN})")
+            # Removed console flooding print statement
             return
         
         if not self.accepting_payments:
-            print(f"PaymentHandler: Ignoring bill pulse - payments not accepting")
+            # Removed console flooding print statement
             return
         
         current_time = time.time()
         
         # Debounce check
         if current_time - self.bill_last_pulse_time < self.DEBOUNCE_TIME:
-            print(f"PaymentHandler: Ignoring bill pulse - too soon after last pulse ({current_time - self.bill_last_pulse_time:.3f}s)")
+            # Removed console flooding print statement
             return
         
         self.bill_pulse_count += 1

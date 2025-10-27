@@ -27,7 +27,7 @@ class USBFileManager:
         self._should_stop = False  # Flag to stop operations
     
     def get_usb_drives(self):
-        """Detect ONLY actual USB/removable drives - exclude all internal drives"""
+        """Detect ONLY actual USB/removable drives - optimized for speed"""
         usb_drives = []
         
         try:
@@ -39,13 +39,23 @@ class USBFileManager:
         return usb_drives
     
     def _get_linux_usb_drives(self):
-        """Linux-specific USB drive detection"""
+        """Linux-specific USB drive detection - light mode"""
         usb_drives = []
         
         try:
             partitions = psutil.disk_partitions()
             
+            # Limit number of partitions to check to prevent system load
+            max_partitions = 10
+            checked_count = 0
+            
             for partition in partitions:
+                if checked_count >= max_partitions:
+                    print(f"⚠️ Reached partition limit ({max_partitions}), stopping scan")
+                    break
+                
+                checked_count += 1
+                
                 # Check for typical USB mount points
                 usb_mount_patterns = [
                     '/media/',
@@ -63,8 +73,7 @@ class USBFileManager:
                 if is_usb_mount or is_removable:
                     try:
                         if os.path.exists(partition.mountpoint) and os.path.isdir(partition.mountpoint):
-                            # Try to access to ensure it's ready
-                            os.listdir(partition.mountpoint)
+                            # Light access check - no heavy operations
                             usb_drives.append(partition.mountpoint)
                             print(f"Found USB drive: {partition.mountpoint} ({partition.fstype})")
                     except (OSError, PermissionError):
@@ -75,49 +84,6 @@ class USBFileManager:
             
         return usb_drives
     
-    def _get_usb_drives_fallback(self):
-        """Fallback method for USB detection"""
-        usb_drives = []
-        
-        try:
-            partitions = psutil.disk_partitions()
-            print(f"Fallback method: Checking {len(partitions)} partitions")
-            
-            for partition in partitions:
-                print(f"Partition: {partition.device} -> {partition.mountpoint} (opts: {partition.opts})")
-                
-                # Check for removable drives
-                is_removable = 'removable' in partition.opts
-                
-                # Also check for common USB drive characteristics
-                is_likely_usb = (
-                    'removable' in partition.opts or
-                    partition.fstype in ['FAT32', 'FAT', 'exFAT', 'NTFS'] and
-                    partition.mountpoint and
-                    len(partition.mountpoint) == 3 and  # Drive letter like "C:\"
-                    partition.mountpoint.endswith('\\')
-                )
-                
-                if is_removable or is_likely_usb:
-                    try:
-                        if os.path.exists(partition.mountpoint):
-                            usage = psutil.disk_usage(partition.mountpoint)
-                            if usage.total > 0:
-                                # Additional size check - USB drives are typically smaller
-                                total_gb = usage.total / (1024**3)
-                                if total_gb < 2048:  # Less than 2TB
-                                    usb_drives.append(partition.mountpoint)
-                                    print(f"✅ Found removable drive: {partition.mountpoint} ({total_gb:.1f}GB)")
-                                else:
-                                    print(f"Drive {partition.mountpoint} too large ({total_gb:.1f}GB) - likely not USB")
-                    except (PermissionError, OSError) as e:
-                        print(f"❌ Cannot access {partition.mountpoint}: {e}")
-                        continue
-                        
-        except Exception as e:
-            print(f"❌ Error in fallback USB detection: {e}")
-            
-        return usb_drives
     
     def check_for_new_drives(self):
         """Check if new USB drives have been inserted"""
@@ -130,8 +96,8 @@ class USBFileManager:
         return list(new_drives), list(removed_drives)
     
     def scan_and_copy_pdf_files(self, source_dir):
-        """Scan for and copy PDF files from USB drive with safety checks"""
-        print(f"\n🔍 Starting scan_and_copy_pdf_files for {source_dir}")
+        """Scan for and copy PDF files from USB drive - light mode"""
+        print(f"\n🔍 Starting light scan_and_copy_pdf_files for {source_dir}")
         copied_files = []
 
         # Reset stop flag for new operation
@@ -150,15 +116,35 @@ class USBFileManager:
             self.set_current_drive(source_dir)
             self.set_operation_in_progress(True)
             
-            print(f"📂 Scanning and copying PDF files from {source_dir} to {self.destination_dir}")
+            print(f"📂 Light scanning and copying PDF files from {source_dir} to {self.destination_dir}")
+            
+            # Limit directory traversal to prevent system load
+            max_directories = 5
+            directory_count = 0
             
             for root, _, files in os.walk(source_dir):
+                if directory_count >= max_directories:
+                    print(f"⚠️ Reached directory limit ({max_directories}), stopping scan")
+                    break
+                
+                directory_count += 1
+                
                 # Check stop flag during directory traversal
                 if self._should_stop:
-                    print("🛑 Stop requested during file scanning, but continuing to complete current directory")
+                    print("🛑 Stop requested during file scanning")
+                    break
+                
+                # Limit number of files per directory
+                max_files_per_dir = 20
+                file_count = 0
                 
                 for filename in files:
+                    if file_count >= max_files_per_dir:
+                        print(f"⚠️ Reached file limit per directory ({max_files_per_dir}), skipping remaining")
+                        break
+                    
                     if filename.lower().endswith('.pdf'):
+                        file_count += 1
                         source_path = os.path.join(root, filename)
                         dest_path = os.path.join(self.destination_dir, filename)
                         
@@ -166,21 +152,21 @@ class USBFileManager:
                             # Mark file as in use
                             self.mark_file_in_use(source_path)
                             
-                            # Copy file and verify
-                            shutil.copy2(source_path, dest_path)
+                            # Light copy - use shutil.copy instead of copy2 for speed
+                            shutil.copy(source_path, dest_path)
                             if os.path.exists(dest_path):
                                 file_size = os.path.getsize(dest_path)
                                 print(f"✅ Copied {filename} ({file_size/1024:.1f} KB)")
                                 
-                                # Get PDF page count
+                                # Light PDF page count - skip if it takes too long
                                 try:
                                     import fitz  # PyMuPDF
                                     doc = fitz.open(dest_path)
                                     page_count = len(doc)
                                     doc.close()
                                 except Exception:
-                                    page_count = 1
-                                    print(f"⚠️ Could not get page count for {filename}")
+                                    page_count = 1  # Default to 1 page for speed
+                                    print(f"⚠️ Could not get page count for {filename}, defaulting to 1")
                                 
                                 copied_files.append({
                                     'filename': filename,
@@ -218,8 +204,6 @@ class USBFileManager:
             print(f"❌ Error in scan_and_copy_pdf_files: {str(e)}")
             # Ensure operation is marked as complete even on error
             self.set_operation_in_progress(False)
-            import traceback
-            traceback.print_exc()
             return []
     
     def stop_all_operations(self):
@@ -315,33 +299,6 @@ class USBFileManager:
             return None
     
 
-    def get_drive_info(self, drive_path):
-        """Get detailed information about a drive"""
-        try:
-            usage = psutil.disk_usage(drive_path)
-            total_gb = usage.total / (1024**3)
-            free_gb = usage.free / (1024**3)
-            used_gb = usage.used / (1024**3)
-        
-            # Try to get filesystem type
-            fs_type = "Unknown"
-            partitions = psutil.disk_partitions()
-            for partition in partitions:
-                if partition.mountpoint == drive_path:
-                    fs_type = partition.fstype
-                    break
-        
-            return {
-                'path': drive_path,
-                'total_gb': total_gb,
-                'free_gb': free_gb,
-                'used_gb': used_gb,
-                'filesystem': fs_type,
-                'is_removable': True  # All drives returned by get_usb_drives are removable
-            }
-        except Exception as e:
-            print(f"Error getting drive info for {drive_path}: {e}")
-            return None
     
     def set_current_drive(self, drive_path):
         """Set the current USB drive being used."""

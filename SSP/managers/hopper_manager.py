@@ -28,7 +28,7 @@ HOPPER_CONFIGS = {
         'enable_pin': 24   # Hopper enable control for Hopper A
     },
     'B': {
-        'signal_pin': 13,   # Coin pulse input for Hopper B
+        'signal_pin': 26,   # Coin pulse input for Hopper B
         'enable_pin': 25   # Hopper enable control for Hopper B
     }
 }
@@ -122,6 +122,7 @@ class HopperController:
         try:
             self.pi.write(self.enable_pin, 1) # Inactive high
             self.enabled = False
+            print(f"[{self.name}] Hopper motor DISABLED")
             return True
         except Exception as e:
             print(f"[{self.name}] ERROR: Failed to disable hopper: {e}")
@@ -141,7 +142,7 @@ class HopperController:
                 elapsed = pigpio.tickDiff(self.last_sensor_change, current_time) / 1000000.0
                 if elapsed > 0.01:  # Debounce: Minimum time for valid coin passage (10ms)
                     self.coin_passage_count += 1
-                    print(f"[{self.name}] SENSOR: Coin passage complete (took {elapsed:.3f}s). Total passages in this cycle: {self.coin_passage_count}")
+                    # Removed console flooding print statement
 
     def _wait_for_coin_passage(self):
         """Wait for exactly one coin passage through the sensor."""

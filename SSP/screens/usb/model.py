@@ -33,19 +33,19 @@ class USBMonitorThread(QThread):
                 if removed_drives and self.monitoring:  # Check monitoring state before emitting
                     self.usb_removed.emit(removed_drives[0])
                 
-                # Use shorter sleep intervals and check for stop more frequently
-                for _ in range(20):  # 20 * 100ms = 2 seconds total
+                # Optimized sleep - shorter intervals for faster detection
+                for _ in range(10):  # 10 * 50ms = 500ms total (faster response)
                     if not self.monitoring or self._should_stop:
                         break
-                    self.msleep(100)
+                    self.msleep(50)
                     
             except Exception as e:
                 print(f"Error in USBMonitorThread: {e}")
-                # Shorter error sleep too
-                for _ in range(50):  # 50 * 100ms = 5 seconds total
+                # Shorter error sleep for faster recovery
+                for _ in range(20):  # 20 * 50ms = 1 second total
                     if not self.monitoring or self._should_stop:
                         break
-                    self.msleep(100)
+                    self.msleep(50)
         
         print("🛑 USBMonitorThread finished")
 
@@ -179,46 +179,6 @@ class USBScreenModel(QObject):
             self.status_changed.emit("Error checking for USB drives.", 'error')
             print(f"Error during USB check: {e}")
     
-    def force_usb_scan(self):
-        """Force a comprehensive USB scan with detailed logging."""
-        try:
-            self.status_changed.emit("Performing comprehensive USB scan...", 'monitoring')
-            
-            # Stop monitoring temporarily
-            self.stop_usb_monitoring()
-            
-            # Get all drives using multiple methods
-            usb_drives = self.usb_manager.get_usb_drives()
-            
-            if not usb_drives:
-                # Try alternative detection methods
-                import psutil
-                all_partitions = psutil.disk_partitions()
-                print(f"All available partitions: {[(p.device, p.mountpoint, p.opts) for p in all_partitions]}")
-                
-                # Check for any accessible drives that might be USB
-                for partition in all_partitions:
-                    if partition.mountpoint and os.path.exists(partition.mountpoint):
-                        try:
-                            # Try to list contents to see if it's accessible
-                            contents = os.listdir(partition.mountpoint)
-                            print(f"Drive {partition.mountpoint} is accessible with {len(contents)} items")
-                            
-                            # If it's a single-letter drive (like D:, E:, F:), it might be USB
-                            if len(partition.mountpoint) == 3 and partition.mountpoint.endswith('\\'):
-                                drive_letter = partition.mountpoint[0]
-                                if drive_letter not in ['C', 'A', 'B']:  # Exclude system drives
-                                    usb_drives.append(partition.mountpoint)
-                                    print(f"✅ Added potential USB drive: {partition.mountpoint}")
-                        except Exception as e:
-                            print(f"❌ Cannot access {partition.mountpoint}: {e}")
-            
-            self.handle_usb_scan_result(usb_drives)
-            
-        except Exception as e:
-            self.status_changed.emit(f"Error during force scan: {str(e)}", 'error')
-            print(f"Error during force USB scan: {e}")
-    
     
     def handle_usb_scan_result(self, usb_drives):
         """Processes the results of a USB scan."""
@@ -265,11 +225,6 @@ class USBScreenModel(QObject):
         self.status_changed.emit("USB drive removed. You can insert another drive.", 'success')
         self.start_usb_monitoring()
     
-    def check_disk_safety(self):
-        """Check if the current USB drive is safe to remove - always safe after auto-eject."""
-        # After auto-eject, USB is always safe to remove
-        self.safety_warning_cleared.emit()
-        return True
     
     def set_returning_from_file_browser(self, returning=True):
         """Set flag to prevent auto-navigation when returning from file browser."""
