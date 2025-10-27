@@ -47,11 +47,11 @@ class USBScreenView(QWidget):
         title.setStyleSheet("color: #36454F; font-size: 38px; font-weight: bold;")
         title.setWordWrap(True)
 
-        instruction = QLabel("The system will automatically detect your device.")
+        instruction = QLabel("The system will automatically detect your storage device.")
         instruction.setAlignment(Qt.AlignCenter)
         instruction.setWordWrap(True)
-        instruction.setStyleSheet("color: #36454F; font-size: 22px; line-height: 1.4;")
-        instruction.setMaximumWidth(1000)
+        instruction.setStyleSheet("color: #36454F; font-size: 20px; line-height: 1.5; padding: 10px;")
+        instruction.setMaximumWidth(1200)
 
         self.status_indicator = QLabel("Initializing...")
         self.status_indicator.setAlignment(Qt.AlignCenter)
