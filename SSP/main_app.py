@@ -280,8 +280,8 @@ class PrintingSystemApp(QMainWindow):
             # 2. Update coin inventory (add received coins)
             self._update_coin_inventory_after_payment(payment_info)
             
-            # 3. Update paper count (subtract pages that will be printed)
-            self._update_paper_count_after_payment(payment_info)
+            # Note: Paper count is updated after successful printing, not after payment
+            # This ensures paper is only decremented if printing actually succeeds
             
             print(f"✅ Database updated immediately after payment completion")
             
@@ -404,6 +404,9 @@ class PrintingSystemApp(QMainWindow):
         
         # Update transaction status to 'completed' (already logged as 'paid')
         self._update_transaction_status_to_completed()
+        
+        # Update paper count after successful printing (before clearing print job)
+        self._update_paper_count_after_print()
         
         # Clean up session directory after successful printing
         self._cleanup_session_directory_after_print()
