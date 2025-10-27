@@ -3,6 +3,8 @@ import shutil
 import psutil
 import tempfile
 import platform
+import threading
+import time
 from datetime import datetime
 
 class USBFileManager:
@@ -25,6 +27,45 @@ class USBFileManager:
         self.files_in_use = set()  # Track files currently being processed
         self.operation_in_progress = False
         self._should_stop = False  # Flag to stop operations
+    
+    def _safe_pdf_page_count(self, file_path, timeout=5):
+        """Safely get PDF page count with timeout to prevent crashes."""
+        result = [1]  # Default fallback
+        
+        def get_page_count():
+            try:
+                import fitz  # PyMuPDF
+                doc = None
+                try:
+                    doc = fitz.open(file_path)
+                    result[0] = len(doc)
+                except Exception as pdf_error:
+                    print(f"⚠️ PDF error for {os.path.basename(file_path)}: {pdf_error}")
+                    result[0] = 1
+                finally:
+                    if doc:
+                        try:
+                            doc.close()
+                        except:
+                            pass
+            except ImportError:
+                print(f"⚠️ PyMuPDF not available for {os.path.basename(file_path)}")
+                result[0] = 1
+            except Exception as e:
+                print(f"⚠️ Unexpected error processing {os.path.basename(file_path)}: {e}")
+                result[0] = 1
+        
+        # Run in thread with timeout
+        thread = threading.Thread(target=get_page_count)
+        thread.daemon = True
+        thread.start()
+        thread.join(timeout)
+        
+        if thread.is_alive():
+            print(f"⚠️ PDF processing timeout for {os.path.basename(file_path)}, using default page count")
+            result[0] = 1
+        
+        return result[0]
     
     def get_usb_drives(self):
         """Detect ONLY actual USB/removable drives - optimized for speed"""
@@ -148,25 +189,35 @@ class USBFileManager:
                         source_path = os.path.join(root, filename)
                         dest_path = os.path.join(self.destination_dir, filename)
                         
+                        # Check file size to prevent memory issues
+                        try:
+                            source_size = os.path.getsize(source_path)
+                            if source_size > 50 * 1024 * 1024:  # 50MB limit
+                                print(f"⚠️ Skipping large file {filename} ({source_size/1024/1024:.1f} MB)")
+                                continue
+                        except Exception as size_error:
+                            print(f"⚠️ Could not check size of {filename}: {size_error}")
+                            continue
+                        
                         try:
                             # Mark file as in use
                             self.mark_file_in_use(source_path)
                             
-                            # Light copy - use shutil.copy instead of copy2 for speed
-                            shutil.copy(source_path, dest_path)
+                            # Light copy with error handling
+                            try:
+                                shutil.copy(source_path, dest_path)
+                            except Exception as copy_error:
+                                print(f"❌ Failed to copy {filename}: {copy_error}")
+                                self.mark_file_complete(source_path)
+                                continue
+                            
                             if os.path.exists(dest_path):
                                 file_size = os.path.getsize(dest_path)
                                 print(f"✅ Copied {filename} ({file_size/1024:.1f} KB)")
                                 
-                                # Light PDF page count - skip if it takes too long
-                                try:
-                                    import fitz  # PyMuPDF
-                                    doc = fitz.open(dest_path)
-                                    page_count = len(doc)
-                                    doc.close()
-                                except Exception:
-                                    page_count = 1  # Default to 1 page for speed
-                                    print(f"⚠️ Could not get page count for {filename}, defaulting to 1")
+                                # Safe PDF page count with timeout
+                                page_count = self._safe_pdf_page_count(dest_path, timeout=3)
+                                print(f"📄 {filename}: {page_count} pages")
                                 
                                 copied_files.append({
                                     'filename': filename,
