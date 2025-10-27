@@ -126,6 +126,10 @@ class PrintingSystemApp(QMainWindow):
         self.printer_manager.print_job_waiting.connect(self.on_print_waiting, Qt.QueuedConnection)
         print("DEBUG: Printer manager signals connected successfully with QueuedConnection")
         
+        # Connect payment signals after screens are ready
+        self.payment_screen.payment_completed.connect(self.on_payment_completed)
+        print("DEBUG: Payment signals connected successfully")
+        
         # Signal connection established successfully
         print("DEBUG: Signal connection established successfully")
 
@@ -162,9 +166,6 @@ class PrintingSystemApp(QMainWindow):
         if result.get('database_updated', False) and 'cmyk_levels' in result:
             print(f"CMYK levels updated: {result['cmyk_levels']}")
             self.db_threader.cmyk_levels_updated.emit(result['cmyk_levels'])
-
-        # Connect payment signals after screens are ready
-        self.payment_screen.payment_completed.connect(self.on_payment_completed)
 
     def check_paper_count_and_redirect(self, allow_admin_access=False):
         paper_count = self.admin_screen.get_paper_count()
