@@ -164,8 +164,6 @@ class PaymentController(QWidget):
         print("TIMEOUT: Payment screen timeout - returning to idle screen")
         # Properly clean up payment screen before navigating away
         self.on_leave()
-        # Additional safety: manually disable acceptors as backup
-        self._manual_disable_acceptors()
         self.main_app.show_screen('idle')
     
     def _reset_timeout(self):

@@ -124,9 +124,6 @@ class IdleController(QWidget):
         """Called by main_app when this screen becomes active."""
         print("Idle screen entered.")
         
-        # Manually disable acceptors to ensure they are turned off
-        self._disable_acceptors()
-        
         # Check paper count before allowing normal operation
         if self.main_app.check_paper_count_and_redirect():
             return  # Redirected to no paper screen, don't proceed with normal idle operations
@@ -136,5 +133,3 @@ class IdleController(QWidget):
     def on_leave(self):
         """Called by main_app when leaving this screen."""
         print("Idle screen left.")
-        # Ensure acceptors are still disabled when leaving idle screen
-        self._disable_acceptors()
