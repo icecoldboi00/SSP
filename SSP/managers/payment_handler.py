@@ -17,7 +17,7 @@ except ImportError:
 
 class PaymentHandler(QObject):
     """
-    Dedicated payment handler for coin and bill acceptors.
+    Payment handler based on the working coinbill.py implementation.
     Handles GPIO operations, pulse detection, and payment processing.
     """
     
@@ -33,70 +33,62 @@ class PaymentHandler(QObject):
         self.pi = None
         self.gpio_available = PIGPIO_AVAILABLE
         
-        # GPIO Pin Configuration
+        # GPIO Pin Configuration (based on coinbill.py)
         self.COIN_PIN = 5          # Coin acceptor signal pin
         self.BILL_PIN = 18         # Bill acceptor signal pin
-        self.COIN_INHIBIT_PIN = 22 # Coin acceptor control pin
-        self.BILL_INHIBIT_PIN = 23 # Bill acceptor control pin
+        self.INHIBIT_PIN = 23      # Bill acceptor control pin
         
         # Payment state
         self.coin_enabled = False
         self.bill_enabled = False
         self.accepting_payments = False
         
-        # Pulse detection
+        # Pulse detection (based on coinbill.py)
         self.coin_pulse_count = 0
         self.bill_pulse_count = 0
         self.coin_last_pulse_time = 0
         self.bill_last_pulse_time = 0
         
-        # Timing constants
-        self.DEBOUNCE_TIME = 0.2      # Minimum time between pulses
-        self.COIN_TIMEOUT = 0.3       # Time to wait for coin completion
-        self.BILL_TIMEOUT = 0.5       # Time to wait for bill completion
-        
-        # Cooldown management
-        self.coin_cooldown_active = False
-        self.coin_cooldown_duration = 0.5  # 500ms cooldown after coin detection
-        
-        # Pulse aggregation
-        self.pulse_aggregation_timer = None
-        self.pulse_aggregation_timeout = 0.3  # 300ms to collect all pulses from one coin
+        # Timing constants (based on coinbill.py)
+        self.COIN_TIMEOUT = 0.3     # Time to wait for coin completion
+        self.PULSE_TIMEOUT = 0.5    # Time to wait for bill completion
+        self.DEBOUNCE_TIME = 0.1    # Minimum time between pulses
         
         # Callbacks
         self.coin_callback = None
         self.bill_callback = None
         
-        print("PaymentHandler initialized")
+        # Processing thread
+        self.processing_thread = None
+        self.stop_processing = False
+        
+        print("PaymentHandler initialized (based on coinbill.py)")
     
     def initialize(self) -> bool:
-        """Initialize GPIO connection and setup with SEPARATE pigpio instance."""
+        """Initialize GPIO connection and setup."""
         if not self.gpio_available:
             print("PaymentHandler: GPIO not available - running in simulation mode")
             return False
         
         try:
-            # Create SEPARATE pigpio connection for payments only
-            # This ensures complete isolation from hopper manager
+            # Create pigpio connection
             self.pi = pigpio.pi()
             if not self.pi.connected:
                 print("PaymentHandler: Failed to connect to pigpio daemon")
                 return False
             
-            print("PaymentHandler: Successfully connected to SEPARATE pigpio daemon for payments")
-            print("PaymentHandler: This connection is COMPLETELY ISOLATED from hopper manager")
+            print("PaymentHandler: Successfully connected to pigpio daemon")
             
-            # Setup GPIO pins
+            # Setup GPIO pins (based on coinbill.py)
             self._setup_gpio_pins()
             
             # Set initial state (disabled)
             self.disable_all_acceptors()
             
-            print("PaymentHandler: Payment system initialization complete - ISOLATED from hoppers")
+            # Start processing thread
+            self._start_processing_thread()
             
-            # Verify complete isolation
-            self.verify_isolation()
-            
+            print("PaymentHandler: Payment system initialization complete")
             return True
             
         except Exception as e:
@@ -104,7 +96,7 @@ class PaymentHandler(QObject):
             return False
     
     def _setup_gpio_pins(self):
-        """Setup GPIO pins for coin and bill acceptors."""
+        """Setup GPIO pins based on coinbill.py implementation."""
         try:
             # Setup coin acceptor
             self.pi.set_mode(self.COIN_PIN, pigpio.INPUT)
@@ -114,134 +106,87 @@ class PaymentHandler(QObject):
             # Setup bill acceptor
             self.pi.set_mode(self.BILL_PIN, pigpio.INPUT)
             self.pi.set_pull_up_down(self.BILL_PIN, pigpio.PUD_UP)
-            self.bill_callback = self.pi.callback(self.BILL_PIN, pigpio.FALLING_EDGE, self._bill_pulse_detected)
+            self.pi.set_mode(self.INHIBIT_PIN, pigpio.OUTPUT)
             
-            # Setup control pins
-            self.pi.set_mode(self.COIN_INHIBIT_PIN, pigpio.OUTPUT)
-            self.pi.set_mode(self.BILL_INHIBIT_PIN, pigpio.OUTPUT)
-            
-            print(f"PaymentHandler: GPIO pins configured - Coin: {self.COIN_PIN}, Bill: {self.BILL_PIN}")
-            print(f"PaymentHandler: Monitoring ONLY pins {self.COIN_PIN} and {self.BILL_PIN} for payments")
-            print(f"PaymentHandler: COMPLETELY ISOLATED from hopper manager - no shared resources")
-            print(f"PaymentHandler: Hopper sensor pins (10, 13) are handled by separate hopper manager")
+            print(f"PaymentHandler: GPIO pins configured - Coin: {self.COIN_PIN}, Bill: {self.BILL_PIN}, Inhibit: {self.INHIBIT_PIN}")
             
         except Exception as e:
             print(f"PaymentHandler: GPIO setup failed - {e}")
             raise
     
     def _coin_pulse_detected(self, gpio, level, tick):
-        """Handle coin pulse detection."""
-        # CRITICAL: Only process pulses from the actual coin acceptor pin (5)
-        # Ignore all hopper sensor pulses (pins 10, 13) to prevent interference
+        """Handle coin pulse detection (based on coinbill.py)."""
         if gpio != self.COIN_PIN:
-            # Removed console flooding print statement
-            return
-        
-        if not self.accepting_payments or self.coin_cooldown_active:
-            # Removed console flooding print statement
-            return
-        
-        current_time = time.time()
-        
-        # Debounce check
-        if current_time - self.coin_last_pulse_time < self.DEBOUNCE_TIME:
-            # Removed console flooding print statement
-            return
-        
-        self.coin_pulse_count += 1
-        self.coin_last_pulse_time = current_time
-        
-        print(f"PaymentHandler: Valid coin pulse detected - GPIO: {gpio}, Count: {self.coin_pulse_count}")
-        
-        # Start aggregation timer to collect all pulses from a single coin
-        self._start_pulse_aggregation()
-    
-    def _start_pulse_aggregation(self):
-        """Start pulse aggregation timer to collect all pulses from one coin."""
-        if self.pulse_aggregation_timer:
-            # Cancel existing timer
-            self.pulse_aggregation_timer.cancel()
-        
-        # Start new timer
-        self.pulse_aggregation_timer = threading.Timer(
-            self.pulse_aggregation_timeout, 
-            self._on_pulse_aggregation_timeout
-        )
-        self.pulse_aggregation_timer.start()
-        print(f"PaymentHandler: Started pulse aggregation timer ({self.pulse_aggregation_timeout}s)")
-    
-    def _on_pulse_aggregation_timeout(self):
-        """Called when pulse aggregation timeout occurs."""
-        print(f"PaymentHandler: Pulse aggregation timeout - processing {self.coin_pulse_count} pulses")
-        self._process_coin_detection()
-        self.pulse_aggregation_timer = None
-    
-    def _bill_pulse_detected(self, gpio, level, tick):
-        """Handle bill pulse detection."""
-        # CRITICAL: Only process pulses from the actual bill acceptor pin (18)
-        # Ignore all hopper sensor pulses (pins 10, 13) to prevent interference
-        if gpio != self.BILL_PIN:
-            # Removed console flooding print statement
             return
         
         if not self.accepting_payments:
-            # Removed console flooding print statement
             return
         
         current_time = time.time()
         
         # Debounce check
-        if current_time - self.bill_last_pulse_time < self.DEBOUNCE_TIME:
-            # Removed console flooding print statement
+        if current_time - self.coin_last_pulse_time > self.DEBOUNCE_TIME:
+            self.coin_pulse_count += 1
+            self.coin_last_pulse_time = current_time
+            print(f"PaymentHandler: Coin pulse detected - Count: {self.coin_pulse_count}")
+    
+    def _bill_pulse_detected(self, gpio, level, tick):
+        """Handle bill pulse detection (based on coinbill.py)."""
+        if gpio != self.BILL_PIN:
             return
         
-        self.bill_pulse_count += 1
-        self.bill_last_pulse_time = current_time
+        if not self.accepting_payments:
+            return
         
-        print(f"PaymentHandler: Valid bill pulse detected - GPIO: {gpio}, Count: {self.bill_pulse_count}")
+        current_time = time.time()
         
-        # Process bill detection
-        self._process_bill_detection()
+        # Debounce check
+        if current_time - self.bill_last_pulse_time > self.DEBOUNCE_TIME:
+            self.bill_pulse_count += 1
+            self.bill_last_pulse_time = current_time
+            print(f"PaymentHandler: Bill pulse detected - Count: {self.bill_pulse_count}")
     
-    def _process_coin_detection(self):
-        """Process detected coin and emit signal."""
-        if self.coin_pulse_count >= 1:
-            value, is_special = self._get_coin_value(self.coin_pulse_count)
-            if value > 0:
-                if is_special:
-                    print(f"PaymentHandler: Processing special coin - {value} peso (cannot be given as change)")
-                    self.special_coin_inserted.emit(value)
-                else:
-                    print(f"PaymentHandler: Processing regular coin - {value} peso")
-                    self.coin_inserted.emit(value)
+    def _start_processing_thread(self):
+        """Start the processing thread (based on coinbill.py main loop)."""
+        self.stop_processing = False
+        self.processing_thread = threading.Thread(target=self._processing_loop, daemon=True)
+        self.processing_thread.start()
+        print("PaymentHandler: Processing thread started")
+    
+    def _processing_loop(self):
+        """Main processing loop (based on coinbill.py)."""
+        while not self.stop_processing:
+            try:
+                now = time.time()
                 
-                # Start cooldown to prevent double detection
-                self._start_coin_cooldown()
-            
-            # Reset pulse count
-            self.coin_pulse_count = 0
-    
-    def _process_bill_detection(self):
-        """Process detected bill and emit signal."""
-        if self.bill_pulse_count >= 1:
-            value = self._get_bill_value(self.bill_pulse_count)
-            if value > 0:
-                print(f"PaymentHandler: Processing bill - {value} peso")
-                self.bill_inserted.emit(value)
-            
-            # Reset pulse count
-            self.bill_pulse_count = 0
+                # Process coin pulses
+                if self.coin_pulse_count > 0 and (now - self.coin_last_pulse_time > self.COIN_TIMEOUT):
+                    value, is_special = self._get_coin_value(self.coin_pulse_count)
+                    if value > 0:
+                        if is_special:
+                            print(f"PaymentHandler: Processing special coin - {value} peso (cannot be given as change)")
+                            self.special_coin_inserted.emit(value)
+                        else:
+                            print(f"PaymentHandler: Processing regular coin - {value} peso")
+                            self.coin_inserted.emit(value)
+                    self.coin_pulse_count = 0
+                
+                # Process bill pulses
+                if self.bill_pulse_count > 0 and (now - self.bill_last_pulse_time > self.PULSE_TIMEOUT):
+                    value = self._get_bill_value(self.bill_pulse_count)
+                    if value > 0:
+                        print(f"PaymentHandler: Processing bill - {value} peso")
+                        self.bill_inserted.emit(value)
+                    self.bill_pulse_count = 0
+                
+                time.sleep(0.05)  # Small delay to prevent excessive CPU usage
+                
+            except Exception as e:
+                print(f"PaymentHandler: Error in processing loop - {e}")
+                time.sleep(0.1)
     
     def _get_coin_value(self, pulses: int) -> tuple:
-        """Convert pulse count to coin value based on actual coin acceptor behavior."""
-        print(f"PaymentHandler: Analyzing {pulses} pulses for coin value")
-        
-        # Based on your logs, coins generate multiple pulses:
-        # 1 peso = 1 pulse (correct)
-        # 5 peso = 2 pulses (detected as two 1 peso coins)
-        # 10 peso = 4 pulses (detected as four 1 peso coins)  
-        # 20 peso = many pulses (detected as many 1 peso coins)
-        
+        """Convert pulse count to coin value (based on coinbill.py)."""
         if 3 <= pulses <= 4:
             return (1, False)  # (value, is_special)
         elif 5 <= pulses <= 6:   
@@ -256,7 +201,7 @@ class PaymentHandler(QObject):
             return (0, False)  # (value, is_special)
     
     def _get_bill_value(self, pulses: int) -> int:
-        """Convert pulse count to bill value."""
+        """Convert pulse count to bill value (based on coinbill.py)."""
         if pulses == 2:
             return 20  # ₱20 bill
         elif pulses == 5:
@@ -269,18 +214,6 @@ class PaymentHandler(QObject):
             print(f"PaymentHandler: Unknown bill pulse count: {pulses}")
             return 0
     
-    def _start_coin_cooldown(self):
-        """Start cooldown period to prevent double coin detection."""
-        self.coin_cooldown_active = True
-        print("PaymentHandler: Starting coin cooldown")
-        
-        def end_cooldown():
-            time.sleep(self.coin_cooldown_duration)
-            self.coin_cooldown_active = False
-            print("PaymentHandler: Coin cooldown ended")
-        
-        threading.Thread(target=end_cooldown, daemon=True).start()
-    
     def enable_payments(self):
         """Enable both coin and bill acceptors."""
         if not self.gpio_available or not self.pi:
@@ -288,22 +221,20 @@ class PaymentHandler(QObject):
             return False
         
         try:
-            # Reset pulse counts to prevent ghost coins
+            # Reset pulse counts
             self.coin_pulse_count = 0
             self.bill_pulse_count = 0
-            self.coin_cooldown_active = False
             
-            # Enable coin acceptor (HIGH = enabled)
-            self.pi.write(self.COIN_INHIBIT_PIN, 1)
-            self.coin_enabled = True
-            
-            # Enable bill acceptor (LOW = enabled)
-            self.pi.write(self.BILL_INHIBIT_PIN, 0)
+            # Enable bill acceptor (LOW = enabled, HIGH = disabled)
+            self.pi.write(self.INHIBIT_PIN, 0)
             self.bill_enabled = True
+            
+            # Coins are always enabled (no inhibit pin)
+            self.coin_enabled = True
             
             self.accepting_payments = True
             
-            print("PaymentHandler: Payment acceptors enabled - pulse counts reset")
+            print("PaymentHandler: Payment acceptors enabled")
             self.payment_status.emit("Payment acceptors enabled - Insert coins or bills")
             self.acceptor_state_changed.emit(True)
             
@@ -320,13 +251,12 @@ class PaymentHandler(QObject):
             return False
         
         try:
-            # Disable coin acceptor (LOW = disabled)
-            self.pi.write(self.COIN_INHIBIT_PIN, 0)
-            self.coin_enabled = False
-            
             # Disable bill acceptor (HIGH = disabled)
-            self.pi.write(self.BILL_INHIBIT_PIN, 1)
+            self.pi.write(self.INHIBIT_PIN, 1)
             self.bill_enabled = False
+            
+            # Coins are always enabled (no inhibit pin)
+            self.coin_enabled = True
             
             self.accepting_payments = False
             
@@ -344,8 +274,7 @@ class PaymentHandler(QObject):
         """Disable all acceptors (startup state)."""
         if self.gpio_available and self.pi:
             try:
-                self.pi.write(self.COIN_INHIBIT_PIN, 0)  # Disable coin acceptor
-                self.pi.write(self.BILL_INHIBIT_PIN, 1)  # Disable bill acceptor
+                self.pi.write(self.INHIBIT_PIN, 1)  # Disable bill acceptor
                 self.coin_enabled = False
                 self.bill_enabled = False
                 self.accepting_payments = False
@@ -361,17 +290,8 @@ class PaymentHandler(QObject):
             'coin_enabled': self.coin_enabled,
             'bill_enabled': self.bill_enabled,
             'accepting_payments': self.accepting_payments,
-            'coin_cooldown_active': self.coin_cooldown_active,
-            'isolated_from_hoppers': True  # Confirms complete separation
+            'processing_thread_active': self.processing_thread and self.processing_thread.is_alive()
         }
-    
-    def verify_isolation(self):
-        """Verify that payment handler is completely isolated from hopper manager."""
-        print("PaymentHandler: Verifying complete isolation from hopper manager...")
-        print(f"PaymentHandler: Using SEPARATE pigpio connection: {self.pi}")
-        print(f"PaymentHandler: Monitoring ONLY payment pins: {self.COIN_PIN}, {self.BILL_PIN}")
-        print(f"PaymentHandler: NOT monitoring hopper pins: 10, 13")
-        print("PaymentHandler: ✅ COMPLETE ISOLATION CONFIRMED")
     
     def test_coin_detection(self, value: int = 1):
         """Test coin detection by simulating a coin insertion."""
@@ -393,6 +313,11 @@ class PaymentHandler(QObject):
         """Clean up GPIO resources."""
         try:
             print("PaymentHandler: Starting cleanup...")
+            
+            # Stop processing thread
+            self.stop_processing = True
+            if self.processing_thread and self.processing_thread.is_alive():
+                self.processing_thread.join(timeout=1.0)
             
             # Disable all acceptors first
             if self.gpio_available and self.pi:
@@ -427,20 +352,10 @@ class PaymentHandler(QObject):
                 finally:
                     self.pi = None
             
-            # Cancel pulse aggregation timer
-            if self.pulse_aggregation_timer:
-                try:
-                    self.pulse_aggregation_timer.cancel()
-                except Exception as e:
-                    print(f"PaymentHandler: Error canceling pulse aggregation timer - {e}")
-                finally:
-                    self.pulse_aggregation_timer = None
-            
             # Reset all state
             self.coin_enabled = False
             self.bill_enabled = False
             self.accepting_payments = False
-            self.coin_cooldown_active = False
             self.coin_pulse_count = 0
             self.bill_pulse_count = 0
             
