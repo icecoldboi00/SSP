@@ -16,7 +16,6 @@ class AdminModel(QObject):
         self.db_manager = DatabaseManager()
         self.paper_count = 100
         self.sms_alert_sent = False
-        self.coin_alert_sent = {'peso_1': False, 'peso_5': False}  # Track coin alerts
         self._loading_cmyk = False  # Flag to prevent recursive calls
         
         # Initialize SMS manager with error handling
@@ -149,9 +148,6 @@ class AdminModel(QObject):
             self.coin_count_changed.emit(coin_1_count, coin_5_count)
             print(f"Coin counts loaded: ₱1={coin_1_count}, ₱5={coin_5_count}")
             
-            # Check for low coin alerts after loading
-            self._check_low_coin_alerts(coin_1_count, coin_5_count)
-            
         except Exception as e:
             print(f"Error loading coin counts: {e}")
             self.coin_count_changed.emit(0, 0)
@@ -168,9 +164,6 @@ class AdminModel(QObject):
             self.db_manager.update_cash_inventory(1, new_count, 'coin')
             self.load_coin_counts()
             print(f"₱1 coin count updated to {new_count}")
-            
-            # Check for low coin alerts after update
-            self._check_low_coin_alerts(new_count, None)
 
         except ValueError:
             self.show_message.emit("Invalid Input", "Please enter a valid number for ₱1 coins.")
@@ -188,9 +181,6 @@ class AdminModel(QObject):
             self.db_manager.update_cash_inventory(5, new_count, 'coin')
             self.load_coin_counts()
             print(f"₱5 coin count updated to {new_count}")
-            
-            # Check for low coin alerts after update
-            self._check_low_coin_alerts(None, new_count)
 
         except ValueError:
             self.show_message.emit("Invalid Input", "Please enter a valid number for ₱5 coins.")
@@ -410,78 +400,6 @@ class AdminModel(QObject):
             print("Low ink alert flags reset - cartridges appear to be refilled")
         except Exception as e:
             print(f"Error resetting ink alerts: {e}")
-
-    def _check_low_coin_alerts(self, coin_1_count=None, coin_5_count=None):
-        """Check coin levels and send SMS alerts for low coins."""
-        try:
-            # Get current counts if not provided
-            if coin_1_count is None or coin_5_count is None:
-                inventory = self.db_manager.get_cash_inventory()
-                if coin_1_count is None:
-                    coin_1_count = 0
-                    for item in inventory:
-                        if item['denomination'] == 1 and item['type'] == 'coin':
-                            coin_1_count = item['count']
-                            break
-                if coin_5_count is None:
-                    coin_5_count = 0
-                    for item in inventory:
-                        if item['denomination'] == 5 and item['type'] == 'coin':
-                            coin_5_count = item['count']
-                            break
-            
-            low_coin_thresholds = {'peso_1': 5, 'peso_5': 3}  # Your specified thresholds
-            low_coins = []
-            
-            # Check ₱1 coins
-            if coin_1_count <= low_coin_thresholds['peso_1']:
-                if not self.coin_alert_sent['peso_1']:
-                    low_coins.append(('₱1', coin_1_count))
-                    self.coin_alert_sent['peso_1'] = True
-                    print(f"Low coin alert flag set for ₱1 coins ({coin_1_count} remaining)")
-            else:
-                # Reset alert flag if coins are above threshold (refilled)
-                if self.coin_alert_sent['peso_1']:
-                    self.coin_alert_sent['peso_1'] = False
-                    print(f"Low coin alert flag reset for ₱1 coins ({coin_1_count} remaining) - coins refilled")
-            
-            # Check ₱5 coins
-            if coin_5_count <= low_coin_thresholds['peso_5']:
-                if not self.coin_alert_sent['peso_5']:
-                    low_coins.append(('₱5', coin_5_count))
-                    self.coin_alert_sent['peso_5'] = True
-                    print(f"Low coin alert flag set for ₱5 coins ({coin_5_count} remaining)")
-            else:
-                # Reset alert flag if coins are above threshold (refilled)
-                if self.coin_alert_sent['peso_5']:
-                    self.coin_alert_sent['peso_5'] = False
-                    print(f"Low coin alert flag reset for ₱5 coins ({coin_5_count} remaining) - coins refilled")
-            
-            # Send SMS alerts if any coins are low
-            if low_coins:
-                try:
-                    from managers.sms_manager import send_multiple_low_coins_sms, send_low_coin_sms
-                    if len(low_coins) == 1:
-                        # Single coin type low
-                        coin_type, count = low_coins[0]
-                        send_low_coin_sms(coin_type, count)
-                        print(f"SMS alert sent for low {coin_type} coins ({count} remaining)")
-                    else:
-                        # Multiple coin types low
-                        send_multiple_low_coins_sms(low_coins)
-                        print(f"SMS alert sent for {len(low_coins)} low coin types")
-                except Exception as e:
-                    print(f"Error sending low coin SMS alert: {e}")
-            else:
-                print("All coin levels are above threshold")
-                
-        except Exception as e:
-            print(f"Error checking coin levels for SMS alerts: {e}")
-    
-    def reset_coin_alerts(self):
-        """Reset all coin alert flags (call this when coins are refilled)."""
-        self.coin_alert_sent = {'peso_1': False, 'peso_5': False}
-        print("Low coin alert flags reset - coins refilled")
 
     def _get_color_for_count(self, count: int) -> str:
         """Determines the display color based on the paper count."""
