@@ -191,12 +191,14 @@ class PrinterThread(QThread):
         
         config = get_config()
         max_wait_time = config.printer_timeout * 10
-        post_completion_wait = 5  # Wait 5 seconds after completion
+        min_print_time = 10  # Minimum time to wait for physical printing (15 seconds)
+        post_completion_wait = 5  # Wait 10 seconds after completion detection
         check_interval = 2
         elapsed_time = 0
         completion_time = None
+        printer_was_active = False
         
-        print(f"🖨️ Starting print completion monitoring (timeout: {max_wait_time}s)")
+        print(f"🖨️ Starting print completion monitoring (timeout: {max_wait_time}s, min_print_time: {min_print_time}s)")
         
         while elapsed_time < max_wait_time:
             try:
@@ -221,6 +223,7 @@ class PrinterThread(QThread):
                                 # Check if printer is actively printing (has cups-waiting-for-job-completed)
                                 if "cups-waiting-for-job-completed" in alerts_found:
                                     printer_actively_printing = True
+                                    printer_was_active = True
                                     print(f"🖨️ Printer '{target_printer}' still processing/printing (cups-waiting-for-job-completed)")
                                 
                                 # Check for specific error conditions
@@ -253,9 +256,16 @@ class PrinterThread(QThread):
                                 print(f"✅ Printer '{target_printer}' is idle (no alerts)")
                             break
                 
-                # Simple completion logic: no printer actively printing
+                # Enhanced completion logic with minimum wait time
                 if not printer_actively_printing:
-                    # No printer is actively printing
+                    # Ensure minimum print time has passed
+                    if elapsed_time < min_print_time:
+                        print(f"⏳ Waiting for minimum print time ({min_print_time}s) - {elapsed_time}s elapsed")
+                        time.sleep(check_interval)
+                        elapsed_time += check_interval
+                        continue
+                    
+                    # No printer is actively printing and minimum time has passed
                     if completion_time is None:
                         completion_time = elapsed_time
                         print(f"✅ Print job completed after {elapsed_time}s, monitoring for {post_completion_wait}s...")
@@ -263,10 +273,10 @@ class PrinterThread(QThread):
                         # Check if post-completion monitoring is complete
                         time_since_completion = elapsed_time - completion_time
                         if time_since_completion >= post_completion_wait:
-                            print(f"✅ Print job successful - no printers actively printing")
+                            print(f"✅ Print job successful - no printers actively printing for {post_completion_wait}s")
                             return True
                 else:
-                    print(f"⏳ Waiting for printer '{active_printer}' to finish printing...")
+                    print(f"⏳ Waiting for printer '{target_printer}' to finish printing...")
                     
                 time.sleep(check_interval)
                 elapsed_time += check_interval
