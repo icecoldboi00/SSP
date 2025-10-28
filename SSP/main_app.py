@@ -166,6 +166,9 @@ class PrintingSystemApp(QMainWindow):
         if result.get('database_updated', False) and 'cmyk_levels' in result:
             print(f"CMYK levels updated: {result['cmyk_levels']}")
             self.db_threader.cmyk_levels_updated.emit(result['cmyk_levels'])
+        
+        # Always clean up temp PDF after analysis completes
+        self.printer_manager.cleanup_last_temp_pdf()
 
     def check_paper_count_and_redirect(self, allow_admin_access=False):
         paper_count = self.admin_screen.get_paper_count()
@@ -478,28 +481,6 @@ class PrintingSystemApp(QMainWindow):
             # Clean up temp PDF even if analysis fails
             self.printer_manager.cleanup_last_temp_pdf()
     
-    def _on_ink_analysis_completed(self, operation):
-        print(f"DEBUG: _on_ink_analysis_completed called with operation: {operation}")
-        
-        # Handle both dictionary and object formats
-        if isinstance(operation, dict):
-            # Direct dictionary result
-            if operation.get('success', False) and operation.get('database_updated', False):
-                print("✅ Ink levels updated in database")
-        else:
-            # Object format
-            if hasattr(operation, 'error') and operation.error:
-                print(f"⚠️ Ink analysis failed: {operation.error}")
-            else:
-                result = operation.result if hasattr(operation, 'result') else operation
-                if result.get('success', False) and result.get('database_updated', False):
-                    print("✅ Ink levels updated in database")
-        
-        print(f"DEBUG: Ink analysis completed, database updates already done after print success")
-        
-        # Always clean up temp PDF after analysis completes
-        self.printer_manager.cleanup_last_temp_pdf()
-
     def _update_paper_count_after_print(self):
         if not hasattr(self, 'current_print_job') or not self.current_print_job:
             print("⚠️ No print job info available for paper count update")
