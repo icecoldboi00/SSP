@@ -1,7 +1,6 @@
 # screens/print_options/model.py
 
 import fitz
-import cv2
 import numpy as np
 from typing import List, Dict
 from PyQt5.QtCore import QObject, pyqtSignal, QThread

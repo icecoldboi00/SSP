@@ -231,8 +231,7 @@ class DatabaseManager:
         """Get the current CMYK ink levels."""
         import threading
         current_thread = threading.current_thread()
-        print(f"DEBUG: get_cmyk_ink_levels called from thread: {current_thread.name} (id: {current_thread.ident})")
-        print(f"DEBUG: Database connection: {self.conn}")
+        # Debug info removed for cleaner output
         
         if not self.conn:
             print("DEBUG: No database connection available")
@@ -276,13 +275,25 @@ class DatabaseManager:
         if not self.conn:
             return False
         try:
+            # Get current levels to calculate deducted amounts
+            current_levels = self.get_cmyk_ink_levels()
+            
             # Ensure values are properly converted to float
             cyan_float = float(cyan)
             magenta_float = float(magenta)
             yellow_float = float(yellow)
             black_float = float(black)
             
-            print(f"DEBUG: Storing CMYK values as floats: C:{cyan_float}, M:{magenta_float}, Y:{yellow_float}, K:{black_float}")
+            # Calculate deducted amounts if we have current levels
+            if current_levels:
+                deducted_cyan = current_levels['cyan'] - cyan_float
+                deducted_magenta = current_levels['magenta'] - magenta_float
+                deducted_yellow = current_levels['yellow'] - yellow_float
+                deducted_black = current_levels['black'] - black_float
+                
+                print(f"Ink Deducted - C: {deducted_cyan:.5f}%, M: {deducted_magenta:.5f}%, Y: {deducted_yellow:.5f}%, K: {deducted_black:.5f}%")
+            else:
+                print(f"Ink Levels Updated - C: {cyan_float:.1f}%, M: {magenta_float:.1f}%, Y: {yellow_float:.1f}%, K: {black_float:.1f}%")
             
             cursor = self.conn.cursor()
             cursor.execute("""

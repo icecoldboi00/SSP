@@ -65,6 +65,9 @@ class InkAnalysisManager:
                 avg_k, avg_c, avg_m, avg_y, analyzed_pages
             )
             
+            # Print ink usage percentages
+            print(f"Ink Usage - C: {job_costs_dict['cyan']:.2f}%, M: {job_costs_dict['magenta']:.2f}%, Y: {job_costs_dict['yellow']:.2f}%, K: {job_costs_dict['black']:.2f}%")
+            
             result = {
                 'success': True,
                 'total_pages': total_pages,
@@ -201,19 +204,19 @@ class InkAnalysisManager:
             job_costs = analysis_result['job_costs']
             copies_factor = copies
             
-            # Calculate new levels based on color mode          
-            if color_mode.lower() == "monochrome" or color_mode.lower() == "black and white":
-                # For monochrome printing, only deduct from black (K)
-                new_cyan = current_levels['cyan']
-                new_magenta = current_levels['magenta']
-                new_yellow = current_levels['yellow']
-                new_black = max(0, current_levels['black'] - (job_costs['black'] * copies_factor))
-            else:
-                # For color printing, deduct from each cartridge individually
-                new_cyan = max(0, current_levels['cyan'] - (job_costs['cyan'] * copies_factor))
-                new_magenta = max(0, current_levels['magenta'] - (job_costs['magenta'] * copies_factor))
-                new_yellow = max(0, current_levels['yellow'] - (job_costs['yellow'] * copies_factor))
-                new_black = max(0, current_levels['black'] - (job_costs['black'] * copies_factor))
+            # Deduct actual ink usage from all cartridges regardless of color mode
+            deducted_cyan = job_costs['cyan'] * copies_factor
+            deducted_magenta = job_costs['magenta'] * copies_factor
+            deducted_yellow = job_costs['yellow'] * copies_factor
+            deducted_black = job_costs['black'] * copies_factor
+            
+            new_cyan = max(0, current_levels['cyan'] - deducted_cyan)
+            new_magenta = max(0, current_levels['magenta'] - deducted_magenta)
+            new_yellow = max(0, current_levels['yellow'] - deducted_yellow)
+            new_black = max(0, current_levels['black'] - deducted_black)
+            
+            # Print deducted amounts
+            print(f"Ink Deducted - C: {deducted_cyan:.2f}%, M: {deducted_magenta:.2f}%, Y: {deducted_yellow:.2f}%, K: {deducted_black:.2f}%")
             
             # Update database
             success = self.db_manager.update_cmyk_ink_levels(
