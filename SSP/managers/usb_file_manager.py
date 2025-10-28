@@ -240,31 +240,56 @@ class USBFileManager:
             return []
     
     def copy_selected_file(self, file_info):
-        """Copy only the selected file to temp directory for printing"""
+        """Copy only the selected file to temp directory for printing.
+        Does not mutate the input dict; returns a new dict on success.
+        Skips copying if the file is already in the current session directory.
+        """
         try:
-            source_path = file_info['path']
-            filename = file_info['filename']
-            
-            # Create temp directory if it doesn't exist
+            # Defensive copy; never mutate caller's dict
+            result_info = dict(file_info) if isinstance(file_info, dict) else None
+            if not result_info or 'path' not in result_info or 'filename' not in result_info:
+                print("❌ Invalid file info provided to copy_selected_file")
+                return None
+
+            source_path = result_info['path']
+            filename = result_info['filename']
+
+            # Ensure we have a session directory
             if not hasattr(self, 'destination_dir') or not self.destination_dir:
                 self._create_new_session()
-            
+
+            # If the file already resides within the current session dir and exists, skip copying
+            if isinstance(source_path, str) and source_path.startswith(self.destination_dir) and os.path.exists(source_path):
+                print(f"↪️ File already in session directory, skipping copy: {filename}")
+                return result_info
+
             dest_path = os.path.join(self.destination_dir, filename)
-            
+
+            # If destination is the same as source, skip copying
+            if os.path.abspath(dest_path) == os.path.abspath(source_path):
+                print(f"↪️ Source and destination are the same, skipping copy: {filename}")
+                return result_info
+
+            # Ensure destination directory exists
+            os.makedirs(self.destination_dir, exist_ok=True)
+
             print(f"📋 Copying selected file: {filename}")
-            shutil.copy(source_path, dest_path)
-            
+            try:
+                shutil.copy2(source_path, dest_path)
+            except shutil.SameFileError:
+                print(f"↪️ Same file detected during copy, skipping: {filename}")
+                return result_info
+
             if os.path.exists(dest_path):
                 file_size = os.path.getsize(dest_path)
                 print(f"✅ Copied {filename} ({file_size/1024:.1f} KB)")
-                
-                # Update file info with new path
-                file_info['path'] = dest_path
-                return file_info
+                # Return new dict with updated path
+                result_info['path'] = dest_path
+                return result_info
             else:
                 print(f"❌ Failed to copy {filename}")
                 return None
-                
+
         except Exception as e:
             print(f"❌ Error copying selected file: {e}")
             return None
