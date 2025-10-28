@@ -133,9 +133,9 @@ class PrintingSystemApp(QMainWindow):
 
     
     def _on_ink_analysis_completed(self, operation):
-        if operation.result and operation.result.get('database_updated', False) and 'cmyk_levels' in operation.result:
-            print(f"CMYK levels updated: {operation.result['cmyk_levels']}")
-            self.db_threader.cmyk_levels_updated.emit(operation.result['cmyk_levels'])
+        if operation and operation.get('database_updated', False) and 'cmyk_levels' in operation:
+            print(f"CMYK levels updated: {operation['cmyk_levels']}")
+            self.db_threader.cmyk_levels_updated.emit(operation['cmyk_levels'])
         
         # Always clean up temp PDF after analysis completes
         self.printer_manager.cleanup_last_temp_pdf()
