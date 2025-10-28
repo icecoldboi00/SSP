@@ -162,10 +162,10 @@ class PrintingSystemApp(QMainWindow):
         # Connect payment and printing signals (will be connected after screens are initialized)
         # This connection happens after all screens are created to avoid AttributeErrors
     
-    def _on_ink_analysis_completed(self, result):
-        if result.get('database_updated', False) and 'cmyk_levels' in result:
-            print(f"CMYK levels updated: {result['cmyk_levels']}")
-            self.db_threader.cmyk_levels_updated.emit(result['cmyk_levels'])
+    def _on_ink_analysis_completed(self, operation):
+        if operation.result and operation.result.get('database_updated', False) and 'cmyk_levels' in operation.result:
+            print(f"CMYK levels updated: {operation.result['cmyk_levels']}")
+            self.db_threader.cmyk_levels_updated.emit(operation.result['cmyk_levels'])
         
         # Always clean up temp PDF after analysis completes
         self.printer_manager.cleanup_last_temp_pdf()
@@ -425,6 +425,10 @@ class PrintingSystemApp(QMainWindow):
         current_screen = self.stacked_widget.currentWidget()
         
         if current_screen == self.thank_you_screen:
+            self.thank_you_screen.finish_printing()
+        elif current_screen == self.idle_screen:
+            # Print completed while on idle screen - this is normal, just finish
+            print("✅ Print completed while on idle screen - finishing normally")
             self.thank_you_screen.finish_printing()
         else:
             # Print job completed but we're on wrong screen - navigate first
