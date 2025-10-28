@@ -36,7 +36,7 @@ class PaymentHandler(QObject):
         # Pin configuration (exact from coinbill.py + GPIO 22 for coin inhibit)
         self.COIN_PIN = 5          # Coin pulse input pin
         self.BILL_PIN = 18         # Bill pulse input pin
-        self.COIN_INHIBIT_PIN = 22 # Coin acceptor disable pin (active high)
+        self.COIN_INHIBIT_PIN = 22 # Coin acceptor disable pin (active low)
         self.BILL_INHIBIT_PIN = 23 # Bill acceptor disable pin (active high)
         
         # Pulse counting variables (exact from coinbill.py)
@@ -239,8 +239,8 @@ class PaymentHandler(QObject):
             self.coin_pulse_count = 0
             self.bill_pulse_count = 0
             
-            # Enable coin acceptor (LOW = enabled, HIGH = disabled)
-            self.pi.write(self.COIN_INHIBIT_PIN, 0)
+            # Enable coin acceptor (HIGH = enabled, LOW = disabled - active low)
+            self.pi.write(self.COIN_INHIBIT_PIN, 1)
             self.coin_enabled = True
             
             # Enable bill acceptor (LOW = enabled, HIGH = disabled)
@@ -266,8 +266,8 @@ class PaymentHandler(QObject):
             return False
         
         try:
-            # Disable coin acceptor (HIGH = disabled)
-            self.pi.write(self.COIN_INHIBIT_PIN, 1)
+            # Disable coin acceptor (LOW = disabled - active low)
+            self.pi.write(self.COIN_INHIBIT_PIN, 0)
             self.coin_enabled = False
             
             # Disable bill acceptor (HIGH = disabled)
@@ -290,7 +290,7 @@ class PaymentHandler(QObject):
         """Disable all acceptors (startup state)."""
         if self.gpio_available and self.pi:
             try:
-                self.pi.write(self.COIN_INHIBIT_PIN, 1)  # Disable coin acceptor
+                self.pi.write(self.COIN_INHIBIT_PIN, 0)  # Disable coin acceptor (active low)
                 self.pi.write(self.BILL_INHIBIT_PIN, 1)  # Disable bill acceptor
                 self.coin_enabled = False
                 self.bill_enabled = False
