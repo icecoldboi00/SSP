@@ -257,6 +257,8 @@ class InkAnalysisManager:
         # Check for low ink levels and send SMS alerts if needed
         if update_success:
             self._check_and_send_low_ink_alerts()
+            # Also check coin levels after ink check
+            self._check_and_send_low_coin_alerts()
         
         return analysis_result
     
@@ -324,3 +326,51 @@ class InkAnalysisManager:
             'black': False
         }
         print("Low ink alert flags reset - cartridges refilled")
+    
+    def _check_and_send_low_coin_alerts(self):
+        """Check current coin levels and send SMS alerts for coins below threshold."""
+        try:
+            # Get current coin counts from database
+            inventory = self.db_manager.get_cash_inventory()
+            coin_1_count = 0
+            coin_5_count = 0
+            
+            for item in inventory:
+                if item['denomination'] == 1 and item['type'] == 'coin':
+                    coin_1_count = item['count']
+                elif item['denomination'] == 5 and item['type'] == 'coin':
+                    coin_5_count = item['count']
+            
+            low_coin_thresholds = {'peso_1': 5, 'peso_5': 3}  # Your specified thresholds
+            low_coins = []
+            
+            # Check ₱1 coins
+            if coin_1_count <= low_coin_thresholds['peso_1']:
+                low_coins.append(('₱1', coin_1_count))
+                print(f"Low ₱1 coins detected ({coin_1_count} remaining)")
+            
+            # Check ₱5 coins
+            if coin_5_count <= low_coin_thresholds['peso_5']:
+                low_coins.append(('₱5', coin_5_count))
+                print(f"Low ₱5 coins detected ({coin_5_count} remaining)")
+            
+            # Send SMS alerts if any coins are low
+            if low_coins:
+                try:
+                    from managers.sms_manager import send_multiple_low_coins_sms, send_low_coin_sms
+                    if len(low_coins) == 1:
+                        # Single coin type low
+                        coin_type, count = low_coins[0]
+                        send_low_coin_sms(coin_type, count)
+                        print(f"SMS alert sent for low {coin_type} coins ({count} remaining)")
+                    else:
+                        # Multiple coin types low
+                        send_multiple_low_coins_sms(low_coins)
+                        print(f"SMS alert sent for {len(low_coins)} low coin types")
+                except Exception as e:
+                    print(f"Error sending low coin SMS alert: {e}")
+            else:
+                print("All coin levels are above threshold")
+                
+        except Exception as e:
+            print(f"Error checking coin levels for SMS alerts: {e}")

@@ -112,32 +112,6 @@ class SMSManager(QObject):
             self.sms_failed.emit(error_msg)
             return False
     
-    def send_low_paper_alert(self):
-        """Send low paper alert SMS."""
-        message = "Low paper, please refill."
-        return self.send_sms(message)
-    
-    def send_paper_jam_alert(self):
-        """Send paper jam alert SMS."""
-        message = "Printer jam"
-        return self.send_sms(message)
-    
-    def send_printing_error_alert(self, error_message):
-        """Send printing error alert SMS."""
-        message = f"Printing error: {error_message}"
-        return self.send_sms(message)
-    
-    def send_low_ink_alert(self, ink_type, level):
-        """Send low ink alert SMS for a specific cartridge."""
-        message = f"ALERT: {ink_type} ink is low ({level:.1f}%). Please refill soon."
-        return self.send_sms(message)
-    
-    def send_multiple_low_ink_alert(self, low_cartridges):
-        """Send SMS alert for multiple low ink cartridges."""
-        cartridge_list = ", ".join([f"{cartridge} ({level:.1f}%)" for cartridge, level in low_cartridges])
-        message = f"ALERT: Multiple ink cartridges are low - {cartridge_list}. Please refill soon."
-        return self.send_sms(message)
-    
     def close(self):
         """Close the serial connection."""
         if self.ser and self.ser.is_open:
@@ -244,6 +218,19 @@ def send_multiple_low_ink_sms(low_cartridges):
     manager = get_sms_manager()
     cartridge_list = ", ".join([f"{cartridge} ({level:.1f}%)" for cartridge, level in low_cartridges])
     message = f"ALERT: Multiple ink cartridges are low - {cartridge_list}. Please refill soon."
+    return manager.send_sms_and_close(message)
+
+def send_low_coin_sms(coin_type, count):
+    """Send low coin SMS alert."""
+    manager = get_sms_manager()
+    message = f"ALERT: Low on {coin_type} coins ({count} remaining). Please refill soon."
+    return manager.send_sms_and_close(message)
+
+def send_multiple_low_coins_sms(low_coins):
+    """Send SMS alert for multiple low coin types."""
+    manager = get_sms_manager()
+    coin_list = ", ".join([f"{coin_type} ({count} remaining)" for coin_type, count in low_coins])
+    message = f"ALERT: Multiple coin types are low - {coin_list}. Please refill soon."
     return manager.send_sms_and_close(message)
 
 def cleanup_sms():
