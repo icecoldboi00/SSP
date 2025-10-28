@@ -1,4 +1,5 @@
 from PyQt5.QtWidgets import QWidget, QMessageBox
+import os
 from PyQt5.QtCore import Qt, pyqtSignal, QTimer
 from .model import FileBrowserModel
 from .view import FileBrowserView
@@ -108,6 +109,19 @@ class FileBrowserController(QWidget):
         if not copied_file:
             QMessageBox.critical(self, "File Copy Error", "Failed to copy the selected PDF file.")
             return
+        
+        # Verify the copied file path exists and is within the current session
+        file_path = copied_file.get('path') if isinstance(copied_file, dict) else None
+        if not file_path or not os.path.exists(file_path):
+            QMessageBox.critical(self, "File Not Found", "The copied PDF file could not be found. Please try again.")
+            return
+
+        usb_manager = getattr(getattr(self.main_app, 'usb_screen', None), 'model', None)
+        usb_manager = getattr(usb_manager, 'usb_manager', None)
+        if usb_manager and hasattr(usb_manager, 'verify_file_in_session'):
+            if not usb_manager.verify_file_in_session(file_path):
+                QMessageBox.critical(self, "Invalid File", "The copied PDF is not available in the current session.")
+                return
         
         # Pass data to print options screen
         print(f"🔍 Calling set_pdf_data with PDF: {copied_file['filename']} and pages: {selected_pages_list}")

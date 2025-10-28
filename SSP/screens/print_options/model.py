@@ -3,6 +3,7 @@
 import fitz
 import numpy as np
 from typing import List, Dict
+import os
 from PyQt5.QtCore import QObject, pyqtSignal, QThread
 from config import get_config
 
@@ -186,6 +187,12 @@ class PrintOptionsModel(QObject):
             self.analysis_started.emit()
             
             pdf_path = self.selected_pdf['path']
+            # Validate path before starting analysis
+            if not pdf_path or not os.path.exists(pdf_path):
+                error_msg = f"PDF file not found: {pdf_path}"
+                print(error_msg)
+                self.analysis_error.emit(error_msg)
+                return
             self.analysis_thread = AnalysisThread(self.analyzer, pdf_path, self.selected_pages, user_wants_color)
             self.analysis_thread.analysis_complete.connect(self.on_analysis_finished)
             self.analysis_thread.start()
