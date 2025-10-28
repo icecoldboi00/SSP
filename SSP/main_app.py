@@ -18,13 +18,9 @@ from managers.printer_manager import PrinterManager
 from managers.db_threader import DatabaseThreadManager
 from managers.ink_analysis_threader import InkAnalysisThreadManager
 from managers.sms_manager import cleanup_sms
-# Removed persistent GPIO import - using GPIOPaymentThread instead
 from config import get_config
+from managers.usb_file_manager import USBFileManager
 
-try:
-    from managers.usb_file_manager import USBFileManager
-except Exception as e:
-    print(f"❌ Failed to import USBFileManager: {e}")
 
 
 class PrintingSystemApp(QMainWindow):
@@ -73,25 +69,18 @@ class PrintingSystemApp(QMainWindow):
         self.printer_manager = PrinterManager()
         
         # Initialize USB file manager for session management
-        try:
-            self.usb_file_manager = USBFileManager()
-            print("✅ USB file manager initialized successfully")
-        except Exception as e:
-            print(f"❌ ERROR: Failed to initialize USB file manager: {e}")
-            self.usb_file_manager = None
+
+        self.usb_file_manager = USBFileManager()
+        print("USB file manager initialized successfully")
+
         
         # Track low paper alert to prevent multiple SMS
         self.low_paper_alert_sent = False
         
         # Initialize remaining screens that depend on other components
-        try:
-            print("🔄 Initializing data viewer screen...")
-            self.data_viewer_screen = DataViewerController(self, self.admin_screen.db_manager)
-            print("✅ Data viewer screen initialized successfully")
-        except Exception as e:
-            print(f"❌ ERROR: Failed to initialize data viewer screen: {e}")
-            # Create a dummy data viewer to prevent crashes
-            self.data_viewer_screen = None
+        self.data_viewer_screen = DataViewerController(self, self.admin_screen.db_manager)
+        print("Data viewer screen initialized successfully")
+
             
         self.thank_you_screen = ThankYouController(self)
 
@@ -102,36 +91,23 @@ class PrintingSystemApp(QMainWindow):
         self.stacked_widget.addWidget(self.printing_options_screen)
         self.stacked_widget.addWidget(self.payment_screen)
         self.stacked_widget.addWidget(self.admin_screen)
-        
-        # Only add data viewer if it was initialized successfully
-        if self.data_viewer_screen is not None:
-            self.stacked_widget.addWidget(self.data_viewer_screen)
-        else:
-            print("⚠️ Data viewer screen not available - skipping")
-            
+        self.stacked_widget.addWidget(self.data_viewer_screen)
         self.stacked_widget.addWidget(self.thank_you_screen)
-
-        # Payment acceptors will be managed by the payment handler
-        print("🔄 Payment acceptors will be managed by payment handler...")
-        # Note: Manual GPIO operations removed to prevent conflicts with payment handler
         
         # Show idle screen as initial screen
         self.show_screen('idle')
         
         # Connect printer manager signals immediately after initialization
-        print("DEBUG: Connecting printer manager signals after initialization")
         from PyQt5.QtCore import Qt
         self.printer_manager.print_job_successful.connect(self.on_print_successful, Qt.QueuedConnection)
         self.printer_manager.print_job_failed.connect(self.on_print_failed, Qt.QueuedConnection)
         self.printer_manager.print_job_waiting.connect(self.on_print_waiting, Qt.QueuedConnection)
-        print("DEBUG: Printer manager signals connected successfully with QueuedConnection")
         
         # Connect payment signals after screens are ready
         self.payment_screen.payment_completed.connect(self.on_payment_completed)
-        print("DEBUG: Payment signals connected successfully")
         
         # Signal connection established successfully
-        print("DEBUG: Signal connection established successfully")
+        print("Signals established successfully")
 
         # Apply application-wide styles
         self.setStyleSheet("""
@@ -141,9 +117,6 @@ class PrintingSystemApp(QMainWindow):
         """)
     
     def _setup_display(self):
-        """
-        Configure display settings - keep original resolution but go fullscreen.
-        """
         # Set the original window size
         self.setGeometry(100, 100, 1280, 720)
         self.setMinimumSize(1280, 720)
@@ -152,15 +125,12 @@ class PrintingSystemApp(QMainWindow):
         self.setWindowFlags(Qt.Window | Qt.FramelessWindowHint)
         
         # Go fullscreen on startup
-        print("🖥️ Starting in fullscreen mode")
         self.showFullScreen()
     
     def _connect_thread_managers(self):
         # Connect ink analysis completion for database updates
         self.ink_analysis_threader.analysis_completed.connect(self._on_ink_analysis_completed)
-        
-        # Connect payment and printing signals (will be connected after screens are initialized)
-        # This connection happens after all screens are created to avoid AttributeErrors
+
     
     def _on_ink_analysis_completed(self, operation):
         if operation.result and operation.result.get('database_updated', False) and 'cmyk_levels' in operation.result:
@@ -173,7 +143,7 @@ class PrintingSystemApp(QMainWindow):
     def check_paper_count_and_redirect(self, allow_admin_access=False):
         paper_count = self.admin_screen.get_paper_count()
         if paper_count <= 1:
-            print(f"⚠️ Low paper detected: {paper_count} pages remaining. Redirecting to error screen.")
+            print(f"Low paper detected: {paper_count} pages remaining. Redirecting to error screen.")
             self.show_screen('thank_you')
             # Show the no paper error on the thank you screen
             self.thank_you_screen.show_no_paper_error(paper_count)
@@ -182,7 +152,7 @@ class PrintingSystemApp(QMainWindow):
 
     def show_screen(self, screen_name):
         if screen_name not in self.SCREEN_MAP:
-            print(f"❌ ERROR: Unknown screen name: {screen_name}")
+            print(f"ERROR: Unknown screen name: {screen_name}")
             return
 
         # Call on_leave lifecycle method for current screen
@@ -202,53 +172,46 @@ class PrintingSystemApp(QMainWindow):
         
         # Call on_enter lifecycle method for new screen
         new_widget = self.stacked_widget.currentWidget()
-        print(f"DEBUG: show_screen - new_widget: {new_widget}")
-        print(f"DEBUG: show_screen - hasattr(new_widget, 'on_enter'): {hasattr(new_widget, 'on_enter')}")
         if hasattr(new_widget, 'on_enter'):
-            print(f"DEBUG: show_screen - calling new_widget.on_enter()")
             try:
                 new_widget.on_enter()
-                print(f"DEBUG: show_screen - new_widget.on_enter() completed")
             except Exception as e:
                 print(f"ERROR: show_screen - new_widget.on_enter() failed with error: {e}")
                 import traceback
                 traceback.print_exc()
 
     def on_payment_completed(self, payment_info):
-        print(f"💰 Payment completed. Starting print job for {payment_info['pdf_data']['filename']}")
-        print(f"🔍 Print details: {payment_info['copies']} copies, {payment_info['color_mode']}, pages: {payment_info['selected_pages']}")
-        
         # Store payment info for later use in transaction logging and inventory updates
         self.current_payment_info = payment_info
-        print(f"DEBUG: Stored payment info: {payment_info}")
+        print(f"Stored payment info: {payment_info}")
         
         # CRITICAL FIX: Update database immediately after payment completion
         # This ensures database is updated even if printing fails
-        print(f"💾 Updating database immediately after payment completion...")
+        print(f"Updating database immediately")
         self._update_database_after_payment(payment_info)
         
         # Navigate to thank you screen first (before checking printer)
-        print(f"🔄 Navigating to thank you screen...")
+        print(f"Navigating to thank you screen...")
         self.show_screen('thank_you')
         
         # Verify file exists before printing
         file_path = payment_info['pdf_data']['path']
-        print(f"🔍 Verifying file before printing: {file_path}")
+        print(f"Verifying file before printing: {file_path}")
         
         # Use USB file manager to verify file is in current session
         if hasattr(self, 'usb_file_manager') and self.usb_file_manager:
             if not self.usb_file_manager.verify_file_in_session(file_path):
-                print(f"❌ PDF file not found in current session: {file_path}")
+                print(f"PDF file not found in current session: {file_path}")
                 self.thank_you_screen.show_printing_error(f"PDF file not found: {os.path.basename(file_path)}")
                 return
         elif not os.path.exists(file_path):
-            print(f"❌ PDF file not found: {file_path}")
+            print(f"PDF file not found: {file_path}")
             self.thank_you_screen.show_printing_error(f"PDF file not found: {os.path.basename(file_path)}")
             return
         
         # Check printer availability before starting print job
         if not self.printer_manager.check_printer_availability():
-            print(f"❌ Printer not available")
+            print(f"Printer not available")
             self.thank_you_screen.show_printing_error("Printer is not available. Please check printer connection.")
             return
         
@@ -259,7 +222,7 @@ class PrintingSystemApp(QMainWindow):
             'copies': payment_info['copies'],
             'color_mode': payment_info['color_mode']
         }
-        print(f"✅ Print job details stored: {self.current_print_job}")
+        print(f"Print job details stored")
         
         # Start print job
         try:
@@ -269,15 +232,13 @@ class PrintingSystemApp(QMainWindow):
                 color_mode=payment_info['color_mode'],
                 selected_pages=payment_info['selected_pages']
             )
-            print(f"✅ Print job started successfully")
+            print(f"Print job started successfully")
         except Exception as e:
-            print(f"❌ Error starting print job: {e}")
+            print(f"Error starting print job: {e}")
             self.thank_you_screen.show_printing_error(f"Failed to start print job: {str(e)}")
 
     def _update_database_after_payment(self, payment_info):
         try:
-            print(f"💾 Starting immediate database update after payment...")
-            
             # 1. Log transaction immediately
             self._log_transaction_immediately(payment_info)
             
@@ -287,17 +248,17 @@ class PrintingSystemApp(QMainWindow):
             # Note: Paper count is updated after successful printing, not after payment
             # This ensures paper is only decremented if printing actually succeeds
             
-            print(f"✅ Database updated immediately after payment completion")
+            print(f"Database updated")
             
         except Exception as e:
-            print(f"❌ Error updating database after payment: {e}")
+            print(f"Error updating database: {e}")
             import traceback
             traceback.print_exc()
 
     def _log_transaction_immediately(self, payment_info):
         """Log transaction to database immediately after payment."""
         try:
-            print(f"💾 Logging transaction immediately...")
+            print(f"Logging transaction")
             
             # Extract transaction data
             pdf_data = payment_info.get('pdf_data', {})
@@ -315,22 +276,20 @@ class PrintingSystemApp(QMainWindow):
                 'status': 'paid'  # Mark as paid, will update to 'completed' after printing
             }
             
-            print(f"💾 Transaction data: {transaction_data}")
-            
             # Log to database
             if hasattr(self, 'admin_screen') and self.admin_screen:
                 self.admin_screen.model.db_manager.log_transaction(transaction_data)
-                print(f"✅ Transaction logged immediately: {transaction_data['file_name']}")
+                print(f"Transaction logged immediately: {transaction_data['file_name']}")
             else:
-                print(f"⚠️ No admin screen available for transaction logging")
+                print(f"No admin screen available for transaction logging")
                 
         except Exception as e:
-            print(f"❌ Error logging transaction immediately: {e}")
+            print(f"Error logging transaction immediately: {e}")
 
     def _update_coin_inventory_after_payment(self, payment_info):
         """Update coin inventory after payment completion."""
         try:
-            print(f"💰 Updating coin inventory after payment...")
+            print(f"Updating coin inventory")
             
             # Get payment screen model to access coin data
             if hasattr(self, 'payment_screen') and self.payment_screen:
@@ -338,45 +297,45 @@ class PrintingSystemApp(QMainWindow):
                 
                 # Add received coins to inventory
                 if hasattr(payment_model, 'cash_received') and payment_model.cash_received:
-                    print(f"💰 Adding received coins: {payment_model.cash_received}")
+                    print(f"Adding received coins: {payment_model.cash_received}")
                     self._update_coin_inventory_items(payment_model.cash_received, add=True)
                 
                 # Subtract dispensed change from inventory
                 if hasattr(payment_model, 'change_dispensed') and payment_model.change_dispensed:
-                    print(f"💰 Subtracting dispensed change: {payment_model.change_dispensed}")
+                    print(f"Subtracting dispensed change: {payment_model.change_dispensed}")
                     self._update_coin_inventory_items(payment_model.change_dispensed, add=False)
                 
-                print(f"✅ Coin inventory updated after payment")
+                print(f"Coin inventory updated after payment")
             else:
-                print(f"⚠️ No payment screen available for coin inventory update")
+                print(f"No payment screen available for coin inventory update")
                 
         except Exception as e:
-            print(f"❌ Error updating coin inventory after payment: {e}")
+            print(f"Error updating coin inventory: {e}")
 
     def _update_paper_count_after_payment(self, payment_info):
         """Update paper count after payment completion."""
         try:
-            print(f"📄 Updating paper count after payment...")
+            print(f"Updating paper count")
             
             # Calculate total pages that will be printed
             selected_pages = payment_info.get('selected_pages', [])
             copies = payment_info.get('copies', 1)
             total_pages = len(selected_pages) * copies
             
-            print(f"📄 Deducting {total_pages} pages from inventory")
+            print(f"Deducting {total_pages} pages from inventory")
             
             # Update paper count
             if hasattr(self, 'admin_screen') and self.admin_screen:
                 success = self.admin_screen.model.decrement_paper_count(total_pages)
                 if success:
-                    print(f"✅ Paper count updated: -{total_pages} pages")
+                    print(f"Paper count updated: -{total_pages} pages")
                 else:
-                    print(f"❌ Failed to update paper count")
+                    print(f"Failed to update paper count")
             else:
-                print(f"⚠️ No admin screen available for paper count update")
+                print(f"No admin screen available for paper count update")
                 
         except Exception as e:
-            print(f"❌ Error updating paper count after payment: {e}")
+            print(f"Error updating paper count after payment: {e}")
 
     def _cleanup_session_directory_after_print(self):
         """Clean up the session directory after successful printing."""
@@ -385,26 +344,18 @@ class PrintingSystemApp(QMainWindow):
                 # Get the current session directory
                 session_dir = self.usb_file_manager.get_current_session_directory()
                 if session_dir and os.path.exists(session_dir):
-                    print(f"🧹 Cleaning up session directory after successful print: {session_dir}")
                     import shutil
                     shutil.rmtree(session_dir)
-                    print(f"✅ Session directory cleaned up: {session_dir}")
+                    print(f"Session directory cleaned up: {session_dir}")
                 else:
-                    print(f"ℹ️ No session directory to clean up")
+                    print(f"No session directory to clean up")
             else:
-                print(f"ℹ️ No USB file manager available for cleanup")
+                print(f"No USB file manager available for cleanup")
         except Exception as e:
-            print(f"⚠️ Error cleaning up session directory: {e}")
+            print(f"Error cleaning up session directory: {e}")
 
     def on_print_successful(self):
-        """
-        Handle successful print job completion.
-        
-        Triggers ink analysis and updates the thank you screen to show completion status.
-        If not currently on the thank you screen, navigates to it first.
-        """
-        print("✅ Print job successfully completed")
-        print(f"DEBUG: on_print_successful called, about to trigger ink analysis")
+        print("Print job successfully completed")
         
         # Update transaction status to 'completed' (already logged as 'paid')
         self._update_transaction_status_to_completed()
@@ -419,7 +370,6 @@ class PrintingSystemApp(QMainWindow):
         self._trigger_ink_analysis()
         
         # Clear the print job after successful completion to prevent re-printing
-        print(f"DEBUG: Clearing current_print_job after successful completion")
         self.current_print_job = None
         
         current_screen = self.stacked_widget.currentWidget()
@@ -428,18 +378,17 @@ class PrintingSystemApp(QMainWindow):
             self.thank_you_screen.finish_printing()
         elif current_screen == self.idle_screen:
             # Print completed while on idle screen - this is normal, just finish
-            print("✅ Print completed while on idle screen - finishing normally")
             self.thank_you_screen.finish_printing()
         else:
             # Print job completed but we're on wrong screen - navigate first
-            print(f"⚠️ Print completed on wrong screen ({type(current_screen).__name__}), navigating to thank you screen")
+            print(f"Print completed on wrong screen, navigating to thank you screen")
             self.show_screen('thank_you')
             QTimer.singleShot(100, lambda: self.thank_you_screen.finish_printing())
 
     def _update_transaction_status_to_completed(self):
         """Update the transaction status from 'paid' to 'completed' after successful printing."""
         try:
-            print(f"💾 Updating transaction status to 'completed'...")
+            print(f"Updating transaction status to 'completed'")
             
             if hasattr(self, 'current_payment_info') and self.current_payment_info:
                 pdf_data = self.current_payment_info.get('pdf_data', {})
@@ -449,22 +398,21 @@ class PrintingSystemApp(QMainWindow):
                 if hasattr(self, 'admin_screen') and self.admin_screen:
                     # This would require a method to update transaction status
                     # For now, we'll just log that the print was successful
-                    print(f"✅ Transaction marked as completed for: {file_name}")
+                    print(f"Transaction marked as completed for: {file_name}")
             else:
-                print(f"⚠️ No current payment info available for status update")
+                print(f"No current payment info available for status update")
                 
         except Exception as e:
-            print(f"❌ Error updating transaction status: {e}")
+            print(f"Error updating transaction status: {e}")
     
     def _trigger_ink_analysis(self):
-        print(f"DEBUG: _trigger_ink_analysis called")
         if not hasattr(self, 'current_print_job') or not self.current_print_job:
-            print("⚠️ No print job info available for ink analysis")
+            print("No print job info available for ink analysis")
             return
         
         # Get the temp PDF path from printer manager
         if not hasattr(self.printer_manager, 'last_temp_pdf_path') or not self.printer_manager.last_temp_pdf_path:
-            print("⚠️ No temp PDF available for ink analysis")
+            print("No temp PDF available for ink analysis")
             return
         
         temp_pdf_path = self.printer_manager.last_temp_pdf_path
@@ -481,13 +429,13 @@ class PrintingSystemApp(QMainWindow):
                 callback=self._on_ink_analysis_completed
             )
         except Exception as e:
-            print(f"⚠️ Error triggering ink analysis: {e}")
+            print(f"Error triggering ink analysis: {e}")
             # Clean up temp PDF even if analysis fails
             self.printer_manager.cleanup_last_temp_pdf()
     
     def _update_paper_count_after_print(self):
         if not hasattr(self, 'current_print_job') or not self.current_print_job:
-            print("⚠️ No print job info available for paper count update")
+            print("No print job info available for paper count update")
             return
         
         try:
@@ -496,8 +444,7 @@ class PrintingSystemApp(QMainWindow):
             copies = self.current_print_job.get('copies', 1)
             total_pages = len(selected_pages) * copies
             
-            print(f"📄 Updating paper count: -{total_pages} pages (pages: {len(selected_pages)}, copies: {copies})")
-            print(f"DEBUG: current_print_job details: {self.current_print_job}")
+            print(f"Updating paper count: -{total_pages} pages (pages: {len(selected_pages)}, copies: {copies})")
             
             # Use direct database access instead of async threader
             if hasattr(self, 'admin_screen') and self.admin_screen:
@@ -507,77 +454,69 @@ class PrintingSystemApp(QMainWindow):
                     new_count = max(0, current_count - total_pages)
                     
                     # Update paper count directly through admin screen
-                    print(f"DEBUG: Calling decrement_paper_count with {total_pages} pages")
                     success = self.admin_screen.model.decrement_paper_count(total_pages)
-                    print(f"DEBUG: decrement_paper_count returned: {success}")
                     
                     if success:
-                        print(f"✅ Paper count updated: {current_count} -> {new_count}")
+                        print(f"Paper count updated: {current_count} -> {new_count}")
                         
                         # Verify the update by checking the database again
                         updated_count = self.admin_screen.get_paper_count()
-                        print(f"DEBUG: Verified paper count in database: {updated_count}")
+                        print(f"Verified paper count in database: {updated_count}")
                         
                         # Check for low paper alert (only send once)
                         if new_count <= 10 and not self.low_paper_alert_sent:
-                            print(f"⚠️ Low paper alert: {new_count} sheets remaining")
+                            print(f"Low paper alert: {new_count} sheets remaining")
                             self.low_paper_alert_sent = True
                         elif new_count > 10:
                             # Reset flag if paper count goes back above threshold
                             self.low_paper_alert_sent = False
                     else:
-                        print("❌ Failed to update paper count")
+                        print("Failed to update paper count")
                 else:
-                    print("⚠️ Could not retrieve current paper count")
+                    print("Could not retrieve current paper count")
             else:
-                print("⚠️ No admin screen available for paper count update")
+                print("No admin screen available for paper count update")
                 
         except Exception as e:
-            print(f"❌ Error updating paper count: {e}")
+            print(f"Error updating paper count: {e}")
 
     def _update_coin_inventory_after_print(self):
-        try:
-            print(f"DEBUG: Starting coin inventory update")
-            
+        try:           
             # Try to get payment info from payment screen first
             if hasattr(self, 'payment_screen') and self.payment_screen:
                 payment_model = self.payment_screen.model
-                print(f"DEBUG: Payment screen available, checking for coin data...")
                 
                 # Handle received coins (coins inserted during payment)
                 if hasattr(payment_model, 'cash_received') and payment_model.cash_received:
-                    print(f"💰 Adding received coins to inventory: {payment_model.cash_received}")
+                    print(f"Adding received coins to inventory: {payment_model.cash_received}")
                     self._update_coin_inventory_items(payment_model.cash_received, add=True)
                 else:
-                    print("DEBUG: No cash_received data available")
+                    print("No 'cash_received' data available")
                 
                 # Handle dispensed change (coins given as change)
                 if hasattr(payment_model, 'change_dispensed') and payment_model.change_dispensed:
-                    print(f"💰 Subtracting dispensed change from inventory: {payment_model.change_dispensed}")
+                    print(f"Subtracting dispensed change from inventory: {payment_model.change_dispensed}")
                     self._update_coin_inventory_items(payment_model.change_dispensed, add=False)
-                    print("✅ Coin inventory updated successfully - dispensed change subtracted")
+                    print("Coin inventory updated successfully - dispensed change subtracted")
                 else:
-                    print("DEBUG: No change dispensed data available - no change was given")
+                    print("No change dispensed data available - No change was given")
             else:
-                print("⚠️ No payment screen available for coin inventory update")
+                print("No payment screen available for coin inventory update")
                 
         except Exception as e:
-            print(f"❌ Error updating coin inventory: {e}")
+            print(f"Error updating coin inventory: {e}")
             import traceback
-            print(f"❌ Full error traceback: {traceback.format_exc()}")
+            print(f"Full error traceback: {traceback.format_exc()}")
 
     def _update_coin_inventory_items(self, coin_data, add=True):
         if not hasattr(self, 'admin_screen') or not self.admin_screen:
-            print("⚠️ No admin screen available for coin inventory update")
+            print("No admin screen available for coin inventory update")
             return
             
         try:
-            print(f"DEBUG: Admin screen available, updating coin inventory")
             for denomination, count in coin_data.items():
                 if count > 0:
                     is_bill = denomination >= 20
-                    operation = "Adding" if add else "Subtracting"
-                    print(f"DEBUG: {operation} {count} x {denomination} {'bill' if is_bill else 'coin'}")
                     
                     # Get current count
                     current_inventory = self.admin_screen.model.db_manager.get_cash_inventory()
@@ -603,37 +542,31 @@ class PrintingSystemApp(QMainWindow):
                     )
                     
                     operation_symbol = "+" if add else "-"
-                    print(f"✅ Updated {denomination} {'bill' if is_bill else 'coin'}: {current_count} {operation_symbol}{count} = {new_count}")
+                    print(f"Updated {denomination} {'bill' if is_bill else 'coin'}: {current_count} {operation_symbol}{count} = {new_count}")
             
             # Refresh admin screen coin counts if it's available
             if hasattr(self, 'admin_screen') and self.admin_screen:
-                print("DEBUG: Refreshing admin screen coin counts after inventory update")
                 self.admin_screen.model.load_coin_counts()
-                print("DEBUG: Admin screen coin counts refreshed")
+                print("Admin screen coin counts refreshed")
             else:
-                print("DEBUG: Admin screen not available for coin count refresh")
+                print("Admin screen not available")
                     
         except Exception as e:
-            print(f"❌ Error updating coin inventory items: {e}")
+            print(f"Error updating coin inventory items: {e}")
             import traceback
-            print(f"❌ Full error traceback: {traceback.format_exc()}")
+            print(f"Full error traceback: {traceback.format_exc()}")
 
     def _log_transaction_after_print_success(self):
         """Log transaction to database after successful printing."""
-        try:
-            print("DEBUG: Starting transaction logging...")
-            
+        try:         
             # Try to get transaction data from payment screen first
             if hasattr(self, 'payment_screen') and self.payment_screen and hasattr(self.payment_screen.model, 'transaction_data') and self.payment_screen.model.transaction_data:
-                print("DEBUG: Logging transaction from payment screen")
+                print("Logging transaction from payment screen")
                 self.payment_screen.model.log_transaction_after_print_success()
                 return
             
             # Fallback: Try to get transaction data from stored payment info
-            if hasattr(self, 'current_payment_info') and self.current_payment_info:
-                print("DEBUG: Logging transaction from stored payment info")
-                print(f"DEBUG: current_payment_info: {self.current_payment_info}")
-                
+            if hasattr(self, 'current_payment_info') and self.current_payment_info:  
                 # Extract data safely with proper fallbacks
                 pdf_data = self.current_payment_info.get('pdf_data', {})
                 file_path = pdf_data.get('path', 'unknown.pdf')
@@ -650,37 +583,36 @@ class PrintingSystemApp(QMainWindow):
                     'status': 'completed'
                 }
                 
-                print(f"DEBUG: Transaction data: {transaction_data}")
+                print(f"Transaction data: {transaction_data}")
                 
                 # Get database manager from admin screen
                 if hasattr(self, 'admin_screen') and self.admin_screen:
                     self.admin_screen.model.db_manager.log_transaction(transaction_data)
-                    print(f"✅ Transaction logged successfully: {transaction_data['file_name']}")
+                    print(f"Transaction logged successfully: {transaction_data['file_name']}")
                     
                     # Refresh data viewer if it's available
                     if hasattr(self, 'data_viewer_screen') and self.data_viewer_screen:
-                        print("DEBUG: Refreshing data viewer after transaction logging")
+                        print("Refreshing data viewer after transaction logging")
                         self.data_viewer_screen.model.load_transactions()
                         self.data_viewer_screen.model.load_cash_inventory()
-                        print("DEBUG: Data viewer refreshed with new transaction and inventory data")
+                        print("Data viewer refreshed with new transaction and inventory data")
                     else:
-                        print("DEBUG: Data viewer not available for refresh")
+                        print("Data viewer not available for refresh")
                 else:
-                    print("⚠️ No admin screen available for transaction logging")
+                    print("No admin screen available for transaction logging")
             else:
-                print("⚠️ No transaction data available to log")
-                print(f"DEBUG: hasattr current_payment_info: {hasattr(self, 'current_payment_info')}")
+                print("No transaction data available to log")
                 if hasattr(self, 'current_payment_info'):
-                    print(f"DEBUG: current_payment_info value: {self.current_payment_info}")
+                    print(f"current_payment_info value: {self.current_payment_info}")
                 
         except Exception as e:
-            print(f"❌ Error logging transaction: {e}")
+            print(f"Error logging transaction: {e}")
             import traceback
             traceback.print_exc()
             
             # Fallback: Try to log a basic transaction record
             try:
-                print("DEBUG: Attempting fallback transaction logging...")
+                print("Attempting fallback transaction logging")
                 if hasattr(self, 'admin_screen') and self.admin_screen:
                     fallback_data = {
                         'file_name': 'unknown.pdf',
@@ -693,20 +625,20 @@ class PrintingSystemApp(QMainWindow):
                         'status': 'completed'
                     }
                     self.admin_screen.model.db_manager.log_transaction(fallback_data)
-                    print("✅ Fallback transaction logged successfully")
+                    print("Fallback transaction logged successfully")
             except Exception as fallback_error:
-                print(f"❌ Fallback transaction logging also failed: {fallback_error}")
+                print(f"Fallback transaction logging also failed: {fallback_error}")
 
     def on_print_waiting(self):
-        print("⏳ Waiting for print job to complete")
+        print("Waiting for print job to complete")
         
         if self.stacked_widget.currentWidget() == self.thank_you_screen:
             self.thank_you_screen.show_waiting_for_print()
         else:
-            print(f"⚠️ Print waiting signal on wrong screen ({type(self.stacked_widget.currentWidget()).__name__})")
+            print(f"Print waiting signal on wrong screen ({type(self.stacked_widget.currentWidget()).__name__})")
 
     def on_print_failed(self, error_message):
-        print(f"❌ Print job failed: {error_message}")
+        print(f"Print job failed: {error_message}")
         
         # Clean up session directory after print failure
         self._cleanup_session_directory_after_print()
@@ -716,14 +648,14 @@ class PrintingSystemApp(QMainWindow):
             from managers.sms_manager import send_printing_error_sms
             send_printing_error_sms(error_message)
         except Exception as sms_error:
-            print(f"⚠️ Failed to send SMS notification: {sms_error}")
+            print(f"Failed to send SMS notification: {sms_error}")
         
         # Log error to database
         try:
             from utils.error_logger import log_error
             log_error("Print Job Failed", error_message, "main_app")
         except Exception as db_error:
-            print(f"⚠️ Failed to log error to database: {db_error}")
+            print(f"Failed to log error to database: {db_error}")
         
         # Display error on thank you screen
         if self.stacked_widget.currentWidget() == self.thank_you_screen:
@@ -733,45 +665,45 @@ class PrintingSystemApp(QMainWindow):
             else:
                 self.thank_you_screen.show_printing_error(error_message)
         else:
-            print(f"⚠️ Print failed on wrong screen. Error: {error_message}")
+            print(f"Print failed on wrong screen. Error: {error_message}")
 
     def cleanup(self):
         try:
-            print("🧹 Starting application cleanup...")
+            print("Starting application cleanup")
             
             # Stop database operations first to prevent SQLite thread errors
             if hasattr(self, 'db_threader'):
-                print("🔄 Stopping database threader...")
+                print("Stopping database threader")
                 self.db_threader.stop()
             if hasattr(self, 'ink_analysis_threader'):
-                print("🔄 Stopping ink analysis threader...")
+                print("Stopping ink analysis threader")
                 self.ink_analysis_threader.stop()
             
             # Stop USB monitoring thread
             if hasattr(self, 'usb_screen') and hasattr(self.usb_screen, 'model'):
-                print("🔄 Stopping USB monitoring...")
+                print("Stopping USB monitoring")
                 self.usb_screen.model.stop_usb_monitoring()
             
             # Clean up database connections before other cleanup
             try:
                 from utils.error_logger import cleanup_db_connections
-                print("🔄 Cleaning up database connections...")
+                print("Cleaning up database connections")
                 cleanup_db_connections()
             except Exception as db_cleanup_error:
-                print(f"⚠️ Error cleaning up database connections: {db_cleanup_error}")
+                print(f"Error cleaning up database connections: {db_cleanup_error}")
             
             # Clean up SMS system
-            print("🔄 Cleaning up SMS system...")
+            print("Cleaning up SMS system")
             cleanup_sms()
             
             # Clean up persistent GPIO last
-            print("🔄 Cleaning up persistent GPIO...")
+            print("Cleaning up persistent GPIO")
             # GPIO threads are cleaned up by individual screens
             
-            print("✅ Application cleanup completed")
+            print("Application cleanup completed")
                 
         except Exception as e:
-            print(f"❌ Error during cleanup: {e}")
+            print(f"Error during cleanup: {e}")
 
     def closeEvent(self, event):
         self.cleanup()
@@ -780,10 +712,10 @@ class PrintingSystemApp(QMainWindow):
 
 def main():
     try:
-        print("\n🔄 Initializing database...")
+        print("\nInitializing database...")
         init_db()
-        print("✅ Database initialization successful\n")
-        
+        print("Database initialization successful\n")
+    
         # Create Qt application
         app = QApplication(sys.argv) # Main thread init
         app.setApplicationName("Printing System GUI")
@@ -800,7 +732,7 @@ def main():
         
         sys.exit(app.exec_())
     except Exception as e:
-        print(f"❌ Error during initialization: {str(e)}")
+        print(f"Error during initialization: {str(e)}")
         sys.exit(1)
 
 
