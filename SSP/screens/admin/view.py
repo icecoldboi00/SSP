@@ -457,10 +457,10 @@ class AdminScreenView(QWidget):
     def update_cmyk_display(self, cyan: float, magenta: float, yellow: float, black: float):
         """Updates the CMYK input fields with current values."""
         import math
-        self.cyan_input.setText(f"{math.floor(cyan * 100) / 100}")
-        self.magenta_input.setText(f"{math.floor(magenta * 100) / 100}")
-        self.yellow_input.setText(f"{math.floor(yellow * 100) / 100}")
-        self.black_input.setText(f"{math.floor(black * 100) / 100}")
+        self.cyan_input.setText(f"{math.floor(cyan * 1000) / 1000}")
+        self.magenta_input.setText(f"{math.floor(magenta * 1000) / 1000}")
+        self.yellow_input.setText(f"{math.floor(yellow * 1000) / 1000}")
+        self.black_input.setText(f"{math.floor(black * 1000) / 1000}")
         
         # Update styling based on ink levels
         self._update_cmyk_styling(cyan, magenta, yellow, black)
