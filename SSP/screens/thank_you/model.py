@@ -196,14 +196,14 @@ class ThankYouModel(QObject):
         
         # SMS notification disabled for print job failures (not critical enough)
         # Only log to database for tracking
-        print(f"⚠️ Print job failure (SMS disabled): {clean_message}")
+        print(f"Print job failure (SMS disabled): {clean_message}")
         
         # Log error to database
         try:
             from utils.error_logger import log_error
             log_error("Printing Error", message, "thank_you_screen")
         except Exception as db_error:
-            print(f"⚠️ Failed to log error to database: {db_error}")
+            print(f"Failed to log error to database: {db_error}")
         
         # Show admin override button
         self.admin_override_requested.emit()
