@@ -13,6 +13,13 @@ class InkAnalysisManager:
     
     def __init__(self, db_manager=None):
         self.db_manager = db_manager
+        # Track which cartridges have already sent low ink alerts
+        self.low_ink_alerts_sent = {
+            'cyan': False,
+            'magenta': False, 
+            'yellow': False,
+            'black': False
+        }
         
     def analyze_pdf_ink_usage(self, pdf_path, selected_pages=None, dpi=150):
         try:
@@ -247,5 +254,73 @@ class InkAnalysisManager:
         
         analysis_result['database_updated'] = update_success
         
+        # Check for low ink levels and send SMS alerts if needed
+        if update_success:
+            self._check_and_send_low_ink_alerts()
         
         return analysis_result
+    
+    def _check_and_send_low_ink_alerts(self):
+        """Check current ink levels and send SMS alerts for cartridges below 20%."""
+        try:
+            # Get current ink levels
+            current_levels = self.db_manager.get_cmyk_ink_levels()
+            if not current_levels:
+                print("Warning: No current ink levels found for monitoring")
+                return
+            
+            low_ink_threshold = 20.0
+            low_cartridges = []
+            
+            # Check each cartridge
+            cartridges = {
+                'cyan': current_levels['cyan'],
+                'magenta': current_levels['magenta'],
+                'yellow': current_levels['yellow'],
+                'black': current_levels['black']
+            }
+            
+            for cartridge_name, level in cartridges.items():
+                if level <= low_ink_threshold:
+                    # Check if we haven't already sent an alert for this cartridge
+                    if not self.low_ink_alerts_sent[cartridge_name]:
+                        low_cartridges.append((cartridge_name.capitalize(), level))
+                        self.low_ink_alerts_sent[cartridge_name] = True
+                        print(f"Low ink alert flag set for {cartridge_name} ({level:.1f}%)")
+                else:
+                    # Reset alert flag if cartridge is above threshold (refilled)
+                    if self.low_ink_alerts_sent[cartridge_name]:
+                        self.low_ink_alerts_sent[cartridge_name] = False
+                        print(f"Low ink alert flag reset for {cartridge_name} ({level:.1f}%) - cartridge refilled")
+            
+            # Send SMS alerts if any cartridges are low
+            if low_cartridges:
+                try:
+                    from managers.sms_manager import send_multiple_low_ink_sms
+                    if len(low_cartridges) == 1:
+                        # Single cartridge low
+                        cartridge_name, level = low_cartridges[0]
+                        from managers.sms_manager import send_low_ink_sms
+                        send_low_ink_sms(cartridge_name, level)
+                        print(f"SMS alert sent for low {cartridge_name} ink ({level:.1f}%)")
+                    else:
+                        # Multiple cartridges low
+                        send_multiple_low_ink_sms(low_cartridges)
+                        print(f"SMS alert sent for {len(low_cartridges)} low ink cartridges")
+                except Exception as e:
+                    print(f"Error sending low ink SMS alert: {e}")
+            else:
+                print("All ink levels are above 20% threshold")
+                
+        except Exception as e:
+            print(f"Error checking ink levels for SMS alerts: {e}")
+    
+    def reset_low_ink_alerts(self):
+        """Reset all low ink alert flags (call this when cartridges are refilled)."""
+        self.low_ink_alerts_sent = {
+            'cyan': False,
+            'magenta': False,
+            'yellow': False,
+            'black': False
+        }
+        print("Low ink alert flags reset - cartridges refilled")

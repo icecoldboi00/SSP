@@ -363,6 +363,10 @@ class AdminModel(QObject):
             if success:
                 self.load_cmyk_levels()
                 print(f"CMYK levels updated: C:{cyan:.1f}% M:{magenta:.1f}% Y:{yellow:.1f}% K:{black:.1f}%")
+                
+                # Reset low ink alerts if levels are high (cartridges refilled)
+                if cyan >= 80.0 and magenta >= 80.0 and yellow >= 80.0 and black >= 80.0:
+                    self._reset_ink_alerts()
             else:
                 self.show_message.emit("Database Error", "Failed to update CMYK levels")
                 
@@ -377,11 +381,25 @@ class AdminModel(QObject):
             if success:
                 self.load_cmyk_levels()
                 print("CMYK levels reset to 100%")
+                
+                # Reset low ink alerts when cartridges are refilled
+                self._reset_ink_alerts()
             else:
                 self.show_message.emit("Database Error", "Failed to reset CMYK levels")
         except Exception as e:
             print(f"Error resetting CMYK levels: {e}")
             self.show_message.emit("Error", f"Failed to reset CMYK levels: {e}")
+    
+    def _reset_ink_alerts(self):
+        """Reset low ink alert flags when cartridges are refilled."""
+        try:
+            # Import here to avoid circular imports
+            from managers.ink_analysis_manager import InkAnalysisManager
+            ink_manager = InkAnalysisManager(self.db_manager)
+            ink_manager.reset_low_ink_alerts()
+            print("Low ink alert flags reset - cartridges appear to be refilled")
+        except Exception as e:
+            print(f"Error resetting ink alerts: {e}")
 
     def _get_color_for_count(self, count: int) -> str:
         """Determines the display color based on the paper count."""

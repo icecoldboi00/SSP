@@ -127,8 +127,15 @@ class SMSManager(QObject):
         message = f"Printing error: {error_message}"
         return self.send_sms(message)
     
-    def send_custom_alert(self, message):
-        """Send custom alert SMS."""
+    def send_low_ink_alert(self, ink_type, level):
+        """Send low ink alert SMS for a specific cartridge."""
+        message = f"ALERT: {ink_type} ink is low ({level:.1f}%). Please refill soon."
+        return self.send_sms(message)
+    
+    def send_multiple_low_ink_alert(self, low_cartridges):
+        """Send SMS alert for multiple low ink cartridges."""
+        cartridge_list = ", ".join([f"{cartridge} ({level:.1f}%)" for cartridge, level in low_cartridges])
+        message = f"ALERT: Multiple ink cartridges are low - {cartridge_list}. Please refill soon."
         return self.send_sms(message)
     
     def close(self):
@@ -225,6 +232,19 @@ def send_printing_error_sms(error_message):
     """Send printing error SMS alert."""
     manager = get_sms_manager()
     return manager.send_sms_and_close(f"Printing error: {error_message}")
+
+def send_low_ink_sms(ink_type, level):
+    """Send low ink SMS alert."""
+    manager = get_sms_manager()
+    message = f"ALERT: {ink_type} ink is low ({level:.1f}%). Please refill soon."
+    return manager.send_sms_and_close(message)
+
+def send_multiple_low_ink_sms(low_cartridges):
+    """Send SMS alert for multiple low ink cartridges."""
+    manager = get_sms_manager()
+    cartridge_list = ", ".join([f"{cartridge} ({level:.1f}%)" for cartridge, level in low_cartridges])
+    message = f"ALERT: Multiple ink cartridges are low - {cartridge_list}. Please refill soon."
+    return manager.send_sms_and_close(message)
 
 def cleanup_sms():
     """Clean up SMS resources."""
