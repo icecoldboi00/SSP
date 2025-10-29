@@ -151,6 +151,20 @@ class ThankYouModel(QObject):
             print("Thank you screen: Print job already finished, skipping duplicate call")
             return
             
+        # Stop any existing timers that might be near expiry (safety/monitor timers)
+        try:
+            if self.redirect_timer.isActive():
+                self.redirect_timer.stop()
+                print("Thank you screen: Stopped existing redirect/safety timer before finishing")
+        except Exception:
+            pass
+        try:
+            if self.status_check_timer.isActive():
+                self.status_check_timer.stop()
+                print("Thank you screen: Stopped status check timer on finish")
+        except Exception:
+            pass
+
         self.print_job_finished = True
         self.current_state = "completed"
         self.status_updated.emit(
