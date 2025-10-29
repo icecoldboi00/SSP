@@ -443,6 +443,14 @@ class ThankYouModel(QObject):
                     self._on_print_success()
                 else:
                     print(f"Fallback: Still waiting for target printer '{target_printer}' to finish printing")
+                    # Extend safety timeout while actively printing to avoid premature redirect
+                    try:
+                        if self.current_state == "waiting":
+                            # Restart the safety timer window (3 minutes) each check
+                            self.redirect_timer.start(180000)
+                            print("⏰ Extended safety timeout while printing")
+                    except Exception as e:
+                        print(f"⚠️ Could not extend safety timeout: {e}")
                     
         except subprocess.TimeoutExpired:
             print("⚠️ Fallback lpstat command timed out")
