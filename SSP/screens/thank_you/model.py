@@ -410,8 +410,15 @@ class ThankYouModel(QObject):
                 output = result.stdout
                 output_lower = output.lower()
                 
-                # Check printer status using alerts-based detection (fallback method)
-                target_printer = "HP_Smart_Tank_580_590_series_5E0E1D_USB"
+                # Get the actual printer name from printer manager instead of hardcoded value
+                target_printer = None
+                if hasattr(self, 'main_app') and hasattr(self.main_app, 'printer_manager'):
+                    target_printer = self.main_app.printer_manager.printer_name
+                
+                if not target_printer:
+                    print("Fallback: No printer name available, using default")
+                    target_printer = "HP_Smart_Tank_580_590_series_5E0E1D_USB"
+                
                 is_printing = False
                 
                 detailed_result = subprocess.run(['lpstat', '-l', '-p', target_printer], 
@@ -454,7 +461,7 @@ class ThankYouModel(QObject):
                 # Do NOT mark complete here; rely on real printer signals.
                 # Only manage safety timer while printing; avoid premature redirects.
                 if not is_printing:
-                    print("Fallback: Target printer appears idle; waiting for official completion signal")
+                    print(f"Fallback: Target printer '{target_printer}' appears idle; waiting for official completion signal")
                 else:
                     print(f"Fallback: Still waiting for target printer '{target_printer}' to finish printing")
                     # Extend safety timeout while actively printing to avoid premature redirect
