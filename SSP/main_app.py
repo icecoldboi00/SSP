@@ -133,12 +133,28 @@ class PrintingSystemApp(QMainWindow):
 
     
     def _on_ink_analysis_completed(self, operation):
-        if operation and operation.get('database_updated', False) and 'cmyk_levels' in operation:
-            print(f"CMYK levels updated: {operation['cmyk_levels']}")
-            self.db_threader.cmyk_levels_updated.emit(operation['cmyk_levels'])
-        
-        # Always clean up temp PDF after analysis completes
-        self.printer_manager.cleanup_last_temp_pdf()
+        """
+        Handle ink analysis completion.
+        This method may be invoked in two ways:
+        1) As a signal handler from InkAnalysisThreadManager.analysis_completed (dict payload)
+        2) As a callback from InkAnalysisOperation (operation object with .result)
+        Support both to avoid attribute errors.
+        """
+        try:
+            payload = None
+            # Case 2: callback with InkAnalysisOperation object
+            if hasattr(operation, 'result') or hasattr(operation, 'error'):
+                payload = getattr(operation, 'result', None) or {}
+            else:
+                # Case 1: signal emitted with dict payload
+                payload = operation or {}
+
+            if isinstance(payload, dict) and payload.get('database_updated', False) and 'cmyk_levels' in payload:
+                print(f"CMYK levels updated: {payload['cmyk_levels']}")
+                self.db_threader.cmyk_levels_updated.emit(payload['cmyk_levels'])
+        finally:
+            # Always clean up temp PDF after analysis completes
+            self.printer_manager.cleanup_last_temp_pdf()
 
     def check_paper_count_and_redirect(self, allow_admin_access=False):
         paper_count = self.admin_screen.get_paper_count()

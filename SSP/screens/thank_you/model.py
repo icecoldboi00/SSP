@@ -451,10 +451,10 @@ class ThankYouModel(QObject):
                                 print(f"Fallback: Printer '{target_printer}' is idle (no alerts)")
                             break
                 
-                # Only assume completion if target printer is not actively printing
+                # Do NOT mark complete here; rely on real printer signals.
+                # Only manage safety timer while printing; avoid premature redirects.
                 if not is_printing:
-                    print("Fallback: Target printer not actively printing, marking print as complete")
-                    self._on_print_success()
+                    print("Fallback: Target printer appears idle; waiting for official completion signal")
                 else:
                     print(f"Fallback: Still waiting for target printer '{target_printer}' to finish printing")
                     # Extend safety timeout while actively printing to avoid premature redirect
