@@ -53,6 +53,7 @@ class ThankYouModel(QObject):
         # Screen state tracking
         self.current_state = "initial"
         self.print_job_started = False
+        self.print_job_finished = False
         self.error_type = None
         
     def _unmount_usb_drive(self):
@@ -108,6 +109,7 @@ class ThankYouModel(QObject):
         
         # Set initial state
         self.current_state = "waiting"
+        self.print_job_finished = False  # Reset finished flag for new print job
         self.status_updated.emit(
             "Thank you for printing with us",
             "You may now remove your USB."
@@ -144,14 +146,30 @@ class ThankYouModel(QObject):
         Called when print job completes successfully. Starts 5-second timer
         before redirecting to idle screen.
         """
+        # Prevent duplicate finish_printing calls
+        if self.print_job_finished:
+            print("Thank you screen: Print job already finished, skipping duplicate call")
+            return
+            
+        self.print_job_finished = True
         self.current_state = "completed"
         self.status_updated.emit(
             "Thank you for printing with us",
             "Kindly collect your documents. We hope to see you again!"
         )
         
-        # Start 5-second timer before returning to idle
-        self.redirect_timer.start(5000)
+        # Only start redirect timer if the thank you screen is currently visible
+        # This prevents the screen from appearing when user is already on idle/admin
+        if hasattr(self, 'main_app') and self.main_app:
+            current_screen = self.main_app.stacked_widget.currentWidget()
+            if current_screen == self.main_app.thank_you_screen:
+                # Start 5-second timer before returning to idle
+                self.redirect_timer.start(5000)
+                print("Thank you screen: Starting redirect timer (screen is visible)")
+            else:
+                print(f"Thank you screen: Skipping redirect timer (current screen is not thank you)")
+        else:
+            print("Thank you screen: No main_app reference, skipping redirect timer")
     
     def show_waiting_for_print(self):
         """Update state to show that print job is in progress."""
@@ -472,6 +490,7 @@ class ThankYouModel(QObject):
         
         # Reset state for next transaction
         self.print_job_started = False
+        self.print_job_finished = False
     
     def get_status_style(self, state):
         """

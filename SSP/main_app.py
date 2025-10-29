@@ -375,12 +375,13 @@ class PrintingSystemApp(QMainWindow):
         current_screen = self.stacked_widget.currentWidget()
         
         if current_screen == self.thank_you_screen:
+            # Print completed while on thank you screen - finish and start redirect timer
             self.thank_you_screen.finish_printing()
         elif current_screen == self.idle_screen:
-            # Print completed while on idle screen - this is normal, just finish
-            self.thank_you_screen.finish_printing()
+            # Print completed while on idle screen - this is normal, no need to show thank you screen
+            print("Print completed while on idle screen - no action needed")
         else:
-            # Print job completed but we're on wrong screen - navigate first
+            # Print job completed but we're on wrong screen - navigate to thank you screen
             print(f"Print completed on wrong screen, navigating to thank you screen")
             self.show_screen('thank_you')
             QTimer.singleShot(100, lambda: self.thank_you_screen.finish_printing())
