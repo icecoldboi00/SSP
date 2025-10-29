@@ -203,7 +203,8 @@ class PrinterThread(QThread):
         while elapsed_time < max_wait_time:
             try:
                 # Check printer status using alerts-based detection
-                target_printer = "HP_Smart_Tank_580_590_series_5E0E1D_USB"
+                # Use the configured printer name instead of a hardcoded value
+                target_printer = self.printer_name
                 printer_actively_printing = False
                 
                 # Get printer alerts to determine status
