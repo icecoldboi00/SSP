@@ -85,14 +85,14 @@ class HopperController:
         """Clean up GPIO resources."""
         try:
             # First disable the hopper to stop any ongoing operations
-            if self.pi and hasattr(self.pi, 'connected') and self.pi.connected:
+            if getattr(self, 'pi', None) and hasattr(self.pi, 'connected') and self.pi.connected:
                 self._disable_hopper()
                 print(f"[{self.name}] Hopper disabled during cleanup")
-            elif self.pi is None:
+            elif getattr(self, 'pi', None) is None:
                 print(f"[{self.name}] No pigpio connection to clean up")
             
             # Then cancel the callback
-            if self.callback:
+            if getattr(self, 'callback', None):
                 try:
                     self.callback.cancel()
                     self.callback = None
@@ -363,7 +363,7 @@ class ChangeDispenser:
                     available_fives = int(item.get('count', 0))
                 elif item.get('type') == 'coin' and item.get('denomination') == 1:
                     available_ones = int(item.get('count', 0))
-            print(f"DEBUG: Inventory - 5-peso: {available_fives}, 1-peso: {available_ones}")
+            # print(f"DEBUG: Inventory - 5-peso: {available_fives}, 1-peso: {available_ones}")
         except Exception as e:
             print(f"WARNING: Could not read coin inventory with fresh DB connection: {e}")
             available_fives = None
@@ -403,7 +403,7 @@ class ChangeDispenser:
             num_ones = desired_ones
         
         print(f"Dispensing ₱{amount:.2f}: {num_fives}x 5-peso, {num_ones}x 1-peso")
-        print(f"DEBUG: Change calculation - Amount: {amount}, 5-peso coins: {num_fives}, 1-peso coins: {num_ones}")
+        # print(f"DEBUG: Change calculation - Amount: {amount}, 5-peso coins: {num_fives}, 1-peso coins: {num_ones}")
         if status_callback:
             status_callback(f"Preparing to dispense ₱{amount:.2f}...")
 
@@ -412,7 +412,7 @@ class ChangeDispenser:
         actual_ones = 0
 
         # Dispense 5-peso coins
-        print(f"DEBUG: Starting to dispense {num_fives} 5-peso coins using Hopper B")
+        # print(f"DEBUG: Starting to dispense {num_fives} 5-peso coins using Hopper B")
         for i in range(num_fives):
             msg = f"Dispensing 5-peso coin ({i + 1} of {num_fives})"
             if status_callback: status_callback(msg)
@@ -421,15 +421,15 @@ class ChangeDispenser:
             if self.simulated:
                 time.sleep(1.5) # Simulate dispense time
                 success = True
-                print(f"DEBUG: Simulated 5-peso coin dispense successful")
+                # print(f"DEBUG: Simulated 5-peso coin dispense successful")
             else:
-                print(f"DEBUG: Calling hoppers['B'].dispense_single_coin() for 5-peso coin {i + 1}")
+                # print(f"DEBUG: Calling hoppers['B'].dispense_single_coin() for 5-peso coin {i + 1}")
                 success = self.hoppers['B'].dispense_single_coin()
-                print(f"DEBUG: Hopper B dispense result: {success}")
+                # print(f"DEBUG: Hopper B dispense result: {success}")
 
             if success:
                 actual_fives += 1
-                print(f"DEBUG: Successfully dispensed 5-peso coin {actual_fives}/{num_fives}")
+                # print(f"DEBUG: Successfully dispensed 5-peso coin {actual_fives}/{num_fives}")
             else:
                 error_msg = f"CRITICAL: Failed to dispense 5-peso coin {i + 1}. Dispensed {actual_fives}/{num_fives} so far."
                 if status_callback: status_callback(error_msg)
@@ -456,7 +456,7 @@ class ChangeDispenser:
 
             if success:
                 actual_ones += 1
-                print(f"DEBUG: Successfully dispensed 1-peso coin {actual_ones}/{total_ones_to_dispense}")
+                # print(f"DEBUG: Successfully dispensed 1-peso coin {actual_ones}/{total_ones_to_dispense}")
             else:
                 error_msg = f"CRITICAL: Failed to dispense 1-peso coin {i + 1}. Dispensed {actual_ones}/{total_ones_to_dispense} so far."
                 if status_callback: status_callback(error_msg)
@@ -468,10 +468,10 @@ class ChangeDispenser:
         actual_change = (actual_fives * 5) + (actual_ones * 1)
         expected_change = (num_fives * 5) + (num_ones * 1)
         
-        print(f"DEBUG: Final change calculation:")
-        print(f"DEBUG: Expected: {num_fives}x₱5 + {num_ones}x₱1 = ₱{expected_change}")
-        print(f"DEBUG: Actual: {actual_fives}x₱5 + {actual_ones}x₱1 = ₱{actual_change}")
-        print(f"DEBUG: Difference: ₱{expected_change - actual_change}")
+        # print(f"DEBUG: Final change calculation:")
+        # print(f"DEBUG: Expected: {num_fives}x₱5 + {num_ones}x₱1 = ₱{expected_change}")
+        # print(f"DEBUG: Actual: {actual_fives}x₱5 + {actual_ones}x₁ = ₱{actual_change}")
+        # print(f"DEBUG: Difference: ₱{expected_change - actual_change}")
         
         final_msg = f"Change dispensing complete. Dispensed ₱{actual_change:.2f} (₱{actual_fives}x5 + ₱{actual_ones}x1) of ₱{expected_change:.2f} expected."
         if status_callback: status_callback(final_msg)

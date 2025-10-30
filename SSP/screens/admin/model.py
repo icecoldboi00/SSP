@@ -160,11 +160,12 @@ class AdminModel(QObject):
                 self.show_message.emit("Invalid Input", "₱1 coin count must be between 0 and 1000.")
                 self.load_coin_counts()
                 return
-
             self.db_manager.update_cash_inventory(1, new_count, 'coin')
             self.load_coin_counts()
             print(f"₱1 coin count updated to {new_count}")
-
+            if new_count > 5:
+                # Reset alert flag if refilled above threshold
+                self.db_manager.update_setting('low_coin_1_alert_active', '0')
         except ValueError:
             self.show_message.emit("Invalid Input", "Please enter a valid number for ₱1 coins.")
             self.load_coin_counts()
@@ -177,11 +178,12 @@ class AdminModel(QObject):
                 self.show_message.emit("Invalid Input", "₱5 coin count must be between 0 and 1000.")
                 self.load_coin_counts()
                 return
-
             self.db_manager.update_cash_inventory(5, new_count, 'coin')
             self.load_coin_counts()
             print(f"₱5 coin count updated to {new_count}")
-
+            if new_count > 3:
+                # Reset alert flag if refilled above threshold
+                self.db_manager.update_setting('low_coin_5_alert_active', '0')
         except ValueError:
             self.show_message.emit("Invalid Input", "Please enter a valid number for ₱5 coins.")
             self.load_coin_counts()
@@ -321,7 +323,6 @@ class AdminModel(QObject):
     def load_cmyk_levels(self):
         """Loads the CMYK ink levels from the database and emits a signal."""
         if self._loading_cmyk:
-            print("DEBUG: load_cmyk_levels already in progress, skipping")
             return
             
         self._loading_cmyk = True

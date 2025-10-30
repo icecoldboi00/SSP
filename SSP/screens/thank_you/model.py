@@ -1,6 +1,6 @@
 from PyQt5.QtCore import QObject, pyqtSignal, QTimer
-import threading
 import subprocess
+import os
 
 
 class ThankYouModel(QObject):
@@ -64,17 +64,16 @@ class ThankYouModel(QObject):
         Args:
             main_app: Reference to main application window
         """
-        print(f"DEBUG: Thank you screen on_enter called")
         self.main_app = main_app
         
         # Prevent duplicate print job starts
         if self.print_job_started:
-            print(f"DEBUG: Print job already started, skipping")
+            print(f"Print job already started, skipping")
             return
         
         # Check if there's a valid print job to start
         if not hasattr(main_app, 'current_print_job') or not main_app.current_print_job:
-            print(f"DEBUG: No valid print job available, skipping print start")
+            print(f"No valid print job available, skipping print start")
             return
         
         # Unmount USB drive
@@ -94,11 +93,9 @@ class ThankYouModel(QObject):
         
         # Connect to printer manager signals
         if hasattr(main_app, 'printer_manager'):
-            print(f"DEBUG: Connecting to printer manager signals")
             try:
                 main_app.printer_manager.print_job_successful.connect(self._on_print_success)
                 main_app.printer_manager.print_job_failed.connect(self._on_print_failed)
-                print(f"DEBUG: Printer signals connected successfully")
             except Exception as e:
                 print(f"Error connecting printer signals: {e}")
             
@@ -301,6 +298,46 @@ class ThankYouModel(QObject):
             "Kindly collect your documents. We hope to see you again!"
         )
         
+        # ==================== LOW COIN INVENTORY SMS CHECK =====================
+        try:
+            from database.db_manager import DatabaseManager
+            db_manager = DatabaseManager()
+            inventory = db_manager.get_cash_inventory()
+            low_threshold_1 = 5
+            low_threshold_5 = 3
+            current_1 = 0
+            current_5 = 0
+            for item in inventory:
+                if item['denomination'] == 1 and item['type'] == 'coin':
+                    current_1 = item['count']
+                elif item['denomination'] == 5 and item['type'] == 'coin':
+                    current_5 = item['count']
+            alert_1_active = bool(int(db_manager.get_setting('low_coin_1_alert_active', 0)))
+            alert_5_active = bool(int(db_manager.get_setting('low_coin_5_alert_active', 0)))
+            from managers.sms_manager import send_low_coin_sms
+            # 1-peso coin alert logic
+            if current_1 <= low_threshold_1:
+                if not alert_1_active:
+                    send_low_coin_sms('1-peso', current_1)
+                    print(f"Low coin SMS sent for 1-peso: {current_1} remaining (after print)")
+                    db_manager.update_setting('low_coin_1_alert_active', '1')
+            else:
+                if alert_1_active:
+                    # Refill/reset occurred, clear alert flag
+                    db_manager.update_setting('low_coin_1_alert_active', '0')
+            # 5-peso coin alert logic
+            if current_5 <= low_threshold_5:
+                if not alert_5_active:
+                    send_low_coin_sms('5-peso', current_5)
+                    print(f"Low coin SMS sent for 5-peso: {current_5} remaining (after print)")
+                    db_manager.update_setting('low_coin_5_alert_active', '1')
+            else:
+                if alert_5_active:
+                    # Refill/reset occurred, clear alert flag
+                    db_manager.update_setting('low_coin_5_alert_active', '0')
+        except Exception as sms_e:
+            print(f"WARNING: Failed to send low coin SMS after print: {sms_e}")
+        # ==================== END LOW COIN INVENTORY SMS CHECK =================
         # Start 5-second redirect timer
         self.redirect_timer.start(5000)
     
@@ -332,11 +369,8 @@ class ThankYouModel(QObject):
             print(f"Error during temp file cleanup: {e}")
     
     def _start_print_job(self, main_app):
-        print(f"DEBUG: _start_print_job called")
-        
         if hasattr(main_app, 'current_print_job') and main_app.current_print_job:
             try:
-                print(f"DEBUG: Starting print job with details: {main_app.current_print_job}")
                 main_app.printer_manager.print_file(
                     file_path=main_app.current_print_job['file_path'],
                     selected_pages=main_app.current_print_job['selected_pages'],
@@ -344,12 +378,11 @@ class ThankYouModel(QObject):
                     color_mode=main_app.current_print_job['color_mode']
                 )
                 self.print_job_started = True
-                print(f"DEBUG: Print job started successfully")
             except Exception as e:
                 print(f"Error starting print job: {e}")
                 self.show_printing_error(f"Failed to start print job: {e}")
         else:
-            print(f"DEBUG: No print job details available")
+            print(f"No print job details available")
             self.show_printing_error("No print job details available")
     
     def _check_print_status(self):

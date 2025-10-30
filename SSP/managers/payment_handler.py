@@ -330,54 +330,46 @@ class PaymentHandler(QObject):
         """Clean up GPIO resources."""
         try:
             print("PaymentHandler: Starting cleanup...")
-            
             # Stop processing thread
             self.stop_processing = True
-            if self.processing_thread and self.processing_thread.is_alive():
+            if hasattr(self, 'processing_thread') and self.processing_thread and getattr(self.processing_thread, 'is_alive', lambda : False)():
                 self.processing_thread.join(timeout=1.0)
-            
             # Disable all acceptors first
-            if self.gpio_available and self.pi:
+            if self.gpio_available and getattr(self, 'pi', None):
                 try:
                     self.disable_all_acceptors()
                 except Exception as e:
                     print(f"PaymentHandler: Error disabling acceptors - {e}")
-                
                 # Clean up callbacks
-                if self.coin_callback:
+                if getattr(self, 'coin_callback', None):
                     try:
                         self.coin_callback.cancel()
                     except Exception as e:
                         print(f"PaymentHandler: Error canceling coin callback - {e}")
                     finally:
                         self.coin_callback = None
-                
-                if self.bill_callback:
+                if getattr(self, 'bill_callback', None):
                     try:
                         self.bill_callback.cancel()
                     except Exception as e:
                         print(f"PaymentHandler: Error canceling bill callback - {e}")
                     finally:
                         self.bill_callback = None
-                
                 # Close pigpio connection
                 try:
-                    if self.pi.connected:
+                    if hasattr(self.pi, 'connected') and self.pi.connected:
                         self.pi.stop()
                 except Exception as e:
                     print(f"PaymentHandler: Error stopping pigpio - {e}")
                 finally:
                     self.pi = None
-            
             # Reset all state
             self.coin_enabled = False
             self.bill_enabled = False
             self.accepting_payments = False
             self.coin_pulse_count = 0
             self.bill_pulse_count = 0
-            
             print("PaymentHandler: Cleanup complete")
-                
         except Exception as e:
             print(f"PaymentHandler: Cleanup error - {e}")
         finally:

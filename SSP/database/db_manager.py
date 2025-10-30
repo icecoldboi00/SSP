@@ -231,10 +231,8 @@ class DatabaseManager:
         """Get the current CMYK ink levels."""
         import threading
         current_thread = threading.current_thread()
-        # Debug info removed for cleaner output
         
         if not self.conn:
-            print("DEBUG: No database connection available")
             return None
         try:
             cursor = self.conn.cursor()

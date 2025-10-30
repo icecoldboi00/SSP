@@ -127,15 +127,15 @@ class PrintOptionsModel(QObject):
     
     def set_pdf_data(self, pdf_data, selected_pages):
         """Sets the PDF data and selected pages."""
-        print(f"🔍 PrintOptionsModel.set_pdf_data called")
-        print(f"🔍 PDF data: {pdf_data}")
-        print(f"🔍 Selected pages: {selected_pages}")
+        print(f"PrintOptionsModel.set_pdf_data called")
+        print(f"PDF data: {pdf_data}")
+        print(f"Selected pages: {selected_pages}")
         self.selected_pdf = pdf_data
         self.selected_pages = selected_pages
         self._copies = 1
         config = get_config()
         self._color_mode = config.default_color_mode
-        print(f"🔍 Triggering analysis...")
+        print(f"Triggering analysis...")
         self.trigger_analysis()
     
     def set_color_mode(self, mode):
@@ -165,13 +165,13 @@ class PrintOptionsModel(QObject):
     
     def trigger_analysis(self):
         """Triggers the PDF analysis based on current settings."""
-        print(f"🔍 trigger_analysis called")
-        print(f"🔍 selected_pdf: {self.selected_pdf}")
-        print(f"🔍 selected_pages: {self.selected_pages}")
-        print(f"🔍 color_mode: {self._color_mode}")
+        print(f"trigger_analysis called")
+        print(f"selected_pdf: {self.selected_pdf}")
+        print(f"selected_pages: {self.selected_pages}")
+        print(f"color_mode: {self._color_mode}")
         
         if not self.selected_pdf: 
-            print(f"🔍 No selected PDF, returning")
+            print(f"No selected PDF, returning")
             return
 
         if self.analysis_thread and self.analysis_thread.isRunning():
@@ -180,10 +180,10 @@ class PrintOptionsModel(QObject):
 
         self.analysis_results = None
         user_wants_color = (self._color_mode == "Color")
-        print(f"🔍 user_wants_color: {user_wants_color}")
+        print(f"user_wants_color: {user_wants_color}")
 
         if user_wants_color:
-            print(f"🔍 Starting color analysis thread")
+            print(f"Starting color analysis thread")
             self.analysis_started.emit()
             
             pdf_path = self.selected_pdf['path']
@@ -198,10 +198,10 @@ class PrintOptionsModel(QObject):
             self.analysis_thread.start()
         else:
             # For black and white, calculate directly
-            print(f"🔍 Calculating black and white cost directly")
+            print(f"Calculating black and white cost directly")
             num_pages = len(self.selected_pages)
             base_cost = num_pages * self.analyzer.black_price
-            print(f"🔍 num_pages: {num_pages}, base_cost: {base_cost}")
+            print(f"num_pages: {num_pages}, base_cost: {base_cost}")
             
             bw_results = {
                 'pricing': {
@@ -212,7 +212,7 @@ class PrintOptionsModel(QObject):
                 'page_analysis': {},
                 'error': None
             }
-            print(f"🔍 bw_results: {bw_results}")
+            print(f"bw_results: {bw_results}")
             self.on_analysis_finished(bw_results)
     
     def on_analysis_finished(self, results):
@@ -227,11 +227,11 @@ class PrintOptionsModel(QObject):
     
     def update_cost_display(self):
         """Updates the cost display based on current settings."""
-        print(f"🔍 update_cost_display called")
-        print(f"🔍 analysis_results: {self.analysis_results}")
+        print(f"update_cost_display called")
+        print(f"analysis_results: {self.analysis_results}")
         
         if not self.analysis_results:
-            print(f"🔍 No analysis results, returning")
+            print(f"No analysis results, returning")
             return
         
         num_copies = self._copies
@@ -247,7 +247,7 @@ class PrintOptionsModel(QObject):
         else:
             details_text = f"Based on {num_copies} copies of {b_count} Black & White pages"
         
-        print(f"🔍 Emitting cost_updated signal: '{cost_text}' / '{details_text}'")
+        print(f"Emitting cost_updated signal: '{cost_text}' / '{details_text}'")
         self.cost_updated.emit(cost_text, details_text)
     
     def get_payment_data(self):

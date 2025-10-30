@@ -74,50 +74,32 @@ class PaymentController(QWidget):
     
     def set_payment_data(self, payment_data):
         """Sets payment data in the model."""
-        print(f"DEBUG: set_payment_data called with: {payment_data}")
         self.model.set_payment_data(payment_data)
         self.view.set_buttons_enabled(True)
         
         # If payment screen is already active, enable payment mode now
         if hasattr(self.model, 'gpio_thread') and self.model.gpio_thread:
-            print("DEBUG: Payment screen already active, enabling payment mode now")
             self.model.enable_payment_mode()
     
     def on_enter(self):
         """Called when the payment screen is shown."""
-        print("*** PAYMENT CONTROLLER ON_ENTER METHOD CALLED ***")
-        print("=== PAYMENT CONTROLLER ON_ENTER START ===")
-        print("DEBUG: Payment controller on_enter() called")
-        print(f"DEBUG: Controller type: {type(self)}")
-        print(f"DEBUG: Model type: {type(self.model)}")
-        print(f"DEBUG: View type: {type(self.view)}")
-        
         # Don't reset payment state here - it will be reset in the model's on_enter()
-        print("DEBUG: Payment state will be reset in model's on_enter() method")
         
         # Start timeout timer (5 minutes)
         self.timeout_timer.start(300000)
-        print("TIMEOUT: Payment screen timeout started (5 minutes)")
         
-        print("DEBUG: About to call model.on_enter()")
         try:
             self.model.on_enter()
-            print("DEBUG: model.on_enter() completed")
         except Exception as e:
-            print(f"DEBUG: model.on_enter() failed with error: {e}")
+            print(f"model.on_enter() failed with error: {e}")
         self.view.set_buttons_enabled(True)
-        print("DEBUG: Payment controller on_enter() completed")
-        print("=== PAYMENT CONTROLLER ON_ENTER END ===")
     
     def on_leave(self):
         """Called when leaving the payment screen."""
-        print("*** PAYMENT CONTROLLER ON_LEAVE METHOD CALLED ***")
         # Stop timeout timer
         self.timeout_timer.stop()
-        print("TIMEOUT: Payment screen timeout stopped")
         # Disable payment pins
         self.model.on_leave()
-        print("*** PAYMENT CONTROLLER ON_LEAVE COMPLETED ***")
     
     def go_back(self):
         """Public method to go back to print options screen."""
@@ -133,8 +115,6 @@ class PaymentController(QWidget):
             self.model.amount_received_updated.emit(amount)
             self.model._update_payment_status()
             
-            print(f"Payment suggestion selected: P{amount:.2f}")
-            
         except Exception as e:
             print(f"Error handling suggestion selection: {e}")
     
@@ -145,8 +125,6 @@ class PaymentController(QWidget):
             self.model.amount_received = self.model.total_cost
             self.model.amount_received_updated.emit(self.model.total_cost)
             self.model._update_payment_status()
-            
-            print(f"Exact payment requested: P{self.model.total_cost:.2f}")
             
         except Exception as e:
             print(f"Error handling exact payment request: {e}")
@@ -170,7 +148,6 @@ class PaymentController(QWidget):
         """Reset the timeout timer (call on user activity)."""
         self.timeout_timer.stop()
         self.timeout_timer.start(300000)
-        print("TIMEOUT: Payment screen timeout reset")
     
     def _manual_disable_acceptors(self):
         """Manually disable acceptors as a safety backup."""
