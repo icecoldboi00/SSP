@@ -210,6 +210,15 @@ class PrinterThread(QThread):
                 alerts_result = subprocess.run(['lpstat', '-l', '-p', target_printer], 
                                              capture_output=True, text=True)
                 if alerts_result.returncode == 0:
+                    # If lpstat reports "now printing", consider it actively printing
+                    try:
+                        lpstat_out_lower = alerts_result.stdout.lower()
+                        if " now printing " in lpstat_out_lower or lpstat_out_lower.startswith(f"printer {target_printer.lower()} now printing"):
+                            printer_actively_printing = True
+                            printer_was_active = True
+                            print(f"🖨️ Printer '{target_printer}' is actively printing (lpstat now printing)")
+                    except Exception:
+                        pass
                     # Look for alerts line in the output
                     for line in alerts_result.stdout.split('\n'):
                         line = line.strip()

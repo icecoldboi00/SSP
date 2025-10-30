@@ -418,6 +418,17 @@ class ThankYouModel(QObject):
                                                capture_output=True, text=True, timeout=5)
                 
                 if detailed_result.returncode == 0:
+                    # First, check header line for explicit printing/idle states
+                    try:
+                        header_line = detailed_result.stdout.split('\n', 1)[0].strip().lower()
+                        if " now printing " in header_line or header_line.startswith(f"printer {target_printer.lower()} now printing"):
+                            is_printing = True
+                            print(f"Fallback: '{target_printer}' actively printing (lpstat header)")
+                        elif " is idle." in header_line:
+                            print(f"Fallback: '{target_printer}' reported idle (lpstat header)")
+                    except Exception:
+                        pass
+
                     # Look for alerts line in the output
                     for line in detailed_result.stdout.split('\n'):
                         line = line.strip()
@@ -457,14 +468,6 @@ class ThankYouModel(QObject):
                     print("Fallback: Target printer appears idle; waiting for official completion signal")
                 else:
                     print(f"Fallback: Still waiting for target printer '{target_printer}' to finish printing")
-                    # Extend safety timeout while actively printing to avoid premature redirect
-                    try:
-                        if self.current_state == "waiting":
-                            # Restart the safety timer window (3 minutes) each check
-                            self.redirect_timer.start(180000)
-                            print("⏰ Extended safety timeout while printing")
-                    except Exception as e:
-                        print(f"⚠️ Could not extend safety timeout: {e}")
                     
         except subprocess.TimeoutExpired:
             print("⚠️ Fallback lpstat command timed out")
