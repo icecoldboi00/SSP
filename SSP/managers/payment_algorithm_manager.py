@@ -64,9 +64,9 @@ class PaymentAlgorithmManager:
             return {1: 0, 5: 0}
         
         # Round to nearest peso (assuming no centavos in this system)
-        change_amount = round(change_amount)
+        change_amount = int(round(change_amount))
         
-        # Calculate optimal coin distribution
+        # Greedy distribution without considering inventory
         coins_5 = int(change_amount // 5)
         coins_1 = int(change_amount % 5)
         
@@ -81,14 +81,31 @@ class PaymentAlgorithmManager:
         # Get current coin inventory
         coin_inventory = self.get_coin_inventory()
         
-        # Calculate required coins
-        required_coins = self.calculate_change_breakdown(change_amount)
+        # Desired greedy breakdown
+        desired = self.calculate_change_breakdown(change_amount)
+        change_int = int(round(change_amount))
         
-        # Check if we have enough coins
-        for denom, required_count in required_coins.items():
-            available_count = coin_inventory.get(denom, 0)
-            if available_count < required_count:
-                return False, f"Insufficient ₱{denom} coins. Required: {required_count}, Available: {available_count}", required_coins
+        # Adapt breakdown to available inventory: use as many 5s as possible (but not more than available), then fill with 1s
+        use_fives = min(desired.get(5, 0), max(0, coin_inventory.get(5, 0)))
+        remaining_after_fives = change_int - (use_fives * 5)
+        if remaining_after_fives < 0:
+            remaining_after_fives = 0
+        use_ones = remaining_after_fives
+        
+        # If not enough 1s to cover remainder, try reducing 5s to free up smaller remainder
+        available_ones = max(0, coin_inventory.get(1, 0))
+        while use_ones > available_ones and use_fives > 0:
+            use_fives -= 1
+            remaining_after_fives = change_int - (use_fives * 5)
+            use_ones = remaining_after_fives
+        
+        # Final feasibility check against inventory
+        if use_ones > available_ones:
+            return False, (
+                f"Insufficient coins for change ₱{change_int}. Available: ₱5={coin_inventory.get(5,0)}, ₱1={coin_inventory.get(1,0)}"
+            ), {1: use_ones, 5: use_fives}
+        
+        required_coins = {1: use_ones, 5: use_fives}
         
         # Check minimum thresholds (reserve some coins for future transactions)
         # Only enforce when threshold > 0
