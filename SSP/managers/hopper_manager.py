@@ -98,6 +98,9 @@ class HopperController:
                     print(f"[{self.name}] Callback cleaned up")
                 except Exception as callback_error:
                     print(f"[{self.name}] Error canceling callback: {callback_error}")
+            
+            # Finally, clear pigpio instance reference to avoid later use in callbacks
+            self.pi = None
                 
         except Exception as e:
             print(f"[{self.name}] Error during cleanup: {e}")
@@ -129,7 +132,14 @@ class HopperController:
             return False
 
     def _sensor_callback(self, gpio, level, tick):
-        current_time = self.pi.get_current_tick()
+        # Guard against callbacks firing after pigpio connection is closed
+        try:
+            if not self.pi or not getattr(self.pi, 'connected', False):
+                return
+            current_time = self.pi.get_current_tick()
+        except Exception:
+            # pigpio thread may still invoke callbacks during shutdown; ignore safely
+            return
 
         if level == 0:  # Falling edge - coin detected
             if not self.sensor_active:
@@ -314,7 +324,10 @@ class ChangeDispenser:
             return False
 
     def dispense_change(self, amount: float, status_callback=None, admin_screen=None, db_threader=None, required_coins=None):
-        """Calculates and dispenses the correct change, one coin at a time. Returns actual coins dispensed."""
+        """Calculates and dispenses the correct change, one coin at a time, respecting inventory limits.
+        If exact change cannot be made due to low inventory, dispense all available coins as fallback.
+        Returns actual coins dispensed.
+        """
         if amount <= 0:
             return {'success': True, 'coins_1': 0, 'coins_5': 0}
 
@@ -336,17 +349,60 @@ class ChangeDispenser:
                     status_callback(error_msg)
                 return {'success': False, 'coins_1': 0, 'coins_5': 0, 'error': 'hopper_initialization_failed'}
 
+        # Determine available inventory from database (if provided)
+        available_fives = None
+        available_ones = None
+        if admin_screen and hasattr(admin_screen, 'model') and hasattr(admin_screen.model, 'db_manager'):
+            try:
+                inventory = admin_screen.model.db_manager.get_cash_inventory()
+                available_fives = 0
+                available_ones = 0
+                for item in inventory:
+                    if item.get('type') == 'coin' and item.get('denomination') == 5:
+                        available_fives = int(item.get('count', 0))
+                    elif item.get('type') == 'coin' and item.get('denomination') == 1:
+                        available_ones = int(item.get('count', 0))
+                print(f"DEBUG: Inventory - 5-peso: {available_fives}, 1-peso: {available_ones}")
+            except Exception as e:
+                print(f"WARNING: Could not read coin inventory: {e}")
+                available_fives = None
+                available_ones = None
+
         # Use provided breakdown if available, otherwise compute greedy
         if isinstance(required_coins, dict):
-            num_fives = int(required_coins.get(5, 0))
-            num_ones = int(required_coins.get(1, 0))
+            desired_fives = int(required_coins.get(5, 0))
+            desired_ones = int(required_coins.get(1, 0))
         else:
-            # Fix: Use proper integer division and modulo for change calculation
-            num_fives = int(amount // 5)  # Number of ₱5 coins needed
-            num_ones = int(amount % 5)    # Number of ₱1 coins needed (no rounding needed)
+            # Greedy target breakdown for the amount
+            desired_fives = int(amount // 5)
+            desired_ones = int(amount % 5)
+
+        # Cap by availability when inventory known
+        if available_fives is not None and available_ones is not None:
+            num_fives = min(desired_fives, max(0, available_fives))
+            remaining_value = int(amount - (num_fives * 5))
+            num_ones = min(desired_ones if isinstance(required_coins, dict) else remaining_value, max(0, available_ones))
+
+            # Evaluate if exact change is possible with capped counts
+            disp_value = (num_fives * 5) + num_ones
+            total_available_value = (available_fives * 5) + available_ones
+
+            if disp_value < int(amount):
+                # Not enough coins to make exact change
+                if total_available_value <= 0:
+                    print("INFO: No coins available in database. Skipping dispense.")
+                    return {'success': True, 'coins_1': 0, 'coins_5': 0, 'actual_change': 0, 'expected_change': int(amount)}
+                # Fallback: dispense all available coins
+                print("INFO: Insufficient coins for exact change. Dispensing all available coins as fallback.")
+                num_fives = max(0, available_fives)
+                num_ones = max(0, available_ones)
+        else:
+            # Inventory unknown; proceed with desired targets
+            num_fives = desired_fives
+            num_ones = desired_ones
         
-        print(f"Dispensing ₱{amount:.2f}: {num_fives}x ₱5, {num_ones}x ₱1")
-        print(f"DEBUG: Change calculation - Amount: {amount}, ₱5 coins: {num_fives}, ₱1 coins: {num_ones}")
+        print(f"Dispensing ₱{amount:.2f}: {num_fives}x 5-peso, {num_ones}x 1-peso")
+        print(f"DEBUG: Change calculation - Amount: {amount}, 5-peso coins: {num_fives}, 1-peso coins: {num_ones}")
         if status_callback:
             status_callback(f"Preparing to dispense ₱{amount:.2f}...")
 
@@ -355,26 +411,26 @@ class ChangeDispenser:
         actual_ones = 0
 
         # Dispense 5-peso coins
-        print(f"DEBUG: Starting to dispense {num_fives} ₱5 coins using Hopper B")
+        print(f"DEBUG: Starting to dispense {num_fives} 5-peso coins using Hopper B")
         for i in range(num_fives):
-            msg = f"Dispensing ₱5 coin ({i + 1} of {num_fives})"
+            msg = f"Dispensing 5-peso coin ({i + 1} of {num_fives})"
             if status_callback: status_callback(msg)
             print(msg)
             
             if self.simulated:
                 time.sleep(1.5) # Simulate dispense time
                 success = True
-                print(f"DEBUG: Simulated ₱5 coin dispense successful")
+                print(f"DEBUG: Simulated 5-peso coin dispense successful")
             else:
-                print(f"DEBUG: Calling hoppers['B'].dispense_single_coin() for ₱5 coin {i + 1}")
+                print(f"DEBUG: Calling hoppers['B'].dispense_single_coin() for 5-peso coin {i + 1}")
                 success = self.hoppers['B'].dispense_single_coin()
                 print(f"DEBUG: Hopper B dispense result: {success}")
 
             if success:
                 actual_fives += 1
-                print(f"DEBUG: Successfully dispensed ₱5 coin {actual_fives}/{num_fives}")
+                print(f"DEBUG: Successfully dispensed 5-peso coin {actual_fives}/{num_fives}")
             else:
-                error_msg = f"CRITICAL: Failed to dispense ₱5 coin {i + 1}. Dispensed {actual_fives}/{num_fives} so far."
+                error_msg = f"CRITICAL: Failed to dispense 5-peso coin {i + 1}. Dispensed {actual_fives}/{num_fives} so far."
                 if status_callback: status_callback(error_msg)
                 print(error_msg)
                 # Continue and try to make up with ₱1 coins later
@@ -387,7 +443,7 @@ class ChangeDispenser:
             print(f"INFO: Making up shortfall of ₱5 coins with {makeup_ones} additional ₱1 coins")
 
         for i in range(total_ones_to_dispense):
-            msg = f"Dispensing ₱1 coin ({i + 1} of {total_ones_to_dispense})"
+            msg = f"Dispensing 1-peso coin ({i + 1} of {total_ones_to_dispense})"
             if status_callback: status_callback(msg)
             print(msg)
             
@@ -399,9 +455,9 @@ class ChangeDispenser:
 
             if success:
                 actual_ones += 1
-                print(f"DEBUG: Successfully dispensed ₱1 coin {actual_ones}/{total_ones_to_dispense}")
+                print(f"DEBUG: Successfully dispensed 1-peso coin {actual_ones}/{total_ones_to_dispense}")
             else:
-                error_msg = f"CRITICAL: Failed to dispense ₱1 coin {i + 1}. Dispensed {actual_ones}/{total_ones_to_dispense} so far."
+                error_msg = f"CRITICAL: Failed to dispense 1-peso coin {i + 1}. Dispensed {actual_ones}/{total_ones_to_dispense} so far."
                 if status_callback: status_callback(error_msg)
                 print(error_msg)
                 # Continue with what we have instead of failing completely

@@ -1,5 +1,3 @@
-# screens/idle/model.py
-
 from PyQt5.QtCore import QObject, pyqtSignal
 import os
 

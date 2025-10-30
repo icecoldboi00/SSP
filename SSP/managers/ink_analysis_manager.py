@@ -20,6 +20,11 @@ class InkAnalysisManager:
             'yellow': False,
             'black': False
         }
+        # Track coin low alerts to avoid spamming until refilled
+        self.low_coin_alerts_sent = {
+            'peso_1': False,
+            'peso_5': False
+        }
         
     def analyze_pdf_ink_usage(self, pdf_path, selected_pages=None, dpi=150):
         try:
@@ -346,13 +351,27 @@ class InkAnalysisManager:
             
             # Check ₱1 coins
             if coin_1_count <= low_coin_thresholds['peso_1']:
-                low_coins.append(('₱1', coin_1_count))
-                print(f"Low ₱1 coins detected ({coin_1_count} remaining)")
+                # Only alert if not already sent
+                if not self.low_coin_alerts_sent['peso_1']:
+                    low_coins.append(('1-peso', coin_1_count))
+                    self.low_coin_alerts_sent['peso_1'] = True
+                    print(f"Low 1-peso coins alert flagged ({coin_1_count} remaining)")
+            else:
+                # Reset flag if refilled above threshold
+                if self.low_coin_alerts_sent['peso_1']:
+                    self.low_coin_alerts_sent['peso_1'] = False
+                    print("1-peso coin alert flag reset (refilled)")
             
             # Check ₱5 coins
             if coin_5_count <= low_coin_thresholds['peso_5']:
-                low_coins.append(('₱5', coin_5_count))
-                print(f"Low ₱5 coins detected ({coin_5_count} remaining)")
+                if not self.low_coin_alerts_sent['peso_5']:
+                    low_coins.append(('5-peso', coin_5_count))
+                    self.low_coin_alerts_sent['peso_5'] = True
+                    print(f"Low 5-peso coins alert flagged ({coin_5_count} remaining)")
+            else:
+                if self.low_coin_alerts_sent['peso_5']:
+                    self.low_coin_alerts_sent['peso_5'] = False
+                    print("5-peso coin alert flag reset (refilled)")
             
             # Send SMS alerts if any coins are low
             if low_coins:

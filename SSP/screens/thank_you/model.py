@@ -1,36 +1,9 @@
-"""
-Thank You Screen Model
-
-Business logic for the Thank You screen shown after payment completion.
-Manages print job status updates, displays appropriate messages, and handles
-screen redirection timing.
-
-States:
-- initial: Screen first shown
-- waiting: Print job in progress
-- completed: Print job finished successfully
-- error: Print job failed (paper jam or other error)
-- admin_override: Admin manually overriding error state
-"""
-
 from PyQt5.QtCore import QObject, pyqtSignal, QTimer
 import threading
 import subprocess
 
 
 class ThankYouModel(QObject):
-    """
-    Model for the Thank You screen.
-    
-    Manages state, print job monitoring, and coordinates with the printer manager
-    to display appropriate status messages to users.
-    
-    Signals:
-        status_updated(str, str): Emits (status_text, subtitle_text) for UI updates
-        redirect_to_idle: Emitted when it's time to return to idle screen
-        admin_override_requested: Emitted to show admin override button on errors
-    """
-    
     status_updated = pyqtSignal(str, str)
     redirect_to_idle = pyqtSignal()
     admin_override_requested = pyqtSignal()

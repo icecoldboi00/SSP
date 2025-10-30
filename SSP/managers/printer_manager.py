@@ -5,7 +5,7 @@ import threading
 from PyQt5.QtCore import QObject, QThread, pyqtSignal, QTimer
 from config import get_config
 from managers.ink_analysis_manager import InkAnalysisManager
-from managers.sms_manager import send_paper_jam_sms, send_printing_error_sms
+from managers.sms_manager import send_paper_jam_sms, send_printing_error_sms, send_no_paper_sms
 
 try:
     import fitz  # PyMuPDF
@@ -252,7 +252,7 @@ class PrinterThread(QThread):
                                 elif "media-empty-error" in alerts_found or "media-needed-error" in alerts_found:
                                     print(f"No paper detected on {target_printer}")
                                     try:
-                                        send_paper_jam_sms()  # Using same SMS function for paper issues
+                                        send_no_paper_sms()  # Using same SMS function for paper issues
                                     except Exception as e:
                                         print(f"Failed to send SMS: {e}")
                                     self.print_failed.emit(f"No paper detected on {target_printer}")

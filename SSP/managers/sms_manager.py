@@ -192,6 +192,11 @@ def initialize_sms():
     manager = get_sms_manager()
     return manager.initialize_modem()
 
+def send_no_paper_sms():
+    """Send low paper SMS alert."""
+    manager = get_sms_manager()
+    return manager.send_sms_and_close("No paper,please refill.")
+
 def send_low_paper_sms():
     """Send low paper SMS alert."""
     manager = get_sms_manager()
@@ -221,15 +226,16 @@ def send_multiple_low_ink_sms(low_cartridges):
     return manager.send_sms_and_close(message)
 
 def send_low_coin_sms(coin_type, count):
-    """Send low coin SMS alert."""
+    """Send low coin SMS alert. coin_type should be ASCII-safe like '1-peso' or '5-peso'."""
     manager = get_sms_manager()
-    message = f"ALERT: Low on {coin_type} coins ({count} remaining). Please refill soon."
+    safe_label = str(coin_type)
+    message = f"ALERT: Low on {safe_label} coins ({count} remaining). Please refill soon."
     return manager.send_sms_and_close(message)
 
 def send_multiple_low_coins_sms(low_coins):
-    """Send SMS alert for multiple low coin types."""
+    """Send SMS alert for multiple low coin types. Use ASCII-safe labels."""
     manager = get_sms_manager()
-    coin_list = ", ".join([f"{coin_type} ({count} remaining)" for coin_type, count in low_coins])
+    coin_list = ", ".join([f"{str(coin_type)} ({count} remaining)" for coin_type, count in low_coins])
     message = f"ALERT: Multiple coin types are low - {coin_list}. Please refill soon."
     return manager.send_sms_and_close(message)
 
