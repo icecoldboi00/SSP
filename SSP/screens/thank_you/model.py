@@ -63,20 +63,20 @@ class ThankYouModel(QObject):
                 usb_manager = self.main_app.usb_screen.model.usb_manager
                 if hasattr(usb_manager, 'current_usb_drive') and usb_manager.current_usb_drive:
                     drive_path = usb_manager.current_usb_drive
-                    print(f"🔌 Unmounting USB drive: {drive_path}")
+                    print(f"Unmounting USB drive: {drive_path}")
                     
                     # Use the existing auto-eject functionality
                     if hasattr(usb_manager, '_auto_eject_usb_drive'):
                         usb_manager._auto_eject_usb_drive(drive_path)
-                        print(f"✅ USB drive unmounted successfully")
+                        print(f"USB drive unmounted successfully")
                     else:
-                        print(f"⚠️ Auto-eject method not available")
+                        print(f"Auto-eject method not available")
                 else:
-                    print(f"⚠️ No USB drive to unmount")
+                    print(f"No USB drive to unmount")
             else:
-                print(f"⚠️ USB screen not available for unmounting")
+                print(f"USB screen not available for unmounting")
         except Exception as e:
-            print(f"❌ Error unmounting USB drive: {e}")
+            print(f"Error unmounting USB drive: {e}")
     
     def _on_timer_timeout(self):
         """Handle redirect timer timeout."""
@@ -127,7 +127,7 @@ class ThankYouModel(QObject):
                 main_app.printer_manager.print_job_failed.connect(self._on_print_failed)
                 print(f"DEBUG: Printer signals connected successfully")
             except Exception as e:
-                print(f"❌ Error connecting printer signals: {e}")
+                print(f"Error connecting printer signals: {e}")
             
             # Start print job
             self._start_print_job(main_app)
@@ -136,7 +136,7 @@ class ThankYouModel(QObject):
             from PyQt5.QtCore import QTimer
             QTimer.singleShot(0, self._start_timers)
         else:
-            print("❌ No printer manager found")
+            print("No printer manager found")
             self.redirect_timer.start(10000)
     
     def finish_printing(self):
@@ -334,7 +334,7 @@ class ThankYouModel(QObject):
     def _cleanup_temp_files(self):
         """Clean up temporary files after successful printing."""
         try:
-            print("🧹 Cleaning up temporary files after printing...")
+            print("Cleaning up temporary files after printing...")
             
             # Import USBFileManager to access cleanup methods
             try:
@@ -346,32 +346,20 @@ class ThankYouModel(QObject):
                 # Clean up all temp folders from previous sessions
                 if hasattr(temp_usb_manager, 'cleanup_all_temp_folders'):
                     temp_usb_manager.cleanup_all_temp_folders()
-                    print("✅ Cleaned up all temporary folders")
+                    print("Cleaned up all temporary folders")
                 else:
-                    print("⚠️ cleanup_all_temp_folders method not available")
+                    print("cleanup_all_temp_folders method not available")
                     
             except ImportError as e:
-                print(f"⚠️ Could not import USBFileManager: {e}")
+                print(f"Could not import USBFileManager: {e}")
             except Exception as e:
-                print(f"⚠️ Error during temp file cleanup: {e}")
+                print(f"Error during temp file cleanup: {e}")
                 
         except Exception as e:
-            print(f"⚠️ Error during temp file cleanup: {e}")
+            print(f"Error during temp file cleanup: {e}")
     
     def _start_print_job(self, main_app):
-        """
-        Start the print job using stored print job details.
-        
-        Args:
-            main_app: Main application window with current_print_job attribute
-        """
         print(f"DEBUG: _start_print_job called")
-        print(f"DEBUG: main_app has current_print_job: {hasattr(main_app, 'current_print_job')}")
-        if hasattr(main_app, 'current_print_job'):
-            print(f"DEBUG: current_print_job value: {main_app.current_print_job}")
-        else:
-            print(f"DEBUG: current_print_job attribute does not exist")
-            print(f"DEBUG: main_app attributes: {[attr for attr in dir(main_app) if not attr.startswith('_')]}")
         
         if hasattr(main_app, 'current_print_job') and main_app.current_print_job:
             try:
@@ -385,7 +373,7 @@ class ThankYouModel(QObject):
                 self.print_job_started = True
                 print(f"DEBUG: Print job started successfully")
             except Exception as e:
-                print(f"❌ Error starting print job: {e}")
+                print(f"Error starting print job: {e}")
                 self.show_printing_error(f"Failed to start print job: {e}")
         else:
             print(f"DEBUG: No print job details available")
@@ -416,7 +404,6 @@ class ThankYouModel(QObject):
                     target_printer = self.main_app.printer_manager.printer_name
                 
                 if not target_printer:
-                    print("Fallback: No printer name available, using default")
                     target_printer = "HP_Smart_Tank_580_590_series_5E0E1D_USB"
                 
                 is_printing = False
@@ -465,8 +452,8 @@ class ThankYouModel(QObject):
                                     self.show_printing_error(f"Printer error on {target_printer}")
                                     return
                             else:
-                                # No alerts means printer is idle
-                                print(f"Fallback: Printer '{target_printer}' is idle (no alerts)")
+                                # No alerts found
+                                print(f"Fallback: {target_printer}: no alerts")
                             break
                 
                 # Do NOT mark complete here; rely on real printer signals.
@@ -477,9 +464,9 @@ class ThankYouModel(QObject):
                     print(f"Fallback: Still waiting for target printer '{target_printer}' to finish printing")
                     
         except subprocess.TimeoutExpired:
-            print("⚠️ Fallback lpstat command timed out")
+            print("Fallback lpstat command timed out")
         except Exception as e:
-            print(f"⚠️ Fallback status check error: {e}")
+            print(f"Fallback status check error: {e}")
     
     def _start_timers(self):
         """Start monitoring timers in the main thread."""
@@ -495,7 +482,7 @@ class ThankYouModel(QObject):
         Args:
             error_message: Error description from printer manager
         """
-        print(f"❌ Print job failed: {error_message}")
+        print(f"Print job failed: {error_message}")
         self.show_printing_error(error_message)
     
     def on_leave(self):

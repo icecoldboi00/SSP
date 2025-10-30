@@ -179,7 +179,7 @@ class PrintingSystemApp(QMainWindow):
         # Check paper count before switching to most screens (except admin and thank_you)
         if screen_name not in ['admin', 'thank_you']:
             if self.check_paper_count_and_redirect():
-                print(f"❌ Cannot navigate to {screen_name} - insufficient paper")
+                print(f"Cannot navigate to {screen_name} - insufficient paper")
                 return
         
         # Switch to the new screen
