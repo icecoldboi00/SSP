@@ -197,7 +197,7 @@ class PrinterThread(QThread):
         initial_startup_delay = 5  # Wait 5 seconds before first check to let printer start
         elapsed_time = 0
         completion_time = None
-        printer_was_active = False
+        media_empty_sms_sent = False
         
         print(f"Starting print completion monitoring (timeout: {max_wait_time}s, min_print_time: {min_print_time}s)")
         print(f"Waiting {initial_startup_delay}s for printer to start processing job...")
@@ -252,9 +252,21 @@ class PrinterThread(QThread):
                                 elif "media-empty-error" in alerts_found or "media-needed-error" in alerts_found:
                                     print(f"No paper detected on {target_printer}")
                                     try:
-                                        send_no_paper_sms()  # Using same SMS function for paper issues
+                                        send_no_paper_sms()
                                     except Exception as e:
                                         print(f"Failed to send SMS: {e}")
+                                    self.print_failed.emit(f"No paper detected on {target_printer}")
+                                    return False
+                                elif "media-empty-report" in alerts_found:
+                                    # Treat as hard no-paper error to surface on UI
+                                    print(f"Paper tray empty report on {target_printer}")
+                                    if not media_empty_sms_sent:
+                                        try:
+                                            send_no_paper_sms()
+                                            media_empty_sms_sent = True
+                                            print("No paper SMS sent (report)")
+                                        except Exception as e:
+                                            print(f"Failed to send SMS: {e}")
                                     self.print_failed.emit(f"No paper detected on {target_printer}")
                                     return False
                                 elif "offline" in alerts_found or "stopped" in alerts_found:
