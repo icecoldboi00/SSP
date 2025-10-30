@@ -449,12 +449,6 @@ class ThankYouModel(QObject):
         # Do not auto-redirect while printing; stay on Thank You until success/failure
     
     def _on_print_failed(self, error_message):
-        """
-        Handle print job failure.
-        
-        Args:
-            error_message: Error description from printer manager
-        """
         print(f"Print job failed: {error_message}")
         self.show_printing_error(error_message)
     
