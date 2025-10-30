@@ -471,7 +471,7 @@ class ThankYouModel(QObject):
     def _start_timers(self):
         """Start monitoring timers in the main thread."""
         # Start periodic printer status check as fallback (every 5 seconds)
-        self.status_check_timer.start(5000)
+        self.status_check_timer.start(10000)
         
         # Do not auto-redirect while printing; stay on Thank You until success/failure
     

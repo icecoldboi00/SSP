@@ -193,7 +193,7 @@ class PrinterThread(QThread):
         max_wait_time = config.printer_timeout * 10
         min_print_time = 15  # Minimum time to wait for physical printing (15 seconds)
         post_completion_wait = 15  # Wait 15 seconds after completion detection to ensure all pages printed
-        check_interval = 2
+        check_interval = 5
         initial_startup_delay = 5  # Wait 5 seconds before first check to let printer start
         elapsed_time = 0
         completion_time = None
