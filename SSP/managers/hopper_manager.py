@@ -2,6 +2,7 @@
 
 import time
 from PyQt5.QtCore import QThread, pyqtSignal
+from database.db_manager import DatabaseManager
 
 # --- Check for pigpio and set a flag ---
 try:
@@ -349,24 +350,24 @@ class ChangeDispenser:
                     status_callback(error_msg)
                 return {'success': False, 'coins_1': 0, 'coins_5': 0, 'error': 'hopper_initialization_failed'}
 
-        # Determine available inventory from database (if provided)
+        # Determine available inventory from database using a fresh connection (thread-safe)
         available_fives = None
         available_ones = None
-        if admin_screen and hasattr(admin_screen, 'model') and hasattr(admin_screen.model, 'db_manager'):
-            try:
-                inventory = admin_screen.model.db_manager.get_cash_inventory()
-                available_fives = 0
-                available_ones = 0
-                for item in inventory:
-                    if item.get('type') == 'coin' and item.get('denomination') == 5:
-                        available_fives = int(item.get('count', 0))
-                    elif item.get('type') == 'coin' and item.get('denomination') == 1:
-                        available_ones = int(item.get('count', 0))
-                print(f"DEBUG: Inventory - 5-peso: {available_fives}, 1-peso: {available_ones}")
-            except Exception as e:
-                print(f"WARNING: Could not read coin inventory: {e}")
-                available_fives = None
-                available_ones = None
+        try:
+            dbm = DatabaseManager()
+            inventory = dbm.get_cash_inventory()
+            available_fives = 0
+            available_ones = 0
+            for item in inventory:
+                if item.get('type') == 'coin' and item.get('denomination') == 5:
+                    available_fives = int(item.get('count', 0))
+                elif item.get('type') == 'coin' and item.get('denomination') == 1:
+                    available_ones = int(item.get('count', 0))
+            print(f"DEBUG: Inventory - 5-peso: {available_fives}, 1-peso: {available_ones}")
+        except Exception as e:
+            print(f"WARNING: Could not read coin inventory with fresh DB connection: {e}")
+            available_fives = None
+            available_ones = None
 
         # Use provided breakdown if available, otherwise compute greedy
         if isinstance(required_coins, dict):
