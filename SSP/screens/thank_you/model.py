@@ -410,8 +410,15 @@ class ThankYouModel(QObject):
                 output = result.stdout
                 output_lower = output.lower()
                 
-                # Check printer status using alerts-based detection (fallback method)
-                target_printer = "HP_Smart_Tank_580_590_series_5E0E1D_USB"
+                # Get the actual printer name from printer manager instead of hardcoded value
+                target_printer = None
+                if hasattr(self, 'main_app') and hasattr(self.main_app, 'printer_manager'):
+                    target_printer = self.main_app.printer_manager.printer_name
+                
+                if not target_printer:
+                    print("Fallback: No printer name available, using default")
+                    target_printer = "HP_Smart_Tank_580_590_series_5E0E1D_USB"
+                
                 is_printing = False
                 
                 detailed_result = subprocess.run(['lpstat', '-l', '-p', target_printer], 
@@ -465,7 +472,7 @@ class ThankYouModel(QObject):
                 # Do NOT mark complete here; rely on real printer signals.
                 # Only manage safety timer while printing; avoid premature redirects.
                 if not is_printing:
-                    print("Fallback: Target printer appears idle; waiting for official completion signal")
+                    print(f"Fallback: Target printer '{target_printer}' appears idle; waiting for official completion signal")
                 else:
                     print(f"Fallback: Still waiting for target printer '{target_printer}' to finish printing")
                     
@@ -479,13 +486,7 @@ class ThankYouModel(QObject):
         # Start periodic printer status check as fallback (every 5 seconds)
         self.status_check_timer.start(5000)
         
-        # Only start safety timeout if not in error state
-        # Error states should wait for admin override, not auto-redirect
-        if self.current_state not in ["error", "admin_override"]:
-            # Start safety timeout (3 minutes) for print jobs
-            # This ensures user doesn't get stuck if printing fails silently
-            self.redirect_timer.start(180000)
-            print(f"⏰ Started 3-minute safety timeout for print job")
+        # Do not auto-redirect while printing; stay on Thank You until success/failure
     
     def _on_print_failed(self, error_message):
         """
