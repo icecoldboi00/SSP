@@ -536,6 +536,24 @@ class PaymentModel(QObject):
 
             print(f"✅ Coin inventory updated immediately: P1 {current_1} -> {new_1}, P5 {current_5} -> {new_5}")
 
+            # Edge-triggered SMS for low coin alerts: send only when crossing below threshold
+            try:
+                low_threshold_1 = 5
+                low_threshold_5 = 3
+                from managers.sms_manager import send_low_coin_sms
+
+                # ₱1 coins: crossing from above threshold to <= threshold
+                if current_1 > low_threshold_1 and new_1 <= low_threshold_1:
+                    send_low_coin_sms('1-peso', new_1)
+                    print(f"Low coin SMS sent for 1-peso: {new_1} remaining")
+
+                # ₱5 coins: crossing from above threshold to <= threshold
+                if current_5 > low_threshold_5 and new_5 <= low_threshold_5:
+                    send_low_coin_sms('5-peso', new_5)
+                    print(f"Low coin SMS sent for 5-peso: {new_5} remaining")
+            except Exception as sms_e:
+                print(f"WARNING: Failed to send edge-triggered low coin SMS: {sms_e}")
+
         except Exception as e:
             print(f"❌ Error updating coin inventory immediately: {e}")
 
