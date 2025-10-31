@@ -187,7 +187,7 @@ class PrintOptionsScreenView(QWidget):
     
     def show_paper_warning(self, available_paper, required_paper):
         """Shows a warning about insufficient paper."""
-        warning_text = f"⚠️ INSUFFICIENT PAPER ⚠️"
+        warning_text = f"INSUFFICIENT PAPER"
         details_text = f"Only {available_paper} sheets available, but {required_paper} sheets needed.\nPlease contact administrator to refill paper."
         
         # Update the display with warning
@@ -198,7 +198,7 @@ class PrintOptionsScreenView(QWidget):
         
         # Disable the continue button
         self.continue_btn.setEnabled(False)
-        self.continue_btn.setText("❌ Insufficient Paper")
+        self.continue_btn.setText("Insufficient Paper")
         self.continue_btn.setStyleSheet("""
             QPushButton {
                 color: white; font-size: 12px; font-weight: bold;

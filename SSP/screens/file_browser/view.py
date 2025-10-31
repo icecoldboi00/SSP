@@ -95,7 +95,7 @@ class PDFButton(QPushButton):
         filename = pdf_data['filename']
         size_mb = pdf_data.get('size', 0) / (1024 * 1024)
         pages = pdf_data.get('pages', 1)
-        self.setText(f"📄 {filename}\n({size_mb:.1f}MB, ~{pages} pages)")
+        self.setText(f"{filename}\n({size_mb:.1f}MB, ~{pages} pages)")
         self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
         self.setStyleSheet(self.get_normal_style())
         self.clicked.connect(self.on_click)
@@ -668,7 +668,7 @@ class FileBrowserView(QWidget):
 
     def load_pdf_files(self, pdf_files):
         """Loads PDF files into the list."""
-        print(f"📁 Loading {len(pdf_files)} PDF files into view")
+        print(f"Loading {len(pdf_files)} PDF files into view")
         self.pdf_files_data = []
         self.pdf_page_selections = {}
         for pdf_info in pdf_files: 
@@ -712,7 +712,7 @@ class FileBrowserView(QWidget):
 
     def select_pdf(self, pdf_data):
         """Selects a PDF file and updates the UI."""
-        print(f"📄 Selecting PDF: {pdf_data['filename']}")
+        print(f"Selecting PDF: {pdf_data['filename']}")
         if self.selected_pdf is not None and self.selected_pages is not None: 
             self.pdf_page_selections[self.selected_pdf['path']] = self.selected_pages.copy()
         self.selected_pdf = pdf_data

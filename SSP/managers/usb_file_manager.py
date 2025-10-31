@@ -17,7 +17,7 @@ class USBFileManager:
         self.destination_dir = os.path.join(temp_base_dir, f"Session_{self.session_id}")
         
         os.makedirs(self.destination_dir, exist_ok=True)
-        print(f"✅ Temp directory created for session {self.session_id}: {self.destination_dir}")
+        print(f"Temp directory created for session {self.session_id}: {self.destination_dir}")
 
         self.supported_extensions = ['.pdf']
         self.last_known_drives = set()
@@ -40,7 +40,7 @@ class USBFileManager:
                     doc = fitz.open(file_path)
                     result[0] = len(doc)
                 except Exception as pdf_error:
-                    print(f"⚠️ PDF error for {os.path.basename(file_path)}: {pdf_error}")
+                    print(f"PDF error for {os.path.basename(file_path)}: {pdf_error}")
                     result[0] = 1
                 finally:
                     if doc:
@@ -49,10 +49,10 @@ class USBFileManager:
                         except:
                             pass
             except ImportError:
-                print(f"⚠️ PyMuPDF not available for {os.path.basename(file_path)}")
+                print(f"PyMuPDF not available for {os.path.basename(file_path)}")
                 result[0] = 1
             except Exception as e:
-                print(f"⚠️ Unexpected error processing {os.path.basename(file_path)}: {e}")
+                print(f"Unexpected error processing {os.path.basename(file_path)}: {e}")
                 result[0] = 1
         
         # Run in thread with timeout
@@ -62,7 +62,7 @@ class USBFileManager:
         thread.join(timeout)
         
         if thread.is_alive():
-            print(f"⚠️ PDF processing timeout for {os.path.basename(file_path)}, using default page count")
+            print(f"PDF processing timeout for {os.path.basename(file_path)}, using default page count")
             result[0] = 1
         
         return result[0]
@@ -92,7 +92,7 @@ class USBFileManager:
             
             for partition in partitions:
                 if checked_count >= max_partitions:
-                    print(f"⚠️ Reached partition limit ({max_partitions}), stopping scan")
+                    print(f"Reached partition limit ({max_partitions}), stopping scan")
                     break
                 
                 checked_count += 1
@@ -138,26 +138,26 @@ class USBFileManager:
     
     def scan_pdf_files(self, source_dir):
         """Scan for PDF files from USB drive without copying them - light mode"""
-        print(f"\n🔍 Starting light PDF scan for {source_dir}")
+        print(f"\nStarting light PDF scan for {source_dir}")
         scanned_files = []
 
         # Reset stop flag for new operation
         self._should_stop = False
-        print("🔄 Reset stop flag for new USB operation")
+        print("Reset stop flag for new USB operation")
 
         try:
             # Only create a new session directory if we don't have one or if it's a different USB drive
             if not self.destination_dir or not os.path.exists(self.destination_dir) or self.current_usb_drive != source_dir:
-                print(f"🔄 Creating new session directory for USB drive: {source_dir}")
+                print(f"Creating new session directory for USB drive: {source_dir}")
                 self._create_new_session()
             else:
-                print(f"🔄 Reusing existing session directory: {self.destination_dir}")
+                print(f"Reusing existing session directory: {self.destination_dir}")
             
             # Set current drive and mark operation as in progress
             self.set_current_drive(source_dir)
             self.set_operation_in_progress(True)
             
-            print(f"📂 Light scanning PDF files from {source_dir}")
+            print(f"Light scanning PDF files from {source_dir}")
             
             # Limit directory traversal to prevent system load
             max_directories = 5
@@ -165,14 +165,14 @@ class USBFileManager:
             
             for root, _, files in os.walk(source_dir):
                 if directory_count >= max_directories:
-                    print(f"⚠️ Reached directory limit ({max_directories}), stopping scan")
+                    print(f"Reached directory limit ({max_directories}), stopping scan")
                     break
                 
                 directory_count += 1
                 
                 # Check stop flag during directory traversal
                 if self._should_stop:
-                    print("🛑 Stop requested during file scanning")
+                    print("Stop requested during file scanning")
                     break
                 
                 # Limit number of files per directory
@@ -181,7 +181,7 @@ class USBFileManager:
                 
                 for filename in files:
                     if file_count >= max_files_per_dir:
-                        print(f"⚠️ Reached file limit per directory ({max_files_per_dir}), skipping remaining")
+                        print(f"Reached file limit per directory ({max_files_per_dir}), skipping remaining")
                         break
                     
                     if filename.lower().endswith('.pdf'):
@@ -192,20 +192,20 @@ class USBFileManager:
                         try:
                             source_size = os.path.getsize(source_path)
                             if source_size > 50 * 1024 * 1024:  # 50MB limit
-                                print(f"⚠️ Skipping large file {filename} ({source_size/1024/1024:.1f} MB)")
+                                print(f"Skipping large file {filename} ({source_size/1024/1024:.1f} MB)")
                                 continue
                         except Exception as size_error:
-                            print(f"⚠️ Could not check size of {filename}: {size_error}")
+                            print(f"Could not check size of {filename}: {size_error}")
                             continue
                         
                         try:
                             # Get file info without copying
                             file_size = source_size
-                            print(f"📄 Found {filename} ({file_size/1024:.1f} KB)")
+                            print(f"Found {filename} ({file_size/1024:.1f} KB)")
                             
                             # Safe PDF page count with timeout (read directly from USB)
                             page_count = self._safe_pdf_page_count(source_path, timeout=3)
-                            print(f"📄 {filename}: {page_count} pages")
+                            print(f"{filename}: {page_count} pages")
                             
                             # Store file info without copying
                             scanned_files.append({
@@ -217,7 +217,7 @@ class USBFileManager:
                             })
                             
                         except Exception as e:
-                            print(f"❌ Error processing {filename}: {str(e)}")
+                            print(f"Error processing {filename}: {str(e)}")
                             continue
                             
             # Mark operation as complete
@@ -225,16 +225,16 @@ class USBFileManager:
             
             # After all files are processed
             if scanned_files:
-                print(f"✅ Successfully scanned {len(scanned_files)} PDF files:")
+                print(f"Successfully scanned {len(scanned_files)} PDF files:")
                 for f in scanned_files:
-                    print(f"   📄 {f['filename']} ({f['size']/1024:.1f} KB, {f['pages']} pages)")
+                    print(f"    Found {f['filename']} ({f['size']/1024:.1f} KB, {f['pages']} pages)")
             else:
-                print("❌ No PDF files found")
+                print("No PDF files found")
                 
             return scanned_files
 
         except Exception as e:
-            print(f"❌ Error in scan_pdf_files: {str(e)}")
+            print(f"Error in scan_pdf_files: {str(e)}")
             # Ensure operation is marked as complete even on error
             self.set_operation_in_progress(False)
             return []
@@ -248,7 +248,7 @@ class USBFileManager:
             # Defensive copy; never mutate caller's dict
             result_info = dict(file_info) if isinstance(file_info, dict) else None
             if not result_info or 'path' not in result_info or 'filename' not in result_info:
-                print("❌ Invalid file info provided to copy_selected_file")
+                print("Invalid file info provided to copy_selected_file")
                 return None
 
             source_path = result_info['path']
@@ -260,49 +260,49 @@ class USBFileManager:
 
             # If the file already resides within the current session dir and exists, skip copying
             if isinstance(source_path, str) and source_path.startswith(self.destination_dir) and os.path.exists(source_path):
-                print(f"↪️ File already in session directory, skipping copy: {filename}")
+                print(f"File already in session directory, skipping copy: {filename}")
                 return result_info
 
             dest_path = os.path.join(self.destination_dir, filename)
 
             # If destination is the same as source, skip copying
             if os.path.abspath(dest_path) == os.path.abspath(source_path):
-                print(f"↪️ Source and destination are the same, skipping copy: {filename}")
+                print(f"Source and destination are the same, skipping copy: {filename}")
                 return result_info
 
             # Ensure destination directory exists
             os.makedirs(self.destination_dir, exist_ok=True)
 
-            print(f"📋 Copying selected file: {filename}")
+            print(f"Copying selected file: {filename}")
             try:
                 shutil.copy2(source_path, dest_path)
             except shutil.SameFileError:
-                print(f"↪️ Same file detected during copy, skipping: {filename}")
+                print(f"Same file detected during copy, skipping: {filename}")
                 return result_info
 
             if os.path.exists(dest_path):
                 file_size = os.path.getsize(dest_path)
-                print(f"✅ Copied {filename} ({file_size/1024:.1f} KB)")
+                print(f"Copied {filename} ({file_size/1024:.1f} KB)")
                 # Return new dict with updated path
                 result_info['path'] = dest_path
                 return result_info
             else:
-                print(f"❌ Failed to copy {filename}")
+                print(f"Failed to copy {filename}")
                 return None
 
         except Exception as e:
-            print(f"❌ Error copying selected file: {e}")
+            print(f"Error copying selected file: {e}")
             return None
     
     def stop_all_operations(self):
         """Stop all file operations to prevent system freezes."""
         try:
-            print("🛑 Stopping USB file operations...")
+            print("Stopping USB file operations...")
             self._should_stop = True
             self.operation_in_progress = False
-            print("✅ USB file operations stopped")
+            print("USB file operations stopped")
         except Exception as e:
-            print(f"⚠️ Error stopping USB operations: {e}")
+            print(f"Error stopping USB operations: {e}")
         
     def cleanup_temp_files(self):
         """Delete all files in the temporary directory after printing"""
@@ -352,7 +352,7 @@ class USBFileManager:
                         except Exception as e:
                             print(f"Error deleting old session folder {folder_name}: {e}")
                 
-                print(f"✅ Cleaned up {cleaned_count} old session folders")
+                print(f"Cleaned up {cleaned_count} old session folders")
                         
         except Exception as e:
             print(f"Error cleaning up old session folders: {e}")
@@ -361,7 +361,7 @@ class USBFileManager:
                 from utils.error_logger import log_error
                 log_error("USB Temp Folder Cleanup Error", str(e), "usb_file_manager")
             except Exception as log_error:
-                print(f"⚠️ Failed to log error: {log_error}")
+                print(f"Failed to log error: {log_error}")
     
     def get_temp_folder_info(self):
         """Get information about the current temporary folder"""
@@ -391,7 +391,7 @@ class USBFileManager:
     def set_current_drive(self, drive_path):
         """Set the current USB drive being used."""
         self.current_usb_drive = drive_path
-        print(f"🔒 Set current USB drive: {drive_path}")
+        print(f"Set current USB drive: {drive_path}")
     
     def is_drive_safe_to_remove(self):
         """Check if the current USB drive is safe to remove."""
@@ -418,18 +418,18 @@ class USBFileManager:
     def mark_file_in_use(self, file_path):
         """Mark a file as being processed."""
         self.files_in_use.add(file_path)
-        print(f"🔒 Marked file as in use: {file_path}")
+        print(f"Marked file as in use: {file_path}")
     
     def mark_file_complete(self, file_path):
         """Mark a file as no longer being processed."""
         self.files_in_use.discard(file_path)
-        print(f"🔓 Marked file as complete: {file_path}")
+        print(f"Marked file as complete: {file_path}")
     
     def set_operation_in_progress(self, in_progress):
         """Set the operation in progress flag."""
         self.operation_in_progress = in_progress
         status = "started" if in_progress else "completed"
-        print(f"🔄 File operation {status}")
+        print(f"File operation {status}")
     
     def get_safety_warning(self):
         """Get a safety warning message for the user."""
@@ -440,20 +440,20 @@ class USBFileManager:
         if is_safe:
             return None
         
-        return f"⚠️ DO NOT REMOVE USB DRIVE: {message}"
+        return f"DO NOT REMOVE USB DRIVE: {message}"
     
     def force_safe_eject(self):
         """Force safe ejection by clearing all operations."""
-        print("🛑 Force safe ejection requested")
+        print("Force safe ejection requested")
         self.files_in_use.clear()
         self.operation_in_progress = False
         self.current_usb_drive = None
-        print("✅ USB drive marked as safe to remove")
+        print("USB drive marked as safe to remove")
     
     def force_cleanup_all_resources(self):
         """Force cleanup of all resources to prevent memory leaks."""
         try:
-            print("🔄 Force cleaning up all USB file manager resources...")
+            print("Force cleaning up all USB file manager resources...")
             
             # Clear all tracking data
             self.files_in_use.clear()
@@ -466,18 +466,18 @@ class USBFileManager:
             
             # DO NOT delete current session directory - files are still needed by file browser
             # The current session directory will be cleaned up when the print job is complete
-            print(f"🔄 Preserving current session directory: {self.destination_dir}")
+            print(f"Preserving current session directory: {self.destination_dir}")
             
-            print("✅ Force cleanup of all resources completed")
+            print("Force cleanup of all resources completed")
             
         except Exception as e:
-            print(f"⚠️ Error during force cleanup: {e}")
+            print(f"Error during force cleanup: {e}")
             # Log error for debugging
             try:
                 from utils.error_logger import log_error
                 log_error("USB Force Cleanup All Resources Error", str(e), "usb_file_manager")
             except Exception as log_error:
-                print(f"⚠️ Failed to log error: {log_error}")
+                print(f"Failed to log error: {log_error}")
     
     def _create_new_session(self):
         """Create a new session directory for each USB drive."""
@@ -488,7 +488,7 @@ class USBFileManager:
         
         # Create the new directory
         os.makedirs(self.destination_dir, exist_ok=True)
-        print(f"✅ New session directory created: {self.destination_dir}")
+        print(f"New session directory created: {self.destination_dir}")
         
         # Clear any previous session data
         self.files_in_use.clear()
@@ -510,22 +510,22 @@ class USBFileManager:
         
         # Check if file exists
         if not os.path.exists(file_path):
-            print(f"❌ File not found: {file_path}")
+            print(f"File not found: {file_path}")
             return False
         
         # Check if file is in current session directory
         if not file_path.startswith(self.destination_dir):
-            print(f"❌ File is not in current session directory: {file_path}")
-            print(f"❌ Expected to be in: {self.destination_dir}")
+            print(f"File is not in current session directory: {file_path}")
+            print(f"Expected to be in: {self.destination_dir}")
             return False
         
-        print(f"✅ File verified in session directory: {file_path}")
+        print(f"File verified in session directory: {file_path}")
         return True
     
     def _auto_eject_usb_drive(self, usb_path):
         """Automatically eject USB drive after files are copied."""
         try:
-            print(f"🔄 Auto-ejecting USB drive: {usb_path}")
+            print(f"Auto-ejecting USB drive: {usb_path}")
             
             # Clear all safety tracking
             self.files_in_use.clear()
@@ -541,18 +541,18 @@ class USBFileManager:
                                           capture_output=True, text=True, timeout=5)
                     if result.returncode == 0:
                         device = result.stdout.strip()
-                        print(f"🔌 Unmounting device: {device}")
+                        print(f"Unmounting device: {device}")
                         subprocess.run(['umount', usb_path], timeout=10)
-                        print(f"✅ USB drive unmounted successfully")
+                        print(f"USB drive unmounted successfully")
                     else:
-                        print("⚠️ Could not find device for unmounting")
+                        print("Could not find device for unmounting")
                 except Exception as e:
-                    print(f"⚠️ Could not unmount USB drive: {e}")
+                    print(f"Could not unmount USB drive: {e}")
             
-            print("✅ USB drive is now safe to remove at any time")
+            print("USB drive is now safe to remove at any time")
             
         except Exception as e:
-            print(f"⚠️ Error during auto-eject: {e}")
+            print(f"Error during auto-eject: {e}")
             # Still clear the safety tracking even if unmount fails
             self.files_in_use.clear()
             self.operation_in_progress = False

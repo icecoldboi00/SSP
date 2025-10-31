@@ -125,14 +125,14 @@ class DatabaseThreadManager(QObject):
             except queue.Empty:
                 continue
             except Exception as e:
-                print(f"❌ Error in database worker: {e}")
+                print(f"Error in database worker: {e}")
                 
                 # Log error to database
                 try:
                     from utils.error_logger import log_error
                     log_error("Database Worker Error", str(e), "db_threader")
                 except Exception as db_error:
-                    print(f"⚠️ Failed to log error to database: {db_error}")
+                    print(f"Failed to log error to database: {db_error}")
                 
                 if operation and operation.callback:
                     operation.error = str(e)
@@ -147,7 +147,7 @@ class DatabaseThreadManager(QObject):
                 self.cmyk_levels_updated.emit(result)
         except Exception as e:
             operation.error = str(e)
-            print(f"❌ Error getting CMYK levels: {e}")
+            print(f"Error getting CMYK levels: {e}")
     
     def _handle_update_cmyk_levels(self, operation):
         """Update CMYK ink levels in database."""
@@ -169,7 +169,7 @@ class DatabaseThreadManager(QObject):
             self.operation_completed.emit("update_cmyk_levels", success)
         except Exception as e:
             operation.error = str(e)
-            print(f"❌ Error updating CMYK levels: {e}")
+            print(f"Error updating CMYK levels: {e}")
     
     def _handle_get_paper_count(self, operation):
         """Retrieve paper count from database."""
@@ -179,7 +179,7 @@ class DatabaseThreadManager(QObject):
             self.paper_count_updated.emit(result)
         except Exception as e:
             operation.error = str(e)
-            print(f"❌ Error getting paper count: {e}")
+            print(f"Error getting paper count: {e}")
     
     def _handle_update_paper_count(self, operation):
         """Update paper count in database."""
@@ -191,7 +191,7 @@ class DatabaseThreadManager(QObject):
             self.operation_completed.emit("update_paper_count", True)
         except Exception as e:
             operation.error = str(e)
-            print(f"❌ Error updating paper count: {e}")
+            print(f"Error updating paper count: {e}")
     
     def _handle_get_coin_counts(self, operation):
         """Retrieve coin counts from database."""
@@ -210,7 +210,7 @@ class DatabaseThreadManager(QObject):
             self.coin_count_updated.emit(coin_1_count, coin_5_count)
         except Exception as e:
             operation.error = str(e)
-            print(f"❌ Error getting coin counts: {e}")
+            print(f"Error getting coin counts: {e}")
     
     def _handle_update_coin_counts(self, operation):
         """Update coin counts in database."""
@@ -224,7 +224,7 @@ class DatabaseThreadManager(QObject):
             self.operation_completed.emit("update_coin_counts", True)
         except Exception as e:
             operation.error = str(e)
-            print(f"❌ Error updating coin counts: {e}")
+            print(f"Error updating coin counts: {e}")
     
     def _handle_update_coin_inventory(self, operation):
         """Update coin inventory after dispensing change."""
@@ -255,7 +255,7 @@ class DatabaseThreadManager(QObject):
             self.operation_completed.emit("update_coin_inventory", True)
         except Exception as e:
             operation.error = str(e)
-            print(f"❌ Error updating coin inventory: {e}")
+            print(f"Error updating coin inventory: {e}")
     
     # Public methods for queuing operations
     

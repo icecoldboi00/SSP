@@ -230,7 +230,7 @@ class PrintOptionsController(QWidget):
         
         # Start timeout timer (5 minutes)
         self.timeout_timer.start(300000)
-        print("⏰ Print options screen timeout started (5 minutes)")
+        print("Print options screen timeout started (5 minutes)")
     
     def on_leave(self):
         """Called by main_app when leaving this screen."""
@@ -241,11 +241,11 @@ class PrintOptionsController(QWidget):
     
     def _on_timeout(self):
         """Handle timeout - return to idle screen."""
-        print("⏰ Print options screen timeout - returning to idle screen")
+        print("Print options screen timeout - returning to idle screen")
         self.main_app.show_screen('idle')
     
     def _reset_timeout(self):
         """Reset the timeout timer (call on user activity)."""
         self.timeout_timer.stop()
         self.timeout_timer.start(300000)
-        print("⏰ Print options screen timeout reset")
+        print("Print options screen timeout reset")

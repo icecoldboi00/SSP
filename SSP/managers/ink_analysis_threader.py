@@ -67,14 +67,14 @@ class InkAnalysisThreadManager(QObject):
             except queue.Empty:
                 continue
             except Exception as e:
-                print(f"❌ Error in ink analysis worker: {e}")
+                print(f"Error in ink analysis worker: {e}")
                 
                 # Log error to database
                 try:
                     from utils.error_logger import log_error
                     log_error("Ink Analysis Worker Error", str(e), "ink_analysis_threader")
                 except Exception as db_error:
-                    print(f"⚠️ Failed to log error to database: {db_error}")
+                    print(f"Failed to log error to database: {db_error}")
                 
                 if operation and operation.callback:
                     operation.error = str(e)
@@ -117,7 +117,7 @@ class InkAnalysisThreadManager(QObject):
                 
         except Exception as e:
             operation.error = str(e)
-            print(f"❌ Error in ink analysis: {e}")
+            print(f"Error in ink analysis: {e}")
             self.database_updated.emit(False)
     
     def analyze_and_update(self, pdf_path, selected_pages=None, copies=1, dpi=150, color_mode="Color", callback=None):

@@ -147,12 +147,12 @@ class FileBrowserModel(QObject):
             if pdf_files is not None:
                 # PDF files provided from external source (like USB controller)
                 self.pdf_files = pdf_files
-                print(f"✅ Loaded {len(pdf_files)} PDF files from external source")
+                print(f"Loaded {len(pdf_files)} PDF files from external source")
             else:
                 # No PDF files provided - this is normal when screen is first loaded
                 # PDF files will be provided by the USB controller when they are found
                 self.pdf_files = []
-                print("ℹ️ No PDF files provided - waiting for USB controller to provide files")
+                print("No PDF files provided - waiting for USB controller to provide files")
             
             self.files_loaded.emit(self.pdf_files)
         except Exception as e:

@@ -45,7 +45,7 @@ class Config:
         Exits application with error message if file is not found.
         """
         if not os.path.exists(self.env_file):
-            print(f"❌ Configuration file '{self.env_file}' not found!")
+            print(f"Configuration file '{self.env_file}' not found!")
             print("Please create a .env file with your configuration settings.")
             sys.exit(1)
     

@@ -92,12 +92,12 @@ class SMSManager(QObject):
             
             if "+CMGS:" in response and "OK" in response:
                 success_msg = f"SMS sent successfully to {self.phone_number}"
-                print("✅ Message sent successfully!")
+                print("Message sent successfully!")
                 self.sms_sent.emit(success_msg)
                 return True
             else:
                 error_msg = f"Failed to send SMS. Response: {response}"
-                print("❌ Failed to send message.")
+                print("Failed to send message.")
                 self.sms_failed.emit(error_msg)
                 return False
                 
@@ -159,10 +159,10 @@ class SMSManager(QObject):
             print("Final Response: " + response)
             
             if "+CMGS:" in response and "OK" in response:
-                print("✅ Message sent successfully!")
+                print("Message sent successfully!")
                 return True
             else:
-                print("❌ Failed to send message.")
+                print("Failed to send message.")
                 return False
                 
         except serial.SerialException as e:

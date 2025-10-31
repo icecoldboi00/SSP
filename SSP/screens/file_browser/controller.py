@@ -86,9 +86,9 @@ class FileBrowserController(QWidget):
     
     def _continue_to_payment(self):
         """Handles continue to print options button click."""
-        print(f"🔍 Continue button clicked")
-        print(f"🔍 Selected PDF: {self.view.selected_pdf}")
-        print(f"🔍 Selected pages: {self.view.selected_pages}")
+        print(f"Continue button clicked")
+        print(f"Selected PDF: {self.view.selected_pdf}")
+        print(f"Selected pages: {self.view.selected_pages}")
         
         if not self.view.selected_pdf:
             QMessageBox.warning(self, "No PDF Selected", "Please select a PDF file.")
@@ -96,7 +96,7 @@ class FileBrowserController(QWidget):
         
         # Get selected pages from the view
         selected_pages_list = [page for page, selected in self.view.selected_pages.items() if selected]
-        print(f"🔍 Selected pages list: {selected_pages_list}")
+        print(f"Selected pages list: {selected_pages_list}")
         
         if not selected_pages_list:
             QMessageBox.warning(self, "No Pages Selected", "Please select at least one page to print.")
@@ -117,7 +117,7 @@ class FileBrowserController(QWidget):
         
         # Otherwise, copy the selected file to temp directory
         if not copied_file:
-            print(f"🔍 Copying selected file: {self.view.selected_pdf['filename']}")
+            print(f"Copying selected file: {self.view.selected_pdf['filename']}")
             if usb_manager and hasattr(usb_manager, 'copy_selected_file'):
                 copied_file = usb_manager.copy_selected_file(self.view.selected_pdf)
             else:
@@ -141,10 +141,10 @@ class FileBrowserController(QWidget):
                 return
         
         # Pass data to print options screen
-        print(f"🔍 Calling set_pdf_data with PDF: {copied_file['filename']} and pages: {selected_pages_list}")
+        print(f"Calling set_pdf_data with PDF: {copied_file['filename']} and pages: {selected_pages_list}")
         options_screen = self.main_app.printing_options_screen
         options_screen.set_pdf_data(copied_file, selected_pages_list)
-        print(f"🔍 Switching to print options screen")
+        print(f"Switching to print options screen")
         self.main_app.show_screen('printing_options')
     
     def _on_analysis_complete(self, pdf_data, analysis_data):

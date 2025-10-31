@@ -289,11 +289,11 @@ class PaymentAlgorithmManager:
         )
         
         if max_change_amount <= 0:
-            return "⚠️ No change available. Exact payment required."
+            return "No change available. Exact payment required."
         elif max_change_amount < 10:
-            return f"⚠️ Limited change available (₱{max_change_amount:.2f} max). Exact payment recommended."
+            return f"Limited change available (₱{max_change_amount:.2f} max). Exact payment recommended."
         else:
-            return f"✅ Change available up to ₱{max_change_amount:.2f}"
+            return f"Change available up to ₱{max_change_amount:.2f}"
     
     def suggest_payment_prompt(self, total_cost: float) -> str:
         suggestions = self.find_optimal_payment_amounts(total_cost)

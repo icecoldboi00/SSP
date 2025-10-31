@@ -345,7 +345,7 @@ class PrinterThread(QThread):
             
             if result.returncode != 0:
                 # If specific printer not found, check all printers for errors
-                print(f"⚠️ Configured printer '{self.printer_name}' not found, checking all printers")
+                print(f"Configured printer '{self.printer_name}' not found, checking all printers")
                 return self._check_all_printers_status()
             
             output = result.stdout.lower()
@@ -441,7 +441,7 @@ class PrinterThread(QThread):
             try:
                 os.remove(self.temp_pdf_path)
             except OSError as e:
-                print(f"⚠️ Error cleaning up temp file: {e}")
+                print(f"Error cleaning up temp file: {e}")
 
 
 class PrinterManager(QObject):
@@ -462,7 +462,7 @@ class PrinterManager(QObject):
         
         # Prevent duplicate print jobs
         if hasattr(self, 'print_thread') and self.print_thread and self.print_thread.isRunning():
-            print("⚠️ Print job already running, ignoring duplicate request")
+            print("Print job already running, ignoring duplicate request")
             return
         
         # Verify printer is available
@@ -491,71 +491,71 @@ class PrinterManager(QObject):
 
     def check_printer_availability(self):
         try:
-            print(f"🔍 Checking printer availability for: {self.printer_name}")
+            print(f"Checking printer availability for: {self.printer_name}")
             
             # Check if lp command exists
             result = subprocess.run(['which', 'lp'], capture_output=True, text=True)
             if result.returncode != 0:
-                print("❌ 'lp' command not found. Is CUPS installed?")
+                print("'lp' command not found. Is CUPS installed?")
                 print("   Install CUPS: sudo apt-get install cups")
                 return False
-            print("✅ CUPS lp command found")
+            print("CUPS lp command found")
             
             # Check if CUPS daemon is running
             try:
                 result = subprocess.run(['pgrep', 'cupsd'], capture_output=True, text=True)
                 if result.returncode != 0:
-                    print("❌ CUPS daemon (cupsd) is not running")
+                    print("CUPS daemon (cupsd) is not running")
                     print("   Start CUPS: sudo systemctl start cups")
                     return False
-                print("✅ CUPS daemon is running")
+                print("CUPS daemon is running")
             except Exception as e:
-                print(f"❌ Error checking CUPS daemon: {e}")
+                print(f"Error checking CUPS daemon: {e}")
                 return False
                 
             # List all available printers first
             try:
                 result = subprocess.run(['lpstat', '-p'], capture_output=True, text=True, timeout=10)
                 if result.returncode == 0:
-                    print(f"🔍 Available printers:")
+                    print(f"Available printers:")
                     for line in result.stdout.split('\n'):
                         if line.strip():
                             print(f"   {line}")
                 else:
-                    print("⚠️ Could not list printers")
+                    print("Could not list printers")
             except Exception as e:
-                print(f"⚠️ Error listing printers: {e}")
+                print(f"Error listing printers: {e}")
                 
             # Check if printer exists
             result = subprocess.run(['lpstat', '-p', self.printer_name], 
                                   capture_output=True, text=True, timeout=10)
             if result.returncode != 0:
-                print(f"❌ Printer '{self.printer_name}' not found")
+                print(f"Printer '{self.printer_name}' not found")
                 print(f"   Available printers listed above")
                 print(f"   Update printer name in config.py")
                 return False
-            print(f"✅ Printer '{self.printer_name}' found")
+            print(f"Printer '{self.printer_name}' found")
             
             # Check printer state
             output = result.stdout.lower()
-            print(f"🔍 Printer status: {result.stdout.strip()}")
+            print(f"Printer status: {result.stdout.strip()}")
             
             if 'offline' in output or 'stopped' in output:
-                print(f"❌ Printer is offline or stopped")
+                print(f"Printer is offline or stopped")
                 return False
             elif 'jam' in output:
-                print(f"❌ Paper jam detected")
+                print(f"Paper jam detected")
                 return False
             elif 'error' in output:
-                print(f"❌ Printer error detected")
+                print(f"Printer error detected")
                 return False
             else:
-                print(f"✅ Printer is ready")
+                print(f"Printer is ready")
                 
             return True
             
         except Exception as e:
-            print(f"❌ Error checking printer availability: {e}")
+            print(f"Error checking printer availability: {e}")
             return False
 
     def check_printer_status(self):
@@ -628,7 +628,7 @@ class PrinterManager(QObject):
                     print(f"Cleaned up temp PDF: {self.last_temp_pdf_path}")
                 self.last_temp_pdf_path = None
             except Exception as e:
-                print(f"⚠️ Error cleaning up temp PDF: {e}")
+                print(f"Error cleaning up temp PDF: {e}")
     
     def on_thread_finished(self):
         """Handle print thread completion."""

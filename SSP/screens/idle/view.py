@@ -116,13 +116,9 @@ class IdleScreenView(QWidget):
         self.screen_touched.emit(event)
     
     def set_background_image(self, image_path):
-        """Sets the background image from the provided path."""
-        if os.path.exists(image_path):
-            self.background_pixmap = QPixmap(image_path)
-            self.update()  # Trigger repaint
-        else:
-            print(f"WARNING: Background image not found at '{image_path}'.")
-    
+        self.background_pixmap = QPixmap(image_path)
+        self.update()  # Trigger repaint
+
     def get_admin_button_geometry(self):
         """Returns the geometry of the admin button for touch validation."""
         return self.admin_button.geometry()

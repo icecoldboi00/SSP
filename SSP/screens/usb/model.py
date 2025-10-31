@@ -10,7 +10,7 @@ try:
     USB_MANAGER_AVAILABLE = True
 except ImportError:
     USB_MANAGER_AVAILABLE = False
-    print("❌ Failed to import USBFileManager. Using fallback.")
+    print("Failed to import USBFileManager. Using fallback.")
 
 class USBMonitorThread(QThread):
     """Thread for monitoring USB drive insertions and removals."""
@@ -24,7 +24,7 @@ class USBMonitorThread(QThread):
         self._should_stop = False
 
     def run(self):
-        print("🔄 USBMonitorThread started")
+        print("USBMonitorThread started")
         while self.monitoring and not self._should_stop:
             try:
                 new_drives, removed_drives = self.usb_manager.check_for_new_drives()
@@ -47,10 +47,10 @@ class USBMonitorThread(QThread):
                         break
                     self.msleep(50)
         
-        print("🛑 USBMonitorThread finished")
+        print("USBMonitorThread finished")
 
     def stop_monitoring(self):
-        print("🛑 USBMonitorThread stop requested")
+        print("USBMonitorThread stop requested")
         self.monitoring = False
         self._should_stop = True
 
@@ -124,12 +124,12 @@ class USBScreenModel(QObject):
         self.monitoring_thread.usb_detected.connect(self.usb_detected.emit)
         self.monitoring_thread.usb_removed.connect(self.usb_removed.emit)
         self.monitoring_thread.start()
-        print("✅ USB monitoring started")
+        print("USB monitoring started")
     
     def stop_usb_monitoring(self):
         """Stops the background USB monitoring thread."""
         if self.monitoring_thread and self.monitoring_thread.isRunning():
-            print("🛑 Stopping USB monitoring thread...")
+            print("Stopping USB monitoring thread...")
             
             # Disconnect signals first to prevent signal emission after thread stops
             try:
@@ -144,20 +144,20 @@ class USBScreenModel(QObject):
             
             # Wait for thread to finish gracefully
             if not self.monitoring_thread.wait(5000):  # Increased wait time to 5 seconds
-                print("⚠️ Thread did not stop gracefully, forcing termination...")
+                print("Thread did not stop gracefully, forcing termination...")
                 # Try to force stop the monitoring loop first
                 self.monitoring_thread.monitoring = False
                 self.monitoring_thread._should_stop = True
                 
                 # Wait a bit more for graceful shutdown
                 if not self.monitoring_thread.wait(2000):
-                    print("⚠️ Forcing thread termination...")
+                    print("Forcing thread termination...")
                     self.monitoring_thread.terminate()
                     self.monitoring_thread.wait(1000)
             
             # Clean up thread reference
             self.monitoring_thread = None
-            print("✅ USB monitoring stopped")
+            print("USB monitoring stopped")
     
     def check_current_drives(self):
         """Checks for currently connected USB drives."""
@@ -168,7 +168,7 @@ class USBScreenModel(QObject):
             # Reset the USB manager's known drives to force fresh detection
             if hasattr(self.usb_manager, 'last_known_drives'):
                 self.usb_manager.last_known_drives = set()
-                print("🔄 Cleared USB manager's known drives cache")
+                print("Cleared USB manager's known drives cache")
             
             current_drives = self.usb_manager.get_usb_drives()
             if current_drives:
@@ -209,11 +209,11 @@ class USBScreenModel(QObject):
     
     def on_usb_detected(self, drive_path):
         """Handles USB drive detection."""
-        print(f"🔌 USB drive detected: {drive_path}")
+        print(f"USB drive detected: {drive_path}")
         
         # If returning from file browser, don't auto-navigate
         if self.returning_from_file_browser:
-            print("🔄 Returning from file browser - not auto-navigating")
+            print("Returning from file browser - not auto-navigating")
             self.status_changed.emit("USB drive detected. Click 'Scan Files' to proceed.", 'success')
             return
         
@@ -221,7 +221,7 @@ class USBScreenModel(QObject):
     
     def on_usb_removed(self, drive_path):
         """Handles USB drive removal - now always safe since we auto-eject."""
-        print(f"🔌 USB drive removed: {drive_path}")
+        print(f"USB drive removed: {drive_path}")
         self.status_changed.emit("USB drive removed. You can insert another drive.", 'success')
         self.start_usb_monitoring()
     
@@ -229,11 +229,11 @@ class USBScreenModel(QObject):
     def set_returning_from_file_browser(self, returning=True):
         """Set flag to prevent auto-navigation when returning from file browser."""
         self.returning_from_file_browser = returning
-        print(f"🔄 Set returning_from_file_browser: {returning}")
+        print(f"Set returning_from_file_browser: {returning}")
     
     def reset_usb_state(self):
         """Completely reset USB monitoring state - useful when switching drives."""
-        print("🔄 Resetting USB monitoring state...")
+        print("Resetting USB monitoring state...")
         
         # Stop any existing monitoring
         self.stop_usb_monitoring()
@@ -241,22 +241,22 @@ class USBScreenModel(QObject):
         # Clear USB manager's cache
         if hasattr(self.usb_manager, 'last_known_drives'):
             self.usb_manager.last_known_drives = set()
-            print("🔄 Cleared USB manager's known drives cache")
+            print("Cleared USB manager's known drives cache")
         
         # Reset status
         self.status_changed.emit("Ready for USB device...", 'monitoring')
         
-        print("✅ USB state reset complete")
+        print("USB state reset complete")
     
     def reset_usb_manager_state(self):
         """Reset USB manager state for new session."""
         try:
-            print("🔄 Resetting USB manager state for new session...")
+            print("Resetting USB manager state for new session...")
             
             # Clear USB manager's known drives cache
             if hasattr(self.usb_manager, 'last_known_drives'):
                 self.usb_manager.last_known_drives = set()
-                print("🔄 Cleared USB manager's known drives cache")
+                print("Cleared USB manager's known drives cache")
             
             # Reset USB manager's session data
             if hasattr(self.usb_manager, 'files_in_use'):
@@ -269,23 +269,23 @@ class USBScreenModel(QObject):
             # Clean up old temporary directories to prevent memory leaks
             if hasattr(self.usb_manager, 'cleanup_all_temp_folders'):
                 self.usb_manager.cleanup_all_temp_folders()
-                print("🔄 Cleaned up old temporary directories")
+                print("Cleaned up old temporary directories")
             
-            print("✅ USB manager state reset complete")
+            print("USB manager state reset complete")
             
         except Exception as e:
-            print(f"⚠️ Error resetting USB manager state: {e}")
+            print(f"Error resetting USB manager state: {e}")
             # Log error to database for debugging
             try:
                 from utils.error_logger import log_error
                 log_error("USB Manager Reset Error", str(e), "usb_screen_model")
             except Exception as log_error:
-                print(f"⚠️ Failed to log error: {log_error}")
+                print(f"Failed to log error: {log_error}")
     
     def force_cleanup(self):
         """Force cleanup of all resources to prevent memory leaks."""
         try:
-            print("🔄 Force cleaning up USB screen resources...")
+            print("Force cleaning up USB screen resources...")
             
             # Stop monitoring thread
             self.stop_usb_monitoring()
@@ -301,33 +301,33 @@ class USBScreenModel(QObject):
             if hasattr(self.usb_manager, 'force_cleanup_all_resources'):
                 self.usb_manager.force_cleanup_all_resources()
             
-            print("✅ Force cleanup completed")
+            print("Force cleanup completed")
             
         except Exception as e:
-            print(f"⚠️ Error during force cleanup: {e}")
+            print(f"Error during force cleanup: {e}")
             # Log error for debugging
             try:
                 from utils.error_logger import log_error
                 log_error("USB Force Cleanup Error", str(e), "usb_screen_model")
             except Exception as log_error:
-                print(f"⚠️ Failed to log error: {log_error}")
+                print(f"Failed to log error: {log_error}")
     
     def stop_all_operations(self):
         """Stop all long-running operations to prevent system freezes."""
         try:
-            print("🛑 Stopping all USB operations...")
+            print("Stopping all USB operations...")
             
             # Stop USB monitoring thread
-            if hasattr(self, 'monitor_thread') and self.monitor_thread:
-                self.monitor_thread.stop_monitoring()
-                print("🛑 USB monitoring thread stopped")
+            if hasattr(self, 'monitoring_thread') and self.monitoring_thread:
+                self.monitoring_thread.stop_monitoring()
+                print("USB monitoring thread stopped")
             
             # Stop any file operations
             if hasattr(self, 'usb_manager') and self.usb_manager:
                 self.usb_manager.stop_all_operations()
-                print("🛑 USB file operations stopped")
+                print("USB file operations stopped")
             
-            print("✅ All USB operations stopped")
+            print("All USB operations stopped")
             
         except Exception as e:
-            print(f"⚠️ Error stopping operations: {e}")
+            print(f"Error stopping operations: {e}")
