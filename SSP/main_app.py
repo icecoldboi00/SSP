@@ -117,12 +117,19 @@ class PrintingSystemApp(QMainWindow):
         """)
     
     def _setup_display(self):
-        # Set the original window size
-        self.setGeometry(100, 100, 1280, 720)
-        self.setMinimumSize(1280, 720)
+        # Get the geometry of the primary screen
+        screen = QApplication.primaryScreen()
+        screen_geometry = screen.geometry()
         
-        # Set window flags for kiosk-like behavior
-        self.setWindowFlags(Qt.Window | Qt.FramelessWindowHint)
+        # Move the window to the top-left corner of the screen
+        self.move(screen_geometry.topLeft())
+        
+        # Set the window to the full size of the screen
+        # This makes the transition to fullscreen smoother
+        self.resize(screen_geometry.size())
+
+        # Set window flags for a true kiosk experience
+        self.setWindowFlags(Qt.Window | Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint)
         
         # Go fullscreen on startup
         self.showFullScreen()
