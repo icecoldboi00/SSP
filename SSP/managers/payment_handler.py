@@ -34,7 +34,7 @@ class PaymentHandler(QObject):
         self.gpio_available = PIGPIO_AVAILABLE
         
         # Pin configuration (exact from coinbill.py + GPIO 22 for coin inhibit)
-        self.COIN_PIN = 21          # Coin pulse input pin
+        self.COIN_PIN = 20          # Coin pulse input pin
         self.BILL_PIN = 18         # Bill pulse input pin
         self.COIN_INHIBIT_PIN = 22 # Coin acceptor disable pin (active low)
         self.BILL_INHIBIT_PIN = 23 # Bill acceptor disable pin (active high)
