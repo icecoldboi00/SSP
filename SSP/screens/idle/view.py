@@ -2,28 +2,22 @@ import os
 from PyQt5.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel, 
                              QPushButton, QFrame, QStackedLayout)
 from PyQt5.QtCore import Qt, pyqtSignal
-from PyQt5.QtGui import QPixmap, QPainter
+from PyQt5.QtGui import QPixmap
 
 class IdleScreenView(QWidget):
-    screen_touched = pyqtSignal(object) 
-    admin_button_clicked = pyqtSignal()
+    screen_touched = pyqtSignal(object)  # Event object emit
+    admin_button_clicked = pyqtSignal() # Admin button clicked emit
     
     def __init__(self):
         super().__init__()
-        self.background_pixmap = None
         self.setup_ui()
         self._load_background_image()
 
     def _load_background_image(self):
-        current_dir = os.path.dirname(os.path.abspath(__file__))
-        image_path = os.path.join(current_dir, '..', '..', 'assets', 'idle_screen background.png')
-        normalized_path = os.path.normpath(image_path)
-        self.set_background_image(normalized_path)
-
-    def paintEvent(self, event):
-        painter = QPainter(self)
-        painter.drawPixmap(self.rect(), self.background_pixmap)
-        super().paintEvent(event)
+        current_dir = os.path.dirname(os.path.abspath(__file__)) # Get current directory
+        image_path = os.path.join(current_dir, '..', '..', 'assets', 'idle_screen background.png') # Find the image path
+        normalized_path = os.path.normpath(image_path) # Shortcut path name
+        self.set_background_image(normalized_path) 
     
     def setup_ui(self):
         COLOR_BACKGROUND = "#FFFFFF"
@@ -34,8 +28,8 @@ class IdleScreenView(QWidget):
         main_layout.setContentsMargins(0, 0, 0, 0)
         main_layout.setStackingMode(QStackedLayout.StackAll)
         
-        background_widget = QWidget()
-        background_widget.setStyleSheet("background-color: transparent;")
+        self.background_label = QLabel()
+        self.background_label.setStyleSheet("background-color: transparent;")
 
         foreground_frame = QFrame()
         foreground_frame.setStyleSheet("background-color: transparent;")
@@ -83,17 +77,18 @@ class IdleScreenView(QWidget):
         admin_layout.addWidget(self.admin_button)
         frame_layout.addLayout(admin_layout)
 
-        main_layout.addWidget(background_widget)
+        main_layout.addWidget(self.background_label)
         main_layout.addWidget(foreground_frame)
         
         self.setLayout(main_layout)
     
     def mousePressEvent(self, event):
-        self.screen_touched.emit(event)
+        self.screen_touched.emit(event) # Used in controller
     
     def set_background_image(self, image_path):
-        self.background_pixmap = QPixmap(image_path)
-        self.update()  # Trigger repaint
+        pixmap = QPixmap(image_path)
+        self.background_label.setPixmap(pixmap)
+        self.background_label.setScaledContents(True)
 
     def get_admin_button_geometry(self):
-        return self.admin_button.geometry()
+        return self.admin_button.geometry() # Used in controller 

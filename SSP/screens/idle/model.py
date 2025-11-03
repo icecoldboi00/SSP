@@ -1,30 +1,11 @@
 from PyQt5.QtCore import QObject, pyqtSignal
-import os
 
 class IdleModel(QObject):
-    background_image_loaded = pyqtSignal(str)  # Emits image path when loaded
-    show_message = pyqtSignal(str, str)        # Emits message title and text
-    
     def __init__(self):
         super().__init__()
-        self.background_image_path = None
-        self._load_background_image()
-    
-    def _load_background_image(self):
-        base_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '../..'))
-        image_path = os.path.join(base_dir, 'assets', 'idle_screen background.png')
-        
-        if os.path.exists(image_path):
-            self.background_image_path = image_path
-            self.background_image_loaded.emit(image_path)
-        else:
-            self.show_message.emit("Warning", f"Background image not found at '{image_path}'.")
-    
-    def get_background_image_path(self):
-        return self.background_image_path
-    
+
+    # If touch is on admin button, don't start the process. Admin button has its own click handler
     def validate_touch_interaction(self, event_pos, admin_button_geometry):
-        # If the touch is on the admin button, don't start printing
         if admin_button_geometry and admin_button_geometry.contains(event_pos):
             return False
         return True

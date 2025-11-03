@@ -37,7 +37,6 @@ class PrintingSystemApp(QMainWindow):
     }
     
     def __init__(self):
-        """Initialize the main application window and all subsystems."""
         super().__init__()
         self.setWindowTitle("Printing System GUI")
         
