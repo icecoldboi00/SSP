@@ -1,10 +1,5 @@
-# screens/print_options/view.py
-
 import os
-from PyQt5.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QLabel,
-    QFrame, QStackedLayout, QSizePolicy
-)
+from PyQt5.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QLabel,  QStackedLayout)
 from PyQt5.QtCore import Qt, pyqtSignal
 from PyQt5.QtGui import QPixmap
 
@@ -12,7 +7,6 @@ def get_base_dir():
     return os.path.abspath(os.path.join(os.path.dirname(__file__), '../..'))
 
 class PrintOptionsScreenView(QWidget):
-    """The user interface for the Print Options Screen. Contains no logic."""
     back_button_clicked = pyqtSignal()
     continue_button_clicked = pyqtSignal()
     bw_mode_clicked = pyqtSignal()
@@ -25,7 +19,6 @@ class PrintOptionsScreenView(QWidget):
         self.setup_ui()
     
     def setup_ui(self):
-        """Sets up the user interface components."""
         stacked_layout = QStackedLayout(self)
         stacked_layout.setContentsMargins(0, 0, 0, 0)
         stacked_layout.setStackingMode(QStackedLayout.StackAll)
@@ -144,49 +137,37 @@ class PrintOptionsScreenView(QWidget):
         self.main_layout = stacked_layout
     
     def _load_background_image(self):
-        """Loads the background image."""
         base_dir = get_base_dir()
         image_path = os.path.join(base_dir, 'assets', 'print_options_screen background.png')
-        if os.path.exists(image_path):
-            pixmap = QPixmap(image_path)
-            self.background_label.setPixmap(pixmap)
-            self.background_label.setScaledContents(True)
-        else:
-            print(f"WARNING: Background image not found at '{image_path}'.")
-            self.background_label.setStyleSheet("background-color: #1f1f38;")
+        pixmap = QPixmap(image_path)
+        self.background_label.setPixmap(pixmap)
+        self.background_label.setScaledContents(True)
     
     def update_copies_display(self, copies):
-        """Updates the copies count display."""
         self.copies_count_label.setText(str(copies))
     
     def set_bw_mode(self):
-        """Sets the black and white mode as selected."""
         self._color_mode = "Black and White"
         self.bw_btn.setChecked(True)
         self.color_btn.setChecked(False)
     
     def set_color_mode(self):
-        """Sets the color mode as selected."""
         self._color_mode = "Color"
         self.bw_btn.setChecked(False)
         self.color_btn.setChecked(True)
     
     def update_cost_display(self, cost_text, details_text):
-        """Updates the cost and details display."""
         self.cost_label.setText(cost_text)
         self.analysis_details_label.setText(details_text)
     
     def set_analysis_status(self, status_text, details_text):
-        """Sets the analysis status display."""
         self.cost_label.setText(status_text)
         self.analysis_details_label.setText(details_text)
     
     def set_continue_button_enabled(self, enabled):
-        """Enables or disables the continue button."""
         self.continue_btn.setEnabled(enabled)
     
     def show_paper_warning(self, available_paper, required_paper):
-        """Shows a warning about insufficient paper."""
         warning_text = f"INSUFFICIENT PAPER"
         details_text = f"Only {available_paper} sheets available, but {required_paper} sheets needed.\nPlease contact administrator to refill paper."
         
@@ -210,7 +191,6 @@ class PrintOptionsScreenView(QWidget):
         """)
     
     def clear_paper_warning(self):
-        """Clears the paper warning and resets the display."""
         # Reset the continue button
         self.continue_btn.setEnabled(True)
         self.continue_btn.setText("Continue to Payment →")
@@ -221,7 +201,6 @@ class PrintOptionsScreenView(QWidget):
         self.analysis_details_label.setStyleSheet("color: #36454F; font-size: 14px; margin-top: 5px;")
     
     def get_copies_button_style(self):
-        """Returns the style for copy control buttons."""
         return """
             QPushButton {
                 background-color: #1e440a; color: #fff; border: none; border-radius: 4px;
@@ -232,7 +211,6 @@ class PrintOptionsScreenView(QWidget):
         """
     
     def get_copies_label_style(self):
-        """Returns the style for the copies count label."""
         return """
             QLabel { 
                 background-color: transparent; color: #36454F; font-size: 22px; 
@@ -242,7 +220,6 @@ class PrintOptionsScreenView(QWidget):
         """
     
     def get_color_button_style(self):
-        """Returns the style for color mode buttons."""
         return """
             QPushButton {
                 color: white; font-size: 16px; font-weight: bold;
@@ -254,7 +231,6 @@ class PrintOptionsScreenView(QWidget):
         """
     
     def get_back_button_style(self):
-        """Returns the style for the back button."""
         return """
             QPushButton {
                 color: white; font-size: 12px; font-weight: bold;
@@ -266,7 +242,6 @@ class PrintOptionsScreenView(QWidget):
         """
     
     def get_continue_button_style(self):
-        """Returns the style for the continue button."""
         return """
             QPushButton {
                 color: white; font-size: 12px; font-weight: bold;

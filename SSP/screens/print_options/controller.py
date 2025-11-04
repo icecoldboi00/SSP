@@ -1,14 +1,10 @@
-# screens/print_options/controller.py
-
-from PyQt5.QtWidgets import QWidget, QGridLayout, QMessageBox
+from PyQt5.QtWidgets import QWidget, QMessageBox
 from PyQt5.QtCore import QTimer
 
 from .model import PrintOptionsModel
 from .view import PrintOptionsScreenView
 
-class PrintOptionsController(QWidget):
-    """Manages the Print Options screen's logic and UI."""
-    
+class PrintOptionsController(QWidget):  
     def __init__(self, main_app, parent=None):
         super().__init__(parent)
         self.main_app = main_app
@@ -27,8 +23,6 @@ class PrintOptionsController(QWidget):
         self._connect_signals()
 
     def _connect_signals(self):
-        """Connect signals from the view to the model and vice-versa."""
-        # --- View -> Controller ---
         self.view.back_button_clicked.connect(self._go_back)
         self.view.continue_button_clicked.connect(self._continue_to_payment)
         self.view.bw_mode_clicked.connect(self._set_bw_mode)
@@ -36,7 +30,7 @@ class PrintOptionsController(QWidget):
         self.view.copies_decreased.connect(self._decrease_copies)
         self.view.copies_increased.connect(self._increase_copies)
         
-        # Reset timeout on user interaction
+        # For for resetting timers every click
         self.view.back_button_clicked.connect(self._reset_timeout)
         self.view.continue_button_clicked.connect(self._reset_timeout)
         self.view.bw_mode_clicked.connect(self._reset_timeout)
@@ -44,7 +38,6 @@ class PrintOptionsController(QWidget):
         self.view.copies_decreased.connect(self._reset_timeout)
         self.view.copies_increased.connect(self._reset_timeout)
         
-        # --- Model -> View ---
         self.model.cost_updated.connect(self.view.update_cost_display)
         self.model.analysis_started.connect(self._on_analysis_started)
         self.model.analysis_completed.connect(self._on_analysis_completed)
@@ -52,31 +45,26 @@ class PrintOptionsController(QWidget):
         self.model.show_message.connect(self._show_message)
     
     def _set_bw_mode(self):
-        """Sets black and white mode."""
         self.model.set_color_mode("Black and White")
         self.view.set_bw_mode()
         self._check_paper_availability()
     
     def _set_color_mode(self):
-        """Sets color mode."""
         self.model.set_color_mode("Color")
         self.view.set_color_mode()
         self._check_paper_availability()
     
     def _decrease_copies(self):
-        """Decreases the number of copies."""
         self.model.change_copies(-1)
         self.view.update_copies_display(self.model.get_copies())
         self._check_paper_availability()
     
     def _increase_copies(self):
-        """Increases the number of copies."""
         self.model.change_copies(1)
         self.view.update_copies_display(self.model.get_copies())
         self._check_paper_availability()
     
     def _on_analysis_started(self):
-        """Handles when analysis starts."""
         self.view.set_continue_button_enabled(False)
         self.view.set_analysis_status(
             "Analyzing pages and calculating cost...",
@@ -84,20 +72,17 @@ class PrintOptionsController(QWidget):
         )
     
     def _on_analysis_completed(self, results):
-        """Handles when analysis is completed."""
-        print("Analysis completed, enabling continue button and checking paper availability")
+        print("Analysis completed, now checking paper availability")
         self.view.set_continue_button_enabled(True)
         # Check paper availability after analysis is complete with a small delay
         from PyQt5.QtCore import QTimer
         QTimer.singleShot(100, self._check_paper_availability)
     
     def _on_analysis_error(self, error_message):
-        """Handles analysis errors."""
         self.view.set_analysis_status("Error during analysis!", error_message)
         QMessageBox.critical(self, "Analysis Error", error_message)
     
     def _continue_to_payment(self):
-        """Continues to the payment screen."""
         payment_data = self.model.get_payment_data()
         if not payment_data:
             QMessageBox.warning(self, "Please Wait", "Cost calculation is still in progress.")
@@ -120,19 +105,14 @@ class PrintOptionsController(QWidget):
         self.main_app.show_screen('payment')
     
     def _go_back(self):
-        """Goes back to the file browser screen."""
         print("Print options screen: going back to file browser")
         self.on_leave()
         self.main_app.show_screen('file_browser')
     
     def _show_message(self, title, text):
-        """Shows a message to the user."""
         QMessageBox.information(self, title, text)
     
-    # --- Public API for main_app ---
-    
     def set_pdf_data(self, pdf_data, selected_pages):
-        """Sets the PDF data and selected pages for printing."""
         self.model.set_pdf_data(pdf_data, selected_pages)
         self.view.update_copies_display(self.model.get_copies())
         self.view.set_bw_mode()
@@ -145,7 +125,6 @@ class PrintOptionsController(QWidget):
 
     
     def check_supplies(self):
-        """Check current supplies status and update view."""
         try:
             # Get db_manager only when needed
             if hasattr(self.main_app, 'admin_screen') and hasattr(self.main_app.admin_screen, 'db_manager'):
@@ -177,8 +156,7 @@ class PrintOptionsController(QWidget):
             pass
 
     def _check_paper_availability(self):
-        """Checks if there's enough paper for the current print job."""
-        print("Paper check: Starting paper availability check...")
+        print("Paper availability check")
         # Get current state from model even if payment data isn't ready
         selected_pages = getattr(self.model, 'selected_pages', None)
         copies = getattr(self.model, '_copies', 1)
@@ -207,14 +185,12 @@ class PrintOptionsController(QWidget):
             print("Paper check: Admin screen not available")
     
     def _calculate_max_change(self, cost):
-        """Calculate maximum possible change needed for a transaction."""
         next_bill = 20  # Assuming minimum bill is ₱20
         while next_bill < cost:
             next_bill += 20
         return next_bill - cost
     
     def on_enter(self):
-        """Called by main_app when this screen becomes active."""
         print("Print options screen entered")
         # Ensure analysis thread is not running from previous visits
         self.model.stop_analysis()
@@ -230,22 +206,19 @@ class PrintOptionsController(QWidget):
         
         # Start timeout timer (5 minutes)
         self.timeout_timer.start(300000)
-        print("Print options screen timeout started (5 minutes)")
+        print("Screen timeout started 5")
     
     def on_leave(self):
-        """Called by main_app when leaving this screen."""
         print("Print options screen leaving")
         self.model.stop_analysis()
         # Stop timeout timer
         self.timeout_timer.stop()
     
     def _on_timeout(self):
-        """Handle timeout - return to idle screen."""
-        print("Print options screen timeout - returning to idle screen")
+        print("Screen timeout, returning to idle screen")
         self.main_app.show_screen('idle')
     
     def _reset_timeout(self):
-        """Reset the timeout timer (call on user activity)."""
         self.timeout_timer.stop()
         self.timeout_timer.start(300000)
-        print("Print options screen timeout reset")
+        print("Timeout reset")
