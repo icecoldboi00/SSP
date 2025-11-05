@@ -47,7 +47,9 @@ class PrintingSystemApp(QMainWindow):
         self.stacked_widget = QStackedWidget()
         self.setCentralWidget(self.stacked_widget)
 
-        # Initialize all screen controllers
+        self.db_threader = DatabaseThreadManager()
+        self.ink_analysis_threader = InkAnalysisThreadManager()
+        
         self.idle_screen = IdleController(self)
         self.usb_screen = USBController(self)
         self.file_browser_screen = FileBrowserController(self)
@@ -55,9 +57,6 @@ class PrintingSystemApp(QMainWindow):
         self.payment_screen = PaymentController(self)
         self.admin_screen = AdminController(self)
         
-        # Initialize thread managers for background operations
-        self.db_threader = DatabaseThreadManager()
-        self.ink_analysis_threader = InkAnalysisThreadManager()
         self.db_threader.start()
         self.ink_analysis_threader.start()
         
@@ -139,13 +138,6 @@ class PrintingSystemApp(QMainWindow):
 
     
     def _on_ink_analysis_completed(self, operation):
-        """
-        Handle ink analysis completion.
-        This method may be invoked in two ways:
-        1) As a signal handler from InkAnalysisThreadManager.analysis_completed (dict payload)
-        2) As a callback from InkAnalysisOperation (operation object with .result)
-        Support both to avoid attribute errors.
-        """
         try:
             payload = None
             # Case 2: callback with InkAnalysisOperation object

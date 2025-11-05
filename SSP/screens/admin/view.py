@@ -1,27 +1,19 @@
-# screens/admin/view.py
-
 import os
 from PyQt5.QtWidgets import (
     QWidget, QVBoxLayout, QLabel, QPushButton, QHBoxLayout, QFrame,
-    QLineEdit, QMessageBox, QGroupBox, QGridLayout, QSizePolicy
+    QLineEdit, QMessageBox, QGroupBox, QSizePolicy, QStackedLayout
 )
 from PyQt5.QtCore import Qt, pyqtSignal
-from PyQt5.QtGui import QIntValidator, QDoubleValidator, QPixmap, QPainter
+from PyQt5.QtGui import QDoubleValidator, QPixmap
 
 class AdminScreenView(QWidget):
-    """The user interface for the Admin Panel. Contains no logic."""
     back_clicked = pyqtSignal()
     view_data_logs_clicked = pyqtSignal()
-    update_paper_clicked = pyqtSignal(str)
     reset_paper_clicked = pyqtSignal()
-    update_coin_1_clicked = pyqtSignal(str)
-    update_coin_5_clicked = pyqtSignal(str)
     reset_coins_clicked = pyqtSignal()
     update_cmyk_clicked = pyqtSignal(float, float, float, float)
     reset_cmyk_clicked = pyqtSignal()
     refresh_cmyk_clicked = pyqtSignal()
-    
-    # New signals for +/- button functionality
     paper_decreased = pyqtSignal()
     paper_increased = pyqtSignal()
     coin_1_decreased = pyqtSignal()
@@ -29,59 +21,33 @@ class AdminScreenView(QWidget):
     coin_5_decreased = pyqtSignal()
     coin_5_increased = pyqtSignal()
     
-
-    def __init__(self, background_image_path=None):
+    def __init__(self):
         super().__init__()
-        self.background_pixmap = None
         self.setup_ui()
-        self._load_background_image(background_image_path)
+        self._load_background_image()
 
-    def _load_background_image(self, background_image_path=None):
-        """
-        Loads the background image for the admin panel.
-        If no path is provided, tries to load the default admin panel background.
-        """
-        try:
-            if background_image_path:
-                self.set_background_image(background_image_path)
-            else:
-                # Get the directory of the current script (screens/admin/)
-                current_dir = os.path.dirname(os.path.abspath(__file__))
-                # Navigate up to the project root (SSP) and then into the assets folder
-                image_path = os.path.join(current_dir, '..', '..', 'assets', 'admin_panel_screen background.png')
-                # Normalize the path to resolve ".." and ensure OS compatibility
-                normalized_path = os.path.normpath(image_path)
-                self.set_background_image(normalized_path)
-        except Exception as e:
-            print(f"ERROR: Could not load admin panel background image. {e}")
+    def _load_background_image(self):
+        current_dir = os.path.dirname(os.path.abspath(__file__))  # Get current directory
+        image_path = os.path.join(current_dir, '..', '..', 'assets', 'admin_panel_screen background.png')  # Find the image path
+        normalized_path = os.path.normpath(image_path)  # Shortcut path name
+        self.set_background_image(normalized_path)
 
     def set_background_image(self, image_path):
-        """Sets the background image from the given path."""
-        try:
-            self.background_pixmap = QPixmap(image_path)
-            if self.background_pixmap.isNull():
-                print(f"ERROR: Failed to load background image from {image_path}")
-                self.background_pixmap = None
-            else:
-                print(f"✅ Admin panel background image loaded: {image_path}")
-        except Exception as e:
-            print(f"ERROR: Could not set background image: {e}")
-            self.background_pixmap = None
-
-    def paintEvent(self, event):
-        try:
-            painter = QPainter(self)
-            if self.background_pixmap:
-                painter.drawPixmap(self.rect(), self.background_pixmap)
-            else:
-                painter.fillRect(self.rect(), Qt.GlobalColor.black)
-            super().paintEvent(event)
-        except Exception as e:
-            print(f"Error in paintEvent: {e}")
-            super().paintEvent(event)
+        pixmap = QPixmap(image_path)
+        self.background_label.setPixmap(pixmap)
+        self.background_label.setScaledContents(True)
 
     def setup_ui(self):
-        layout = QVBoxLayout(self)
+        main_layout = QStackedLayout()
+        main_layout.setContentsMargins(0, 0, 0, 0)
+        main_layout.setStackingMode(QStackedLayout.StackAll)
+        
+        self.background_label = QLabel()
+        self.background_label.setStyleSheet("background-color: transparent;")
+        
+        foreground_widget = QWidget()
+        foreground_widget.setStyleSheet("background-color: transparent;")
+        layout = QVBoxLayout(foreground_widget)
         layout.setContentsMargins(20, 5, 20, 15)  # Reduced top margin
         layout.setSpacing(10)
 
@@ -127,6 +93,10 @@ class AdminScreenView(QWidget):
         buttons_layout.addWidget(view_logs_button)
         
         layout.addWidget(buttons_container)
+        
+        main_layout.addWidget(self.background_label)
+        main_layout.addWidget(foreground_widget)
+        self.setLayout(main_layout)
 
     def _create_content_frame(self):
         frame = QFrame()
@@ -394,16 +364,9 @@ class AdminScreenView(QWidget):
 
 
     def update_paper_count_display(self, count: int, color: str):
-        """Updates the paper count input field and its style."""
-        self.paper_count_input.setText(str(count))
-        self.paper_count_input.setStyleSheet(f"""
-            QLineEdit {{
-                background-color: white; color: #36454F; font-size: 22px;
-                font-weight: bold; border: 2px solid #1e440a; border-radius: 8px;
-                padding: 5px 10px;
-            }}
-            QLineEdit:focus {{ border: 2px solid #2a5d1a; }}
-        """)
+        """Updates the paper count label display."""
+        self.paper_count_label.setText(str(count))
+        self.paper_count_label.setStyleSheet(f"color: {color}; font-size: 22px; font-weight: bold;")
 
     def update_coin_count_display(self, coin_1_count: int, coin_5_count: int):
         """Updates the coin count labels."""

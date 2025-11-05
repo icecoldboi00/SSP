@@ -1,1 +1,3 @@
-from .controller import AdminController # Can import everything 
+from .controller import AdminController
+
+__all__ = ['AdminController']
