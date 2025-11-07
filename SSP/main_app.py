@@ -156,10 +156,6 @@ class PrintingSystemApp(QMainWindow):
         return False
 
     def show_screen(self, screen_name):
-        if screen_name not in self.SCREEN_MAP:
-            print(f"ERROR: Unknown screen name: {screen_name}")
-            return
-
         # Call on_leave lifecycle method for current screen
         current_widget = self.stacked_widget.currentWidget()
         if hasattr(current_widget, 'on_leave'):

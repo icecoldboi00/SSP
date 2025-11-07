@@ -1,25 +1,17 @@
 import os
 from PyQt5.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QLabel, QScrollArea,
-    QFrame, QMessageBox, QGridLayout, QCheckBox, QSizePolicy, QStackedLayout, QSpacerItem
+    QFrame, QGridLayout, QCheckBox, QSizePolicy, QStackedLayout
 )
 from PyQt5.QtCore import Qt, pyqtSignal, QThread, QPoint
-from PyQt5.QtGui import QPixmap, QImage, QWheelEvent, QMouseEvent, QTouchEvent
+from PyQt5.QtGui import QPixmap, QImage, QTouchEvent
 from .pdf_preview_widget import PDFPreviewWidget
-
-try:
-    import fitz  # PyMuPDF
-    PYMUPDF_AVAILABLE = True
-except ImportError:
-    PYMUPDF_AVAILABLE = False
-    print("PyMuPDF not available - PDF preview will be limited")
+import fitz  # PyMuPDF
 
 def get_base_dir():
     return os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
 
 class DragScrollArea(QScrollArea):
-    """Custom scroll area that supports mouse drag scrolling."""
-    
     def __init__(self, parent=None):
         super().__init__(parent)
         self.dragging = False
@@ -48,29 +40,17 @@ class DragScrollArea(QScrollArea):
             self.setCursor(Qt.ArrowCursor)
         super().mouseReleaseEvent(event)
     
-    def wheelEvent(self, event):
-        """Handle mouse wheel scrolling."""
-        delta = event.angleDelta().y()
-        scroll_amount = delta // 8  # Adjust scroll sensitivity
-        self.verticalScrollBar().setValue(
-            self.verticalScrollBar().value() - scroll_amount
-        )
-        event.accept()
-    
     def enterEvent(self, event):
-        """Change cursor when entering the scroll area."""
         if not self.dragging:
             self.setCursor(Qt.OpenHandCursor)
         super().enterEvent(event)
     
     def leaveEvent(self, event):
-        """Reset cursor when leaving the scroll area."""
         if not self.dragging:
             self.setCursor(Qt.ArrowCursor)
         super().leaveEvent(event)
     
     def touchEvent(self, event):
-        """Handle touch events for touch screens."""
         if event.touchPoints():
             touch_point = event.touchPoints()[0]
             if event.type() == QTouchEvent.TouchBegin:
@@ -238,12 +218,6 @@ class PDFPreviewThread(QThread):
         self.running = True
         
     def run(self):
-        if not PYMUPDF_AVAILABLE:
-            for page_num in self.pages_to_render:
-                if not self.running: 
-                    break
-                self.error_occurred.emit(page_num, "PyMuPDF not available")
-            return
         try:
             doc = fitz.open(self.pdf_path)
             for page_num in self.pages_to_render:
@@ -269,9 +243,7 @@ class PDFPreviewThread(QThread):
     def stop(self): 
         self.running = False
 
-class FileBrowserView(QWidget):
-    """View for the File Browser screen - handles UI components and presentation."""
-    
+class FileBrowserView(QWidget):  
     SINGLE_PAGE_PREVIEW_WIDTH = 280
     SINGLE_PAGE_PREVIEW_HEIGHT = 380
     ITEMS_PER_GRID_PAGE = 3
@@ -308,7 +280,6 @@ class FileBrowserView(QWidget):
         self.setup_ui()
 
     def setup_ui(self):
-        """Sets up the user interface for the screen."""
         stacked_layout = QStackedLayout()
         stacked_layout.setContentsMargins(0, 0, 0, 0)
         stacked_layout.setStackingMode(QStackedLayout.StackAll)
@@ -667,7 +638,6 @@ class FileBrowserView(QWidget):
         self.next_grid_page_btn.hide()
 
     def load_pdf_files(self, pdf_files):
-        """Loads PDF files into the list."""
         print(f"Loading {len(pdf_files)} PDF files into view")
         self.pdf_files_data = []
         self.pdf_page_selections = {}
@@ -704,14 +674,12 @@ class FileBrowserView(QWidget):
     
 
     def clear_file_list(self):
-        """Clears the file list."""
         while self.file_list_layout.count() > 1:
             child = self.file_list_layout.takeAt(0)
             if child.widget(): 
                 child.widget().deleteLater()
 
     def select_pdf(self, pdf_data):
-        """Selects a PDF file and updates the UI."""
         print(f"Selecting PDF: {pdf_data['filename']}")
         if self.selected_pdf is not None and self.selected_pages is not None: 
             self.pdf_page_selections[self.selected_pdf['path']] = self.selected_pages.copy()
@@ -730,7 +698,6 @@ class FileBrowserView(QWidget):
         self.show_pdf_preview()
 
     def show_pdf_preview(self):
-        """Shows the PDF preview in grid mode."""
         self.preview_container.show()
         self.single_page_widget.hide()
         # Show grid pagination; hide single-page controls
@@ -769,15 +736,11 @@ class FileBrowserView(QWidget):
             self.page_widget_map[page_num] = page_widget
             # Arrange a single row at row 0 with 3 columns (1..3)
             self.preview_layout.addWidget(page_widget, 0, (i % 3) + 1)
-            
-        if PYMUPDF_AVAILABLE:
-            self.preview_thread = PDFPreviewThread(self.selected_pdf['path'], pages_to_show)
-            self.preview_thread.preview_ready.connect(self.on_preview_ready)
-            self.preview_thread.error_occurred.connect(self.on_preview_error)
-            self.preview_thread.start()
-        else:
-            for widget in self.page_widgets: 
-                widget.preview_label.setText(f"Page {widget.page_num}\n\nPDF Preview\nRequires PyMuPDF")
+
+        self.preview_thread = PDFPreviewThread(self.selected_pdf['path'], pages_to_show)
+        self.preview_thread.preview_ready.connect(self.on_preview_ready)
+        self.preview_thread.error_occurred.connect(self.on_preview_error)
+        self.preview_thread.start()
 
     def clear_preview(self):
         """Clears the preview area."""
@@ -800,7 +763,6 @@ class FileBrowserView(QWidget):
         self.selected_count_label.setText("")
 
     def show_single_page(self):
-        """Shows the single page view."""
         self.preview_container.hide()
         self.single_page_widget.show()
         # Hide grid pagination; show single-page controls in bottom bar
@@ -824,35 +786,28 @@ class FileBrowserView(QWidget):
         self.single_page_checkbox.setChecked(self.selected_pages.get(page_num, False))
         self.single_page_checkbox.blockSignals(False)
         self.single_page_preview.clear()
-        if PYMUPDF_AVAILABLE:
-            try:
-                doc = fitz.open(self.selected_pdf['path'])
-                if page_num <= len(doc):
-                    page = doc[page_num-1]
-                    # Increase DPI for sharper single-page preview (from 300 to 450 DPI)
-                    pix = page.get_pixmap(matrix=fitz.Matrix(450/72, 450/72), alpha=False)
-                    qimg = QImage(pix.samples, pix.width, pix.height, pix.stride, QImage.Format_RGB888)
-                    self.single_page_preview.setPixmap(QPixmap.fromImage(qimg))
-                doc.close()
-            except Exception as e: 
-                print(f"Error rendering page {page_num}: {e}")
-                self.single_page_preview.clear()
-        else: 
+        try:
+            doc = fitz.open(self.selected_pdf['path'])
+            if page_num <= len(doc):
+                page = doc[page_num - 1]
+                pix = page.get_pixmap(matrix=fitz.Matrix(450 / 72, 450 / 72), alpha=False)
+                qimg = QImage(pix.samples, pix.width, pix.height, pix.stride, QImage.Format_RGB888)
+                self.single_page_preview.setPixmap(QPixmap.fromImage(qimg))
+            doc.close()
+        except Exception as e:
+            print(f"Error rendering page {page_num}: {e}")
             self.single_page_preview.clear()
 
     def update_view_mode_buttons(self):
-        """Updates the view mode buttons."""
         self.view_all_btn.setChecked(self.view_mode == 'all')
         self.view_single_btn.setChecked(self.view_mode == 'single')
 
     def set_all_pages_view(self):
-        """Sets the view to all pages mode."""
         self.view_mode = 'all'
         self.update_view_mode_buttons()
         self.show_pdf_preview()
 
     def set_single_page_view(self):
-        """Sets the view to single page mode."""
         self.view_mode = 'single'
         self.update_view_mode_buttons()
         if self.selected_pdf and not (1 <= self.single_page_index <= self.selected_pdf['pages']): 
@@ -860,7 +815,6 @@ class FileBrowserView(QWidget):
         self.show_single_page()
 
     def update_selected_count(self):
-        """Updates the selected count display."""
         if not self.selected_pages: 
             return
         selected_count = sum(1 for selected in self.selected_pages.values() if selected)
@@ -868,7 +822,6 @@ class FileBrowserView(QWidget):
         self.continue_btn.setEnabled(selected_count > 0)
 
     def select_all_pages(self):
-        """Selects all pages."""
         if not self.selected_pages: 
             return
         for page_num in self.selected_pages: 
@@ -884,7 +837,6 @@ class FileBrowserView(QWidget):
             self.single_page_checkbox.blockSignals(False)
 
     def deselect_all_pages(self):
-        """Deselects all pages."""
         if not self.selected_pages: 
             return
         for page_num in self.selected_pages: 
@@ -900,7 +852,6 @@ class FileBrowserView(QWidget):
             self.single_page_checkbox.blockSignals(False)
 
     def on_preview_ready(self, page_num, pixmap):
-        """Handles when a preview is ready."""
         if self.view_mode == 'all':
             widget = self.page_widget_map.get(page_num)
             if widget: 
@@ -909,7 +860,6 @@ class FileBrowserView(QWidget):
             self.single_page_preview.setPixmap(pixmap)
 
     def on_preview_error(self, page_num, error_msg):
-        """Handles when a preview error occurs."""
         if self.view_mode == 'all':
             widget = self.page_widget_map.get(page_num)
             if widget: 
@@ -917,20 +867,5 @@ class FileBrowserView(QWidget):
         elif self.view_mode == 'single' and page_num == self.single_page_index: 
             self.single_page_preview.clear()
 
-    def update_zoom_label(self):
-        """Updates the zoom label."""
-        if self.single_page_preview:
-            zoom_factor = self.single_page_preview.getZoomFactor()
-            self.zoom_label.setText(f"{int(zoom_factor * 100)}%")
-
     def set_continue_button_enabled(self, enabled):
-        """Enables or disables the continue button."""
         self.continue_btn.setEnabled(enabled)
-
-    def show_analysis_loading(self, filename):
-        """Shows loading state for analysis."""
-        pass  # Not used in this view
-
-    def update_analysis_info(self, analysis_data):
-        """Updates the analysis information display."""
-        pass  # Not used in this view
