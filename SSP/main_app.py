@@ -2,9 +2,8 @@ import sys
 import os
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
-from PyQt5.QtWidgets import QApplication, QMainWindow, QStackedWidget, QDesktopWidget
+from PyQt5.QtWidgets import QApplication, QMainWindow, QStackedWidget
 from PyQt5.QtCore import Qt, QTimer
-from PyQt5.QtGui import QIcon
 from screens.idle import IdleController
 from screens.usb import USBController
 from screens.file_browser import FileBrowserController
@@ -14,13 +13,11 @@ from screens.admin import AdminController
 from screens.data_viewer import DataViewerController
 from screens.thank_you import ThankYouController
 from database.models import init_db
+from managers.usb_file_manager import USBFileManager
 from managers.printer_manager import PrinterManager
 from managers.db_threader import DatabaseThreadManager
 from managers.ink_analysis_threader import InkAnalysisThreadManager
 from managers.sms_manager import cleanup_sms
-from config import get_config
-from managers.usb_file_manager import USBFileManager
-
 
 
 class PrintingSystemApp(QMainWindow):
@@ -137,19 +134,13 @@ class PrintingSystemApp(QMainWindow):
         self.ink_analysis_threader.analysis_completed.connect(self._on_ink_analysis_completed)
 
     
-    def _on_ink_analysis_completed(self, operation):
+    def _on_ink_analysis_completed(self, result):
+        """Handle ink analysis completion - update CMYK levels and clean up temp PDF."""
         try:
-            payload = None
-            # Case 2: callback with InkAnalysisOperation object
-            if hasattr(operation, 'result') or hasattr(operation, 'error'):
-                payload = getattr(operation, 'result', None) or {}
-            else:
-                # Case 1: signal emitted with dict payload
-                payload = operation or {}
-
-            if isinstance(payload, dict) and payload.get('database_updated', False) and 'cmyk_levels' in payload:
-                print(f"CMYK levels updated: {payload['cmyk_levels']}")
-                self.db_threader.cmyk_levels_updated.emit(payload['cmyk_levels'])
+            # Handle signal payload (dict from ink_analysis_threader)
+            if isinstance(result, dict) and result.get('database_updated', False) and 'cmyk_levels' in result:
+                print(f"CMYK levels updated: {result['cmyk_levels']}")
+                self.db_threader.cmyk_levels_updated.emit(result['cmyk_levels'])
         finally:
             # Always clean up temp PDF after analysis completes
             self.printer_manager.cleanup_last_temp_pdf()
@@ -253,11 +244,17 @@ class PrintingSystemApp(QMainWindow):
 
     def _update_database_after_payment(self, payment_info):
         try:
-            # 1. Log transaction immediately
-            self._log_transaction_immediately(payment_info)
+            # 1. Log transaction immediately (using PaymentModel)
+            if hasattr(self, 'payment_screen') and self.payment_screen:
+                self.payment_screen.model.log_transaction(payment_info)
+            else:
+                print(f"No payment screen available for transaction logging")
             
-            # 2. Update coin inventory (add received coins)
-            self._update_coin_inventory_after_payment(payment_info)
+            # 2. Update coin inventory (add received coins) (using PaymentModel)
+            if hasattr(self, 'payment_screen') and self.payment_screen:
+                self.payment_screen.model.update_coin_inventory_after_payment()
+            else:
+                print(f"No payment screen available for coin inventory update")
             
             # Note: Paper count is updated after successful printing, not after payment
             # This ensures paper is only decremented if printing actually succeeds
@@ -269,110 +266,16 @@ class PrintingSystemApp(QMainWindow):
             import traceback
             traceback.print_exc()
 
-    def _log_transaction_immediately(self, payment_info):
-        """Log transaction to database immediately after payment."""
-        try:
-            print(f"Logging transaction")
-            
-            # Extract transaction data
-            pdf_data = payment_info.get('pdf_data', {})
-            file_path = pdf_data.get('path', 'unknown.pdf')
-            selected_pages = payment_info.get('selected_pages', [])
-            
-            transaction_data = {
-                'file_name': os.path.basename(file_path),
-                'pages': len(selected_pages),
-                'copies': payment_info.get('copies', 1),
-                'color_mode': payment_info.get('color_mode', 'Color'),
-                'total_cost': payment_info.get('total_cost', 0),
-                'amount_paid': payment_info.get('amount_received', 0),
-                'change_given': payment_info.get('change', 0),
-                'status': 'paid'  # Mark as paid, will update to 'completed' after printing
-            }
-            
-            # Log to database
-            if hasattr(self, 'admin_screen') and self.admin_screen:
-                self.admin_screen.model.db_manager.log_transaction(transaction_data)
-                print(f"Transaction logged immediately: {transaction_data['file_name']}")
-            else:
-                print(f"No admin screen available for transaction logging")
-                
-        except Exception as e:
-            print(f"Error logging transaction immediately: {e}")
 
-    def _update_coin_inventory_after_payment(self, payment_info):
-        """Update coin inventory after payment completion."""
-        try:
-            print(f"Updating coin inventory")
-            
-            # Get payment screen model to access coin data
-            if hasattr(self, 'payment_screen') and self.payment_screen:
-                payment_model = self.payment_screen.model
-                
-                # Add received coins to inventory
-                if hasattr(payment_model, 'cash_received') and payment_model.cash_received:
-                    print(f"Adding received coins: {payment_model.cash_received}")
-                    self._update_coin_inventory_items(payment_model.cash_received, add=True)
-                
-                # Subtract dispensed change from inventory
-                if hasattr(payment_model, 'change_dispensed') and payment_model.change_dispensed:
-                    print(f"Subtracting dispensed change: {payment_model.change_dispensed}")
-                    self._update_coin_inventory_items(payment_model.change_dispensed, add=False)
-                
-                print(f"Coin inventory updated after payment")
-            else:
-                print(f"No payment screen available for coin inventory update")
-                
-        except Exception as e:
-            print(f"Error updating coin inventory: {e}")
-
-    def _update_paper_count_after_payment(self, payment_info):
-        """Update paper count after payment completion."""
-        try:
-            print(f"Updating paper count")
-            
-            # Calculate total pages that will be printed
-            selected_pages = payment_info.get('selected_pages', [])
-            copies = payment_info.get('copies', 1)
-            total_pages = len(selected_pages) * copies
-            
-            print(f"Deducting {total_pages} pages from inventory")
-            
-            # Update paper count
-            if hasattr(self, 'admin_screen') and self.admin_screen:
-                success = self.admin_screen.model.decrement_paper_count(total_pages)
-                if success:
-                    print(f"Paper count updated: -{total_pages} pages")
-                else:
-                    print(f"Failed to update paper count")
-            else:
-                print(f"No admin screen available for paper count update")
-                
-        except Exception as e:
-            print(f"Error updating paper count after payment: {e}")
 
     def _cleanup_session_directory_after_print(self):
-        """Clean up the session directory after successful printing."""
-        try:
-            if hasattr(self, 'usb_file_manager') and self.usb_file_manager:
-                # Get the current session directory
-                session_dir = self.usb_file_manager.get_current_session_directory()
-                if session_dir and os.path.exists(session_dir):
-                    import shutil
-                    shutil.rmtree(session_dir)
-                    print(f"Session directory cleaned up: {session_dir}")
-                else:
-                    print(f"No session directory to clean up")
-            else:
-                print(f"No USB file manager available for cleanup")
-        except Exception as e:
-            print(f"Error cleaning up session directory: {e}")
+        if hasattr(self, 'usb_file_manager') and self.usb_file_manager:
+            self.usb_file_manager.cleanup_session_directory()
+        else:
+            print(f"No USB file manager available for cleanup")
 
     def on_print_successful(self):
         print("Print job successfully completed")
-        
-        # Update transaction status to 'completed' (already logged as 'paid')
-        self._update_transaction_status_to_completed()
         
         # Update paper count after successful printing (before clearing print job)
         self._update_paper_count_after_print()
@@ -400,26 +303,6 @@ class PrintingSystemApp(QMainWindow):
             self.show_screen('thank_you')
             QTimer.singleShot(100, lambda: self.thank_you_screen.finish_printing())
 
-    def _update_transaction_status_to_completed(self):
-        """Update the transaction status from 'paid' to 'completed' after successful printing."""
-        try:
-            print(f"Updating transaction status to 'completed'")
-            
-            if hasattr(self, 'current_payment_info') and self.current_payment_info:
-                pdf_data = self.current_payment_info.get('pdf_data', {})
-                file_name = os.path.basename(pdf_data.get('path', 'unknown.pdf'))
-                
-                # Update the most recent transaction for this file
-                if hasattr(self, 'admin_screen') and self.admin_screen:
-                    # This would require a method to update transaction status
-                    # For now, we'll just log that the print was successful
-                    print(f"Transaction marked as completed for: {file_name}")
-            else:
-                print(f"No current payment info available for status update")
-                
-        except Exception as e:
-            print(f"Error updating transaction status: {e}")
-    
     def _trigger_ink_analysis(self):
         if not hasattr(self, 'current_print_job') or not self.current_print_job:
             print("No print job info available for ink analysis")
@@ -435,13 +318,13 @@ class PrintingSystemApp(QMainWindow):
         try:
             # Use temp PDF (already has only selected pages!) instead of original file
             # This works even if USB drive is removed
+            # Note: Completion is handled via signal connection in _connect_thread_managers()
             self.ink_analysis_threader.analyze_and_update(
                 pdf_path=temp_pdf_path,
                 selected_pages=None,  # All pages in temp PDF (already filtered)
                 copies=self.current_print_job['copies'],
                 dpi=150,
-                color_mode=self.current_print_job['color_mode'],
-                callback=self._on_ink_analysis_completed
+                color_mode=self.current_print_job['color_mode']
             )
         except Exception as e:
             print(f"Error triggering ink analysis: {e}")
@@ -449,6 +332,7 @@ class PrintingSystemApp(QMainWindow):
             self.printer_manager.cleanup_last_temp_pdf()
     
     def _update_paper_count_after_print(self):
+        """Update paper count after successful printing."""
         if not hasattr(self, 'current_print_job') or not self.current_print_job:
             print("No print job info available for paper count update")
             return
@@ -461,188 +345,34 @@ class PrintingSystemApp(QMainWindow):
             
             print(f"Updating paper count: -{total_pages} pages (pages: {len(selected_pages)}, copies: {copies})")
             
-            # Use direct database access instead of async threader
+            # Update paper count using AdminModel
             if hasattr(self, 'admin_screen') and self.admin_screen:
-                # Get current paper count
+                # Get current paper count before update
                 current_count = self.admin_screen.get_paper_count()
-                if current_count is not None:
-                    new_count = max(0, current_count - total_pages)
+                
+                # Decrement paper count (AdminModel handles the database update and low paper alerts)
+                success = self.admin_screen.model.decrement_paper_count(total_pages)
+                
+                if success:
+                    # Get updated count after decrement
+                    updated_count = self.admin_screen.get_paper_count()
+                    print(f"Paper count updated: {current_count} -> {updated_count}")
                     
-                    # Update paper count directly through admin screen
-                    success = self.admin_screen.model.decrement_paper_count(total_pages)
-                    
-                    if success:
-                        print(f"Paper count updated: {current_count} -> {new_count}")
-                        
-                        # Verify the update by checking the database again
-                        updated_count = self.admin_screen.get_paper_count()
-                        print(f"Verified paper count in database: {updated_count}")
-                        
-                        # Check for low paper alert (only send once)
-                        if new_count <= 10 and not self.low_paper_alert_sent:
-                            print(f"Low paper alert: {new_count} sheets remaining")
-                            self.low_paper_alert_sent = True
-                        elif new_count > 10:
-                            # Reset flag if paper count goes back above threshold
-                            self.low_paper_alert_sent = False
-                    else:
-                        print("Failed to update paper count")
+                    # Check for low paper alert flag (application-level state management)
+                    if updated_count <= 10 and not self.low_paper_alert_sent:
+                        print(f"Low paper alert flag set: {updated_count} sheets remaining")
+                        self.low_paper_alert_sent = True
+                    elif updated_count > 10:
+                        # Reset flag if paper count goes back above threshold
+                        self.low_paper_alert_sent = False
                 else:
-                    print("Could not retrieve current paper count")
+                    print("Failed to update paper count")
             else:
                 print("No admin screen available for paper count update")
                 
         except Exception as e:
             print(f"Error updating paper count: {e}")
 
-    def _update_coin_inventory_after_print(self):
-        try:           
-            # Try to get payment info from payment screen first
-            if hasattr(self, 'payment_screen') and self.payment_screen:
-                payment_model = self.payment_screen.model
-                
-                # Handle received coins (coins inserted during payment)
-                if hasattr(payment_model, 'cash_received') and payment_model.cash_received:
-                    print(f"Adding received coins to inventory: {payment_model.cash_received}")
-                    self._update_coin_inventory_items(payment_model.cash_received, add=True)
-                else:
-                    print("No 'cash_received' data available")
-                
-                # Handle dispensed change (coins given as change)
-                if hasattr(payment_model, 'change_dispensed') and payment_model.change_dispensed:
-                    print(f"Subtracting dispensed change from inventory: {payment_model.change_dispensed}")
-                    self._update_coin_inventory_items(payment_model.change_dispensed, add=False)
-                    print("Coin inventory updated successfully - dispensed change subtracted")
-                else:
-                    print("No change dispensed data available - No change was given")
-            else:
-                print("No payment screen available for coin inventory update")
-                
-        except Exception as e:
-            print(f"Error updating coin inventory: {e}")
-            import traceback
-            print(f"Full error traceback: {traceback.format_exc()}")
-
-    def _update_coin_inventory_items(self, coin_data, add=True):
-        if not hasattr(self, 'admin_screen') or not self.admin_screen:
-            print("No admin screen available for coin inventory update")
-            return
-            
-        try:
-            for denomination, count in coin_data.items():
-                if count > 0:
-                    is_bill = denomination >= 20
-                    
-                    # Get current count
-                    current_inventory = self.admin_screen.model.db_manager.get_cash_inventory()
-                    current_count = 0
-                    
-                    for item in current_inventory:
-                        if (item.get('denomination') == denomination and 
-                            item.get('type') == ('bill' if is_bill else 'coin')):
-                            current_count = item.get('count', 0)
-                            break
-                    
-                    # Calculate new count
-                    if add:
-                        new_count = current_count + count
-                    else:
-                        new_count = max(0, current_count - count)  # Don't go below 0
-                    
-                    # Update database
-                    self.admin_screen.model.db_manager.update_cash_inventory(
-                        denomination=denomination,
-                        count=new_count,
-                        type='bill' if is_bill else 'coin'
-                    )
-                    
-                    operation_symbol = "+" if add else "-"
-                    print(f"Updated {denomination} {'bill' if is_bill else 'coin'}: {current_count} {operation_symbol}{count} = {new_count}")
-            
-            # Refresh admin screen coin counts if it's available
-            if hasattr(self, 'admin_screen') and self.admin_screen:
-                self.admin_screen.model.load_coin_counts()
-                print("Admin screen coin counts refreshed")
-            else:
-                print("Admin screen not available")
-                    
-        except Exception as e:
-            print(f"Error updating coin inventory items: {e}")
-            import traceback
-            print(f"Full error traceback: {traceback.format_exc()}")
-
-    def _log_transaction_after_print_success(self):
-        """Log transaction to database after successful printing."""
-        try:         
-            # Try to get transaction data from payment screen first
-            if hasattr(self, 'payment_screen') and self.payment_screen and hasattr(self.payment_screen.model, 'transaction_data') and self.payment_screen.model.transaction_data:
-                print("Logging transaction from payment screen")
-                self.payment_screen.model.log_transaction_after_print_success()
-                return
-            
-            # Fallback: Try to get transaction data from stored payment info
-            if hasattr(self, 'current_payment_info') and self.current_payment_info:  
-                # Extract data safely with proper fallbacks
-                pdf_data = self.current_payment_info.get('pdf_data', {})
-                file_path = pdf_data.get('path', 'unknown.pdf')
-                selected_pages = self.current_payment_info.get('selected_pages', [])
-                
-                transaction_data = {
-                    'file_name': os.path.basename(file_path),
-                    'pages': len(selected_pages),
-                    'copies': self.current_payment_info.get('copies', 1),
-                    'color_mode': self.current_payment_info.get('color_mode', 'Color'),
-                    'total_cost': self.current_payment_info.get('total_cost', 0),
-                    'amount_paid': self.current_payment_info.get('amount_received', 0),
-                    'change_given': self.current_payment_info.get('change', 0),
-                    'status': 'completed'
-                }
-                
-                print(f"Transaction data: {transaction_data}")
-                
-                # Get database manager from admin screen
-                if hasattr(self, 'admin_screen') and self.admin_screen:
-                    self.admin_screen.model.db_manager.log_transaction(transaction_data)
-                    print(f"Transaction logged successfully: {transaction_data['file_name']}")
-                    
-                    # Refresh data viewer if it's available
-                    if hasattr(self, 'data_viewer_screen') and self.data_viewer_screen:
-                        print("Refreshing data viewer after transaction logging")
-                        self.data_viewer_screen.model.load_transactions()
-                        self.data_viewer_screen.model.load_cash_inventory()
-                        print("Data viewer refreshed with new transaction and inventory data")
-                    else:
-                        print("Data viewer not available for refresh")
-                else:
-                    print("No admin screen available for transaction logging")
-            else:
-                print("No transaction data available to log")
-                if hasattr(self, 'current_payment_info'):
-                    print(f"current_payment_info value: {self.current_payment_info}")
-                
-        except Exception as e:
-            print(f"Error logging transaction: {e}")
-            import traceback
-            traceback.print_exc()
-            
-            # Fallback: Try to log a basic transaction record
-            try:
-                print("Attempting fallback transaction logging")
-                if hasattr(self, 'admin_screen') and self.admin_screen:
-                    fallback_data = {
-                        'file_name': 'unknown.pdf',
-                        'pages': 1,
-                        'copies': 1,
-                        'color_mode': 'Color',
-                        'total_cost': 0,
-                        'amount_paid': 0,
-                        'change_given': 0,
-                        'status': 'completed'
-                    }
-                    self.admin_screen.model.db_manager.log_transaction(fallback_data)
-                    print("Fallback transaction logged successfully")
-            except Exception as fallback_error:
-                print(f"Fallback transaction logging also failed: {fallback_error}")
 
     def on_print_waiting(self):
         print("Waiting for print job to complete")
@@ -734,7 +464,7 @@ def main():
         # Create Qt application
         app = QApplication(sys.argv) # Main thread init
         app.setApplicationName("Printing System GUI")
-        app.setApplicationVersion("1.0")
+        app.setApplicationVersion("1.21")
         window = PrintingSystemApp()
 
         # Show window (size and mode determined by _setup_display)
@@ -753,3 +483,5 @@ def main():
 
 if __name__ == '__main__':
     main()
+
+# Functions in here are for database, file cleaning, or other system-level operations that are not screen-specific.

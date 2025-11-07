@@ -4,7 +4,6 @@ import psutil
 import tempfile
 import platform
 import threading
-import time
 from datetime import datetime
 
 class USBFileManager:
@@ -502,6 +501,21 @@ class USBFileManager:
     def get_current_session_id(self):
         """Get the current session ID."""
         return self.session_id
+    
+    def cleanup_session_directory(self):
+        """Clean up the current session directory after successful printing."""
+        try:
+            session_dir = self.get_current_session_directory()
+            if session_dir and os.path.exists(session_dir):
+                shutil.rmtree(session_dir)
+                print(f"Session directory cleaned up: {session_dir}")
+                return True
+            else:
+                print(f"No session directory to clean up")
+                return False
+        except Exception as e:
+            print(f"Error cleaning up session directory: {e}")
+            return False
     
     def verify_file_in_session(self, file_path):
         """Verify that a file exists in the current session directory."""

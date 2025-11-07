@@ -500,6 +500,94 @@ class PaymentModel(QObject):
         except Exception as e:
             print(f"Error updating coin inventory immediately: {e}")
 
+    def log_transaction(self, payment_info):
+        """Log transaction to database immediately after payment."""
+        try:
+            print(f"Logging transaction")
+            
+            # Extract transaction data
+            pdf_data = payment_info.get('pdf_data', {})
+            file_path = pdf_data.get('path', 'unknown.pdf')
+            selected_pages = payment_info.get('selected_pages', [])
+            
+            transaction_data = {
+                'file_name': os.path.basename(file_path),
+                'pages': len(selected_pages),
+                'copies': payment_info.get('copies', 1),
+                'color_mode': payment_info.get('color_mode', 'Color'),
+                'total_cost': payment_info.get('total_cost', 0),
+                'amount_paid': payment_info.get('amount_received', 0),
+                'change_given': payment_info.get('change', 0),
+                'status': 'paid'  # Mark as paid, will update to 'completed' after printing
+            }
+            
+            # Log to database using PaymentModel's db_manager
+            self.db_manager.log_transaction(transaction_data)
+            print(f"Transaction logged immediately: {transaction_data['file_name']}")
+                
+        except Exception as e:
+            print(f"Error logging transaction immediately: {e}")
+
+    def update_coin_inventory_after_payment(self):
+        """Update coin inventory after payment completion."""
+        try:
+            print(f"Updating coin inventory")
+            
+            # Add received coins to inventory
+            if hasattr(self, 'cash_received') and self.cash_received:
+                print(f"Adding received coins: {self.cash_received}")
+                self._update_coin_inventory_items(self.cash_received, add=True)
+            
+            # Subtract dispensed change from inventory
+            if hasattr(self, 'change_dispensed') and self.change_dispensed:
+                print(f"Subtracting dispensed change: {self.change_dispensed}")
+                self._update_coin_inventory_items(self.change_dispensed, add=False)
+            
+            print(f"Coin inventory updated after payment")
+                
+        except Exception as e:
+            print(f"Error updating coin inventory: {e}")
+
+    def _update_coin_inventory_items(self, coin_data, add=True):
+        """Helper method to update coin inventory items."""
+        try:
+            for denomination, count in coin_data.items():
+                if count > 0:
+                    is_bill = denomination >= 20
+                    
+                    # Get current count
+                    current_inventory = self.db_manager.get_cash_inventory()
+                    current_count = 0
+                    
+                    for item in current_inventory:
+                        if (item.get('denomination') == denomination and 
+                            item.get('type') == ('bill' if is_bill else 'coin')):
+                            current_count = item.get('count', 0)
+                            break
+                    
+                    # Calculate new count
+                    if add:
+                        new_count = current_count + count
+                    else:
+                        new_count = max(0, current_count - count)  # Don't go below 0
+                    
+                    # Update database
+                    self.db_manager.update_cash_inventory(
+                        denomination=denomination,
+                        count=new_count,
+                        type='bill' if is_bill else 'coin'
+                    )
+                    
+                    operation_symbol = "+" if add else "-"
+                    print(f"Updated {denomination} {'bill' if is_bill else 'coin'}: {current_count} {operation_symbol}{count} = {new_count}")
+            
+            print("Coin inventory items updated successfully")
+                    
+        except Exception as e:
+            print(f"Error updating coin inventory items: {e}")
+            import traceback
+            print(f"Full error traceback: {traceback.format_exc()}")
+
     def _navigate_to_thank_you(self):
         """Navigate to thank you screen after all operations are complete."""
         try:

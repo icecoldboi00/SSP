@@ -1,5 +1,3 @@
-# screens/usb/view.py
-
 import os
 from PyQt5.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QStackedLayout,
@@ -12,7 +10,6 @@ def get_base_dir():
     return os.path.abspath(os.path.join(os.path.dirname(__file__), '../..'))
 
 class USBScreenView(QWidget):
-    """The user interface for the USB Screen. Contains no logic."""
     back_button_clicked = pyqtSignal()
     
     def __init__(self):
@@ -22,7 +19,6 @@ class USBScreenView(QWidget):
         self.setup_timers()
     
     def setup_ui(self):
-        """Initializes the user interface using a flexible, layered layout."""
         # 1. Main Stacked Layout for Background/Foreground Layering
         main_layout = QStackedLayout(self)
         main_layout.setContentsMargins(0, 0, 0, 0)
@@ -58,19 +54,6 @@ class USBScreenView(QWidget):
         self.status_indicator.setMinimumHeight(55)
         self.status_indicator.setStyleSheet(self.get_initial_status_style())
         
-        # Safety warning label (hidden by default)
-        self.safety_warning = QLabel("")
-        self.safety_warning.setAlignment(Qt.AlignCenter)
-        self.safety_warning.setMinimumHeight(40)
-        self.safety_warning.setStyleSheet("""
-            QLabel {
-                color: #dc3545; font-size: 16px; font-weight: bold;
-                padding: 8px 16px; border: 2px solid #dc3545; border-radius: 6px;
-                background-color: rgba(220, 53, 69, 0.1);
-            }
-        """)
-        self.safety_warning.hide()
-
         # Button Creation
         self.back_button = QPushButton("← Back to Main")
         self.back_button.setStyleSheet(self.get_back_button_style())
@@ -87,13 +70,6 @@ class USBScreenView(QWidget):
         status_layout.addWidget(self.status_indicator)
         status_layout.addStretch()
         fg_layout.addLayout(status_layout)
-        
-        # Add safety warning layout
-        safety_layout = QHBoxLayout()
-        safety_layout.addStretch()
-        safety_layout.addWidget(self.safety_warning)
-        safety_layout.addStretch()
-        fg_layout.addLayout(safety_layout)
         
         fg_layout.addSpacing(20)
         fg_layout.addStretch(4)
@@ -114,23 +90,16 @@ class USBScreenView(QWidget):
         self.back_button.clicked.connect(self.back_button_clicked.emit)
     
     def setup_timers(self):
-        """Sets up timers for the view."""
         self.blink_timer.timeout.connect(self.blink_status)
     
     def _load_background_image(self):
-        """Loads the background image."""
         base_dir = get_base_dir()
         image_path = os.path.join(base_dir, 'assets', 'usb_screen background.png')
-        if os.path.exists(image_path):
-            pixmap = QPixmap(image_path)
-            self.background_label.setPixmap(pixmap)
-            self.background_label.setScaledContents(True)
-        else:
-            print(f"WARNING: Background image not found at '{image_path}'")
-            self.background_label.setStyleSheet("background-color: #e0e0e0;")
+        pixmap = QPixmap(image_path)
+        self.background_label.setPixmap(pixmap)
+        self.background_label.setScaledContents(True)
     
     def update_status_indicator(self, text, style_key, color_hex):
-        """Updates the text and style of the status indicator label."""
         self.status_indicator.setText(text)
         self.status_indicator.setStyleSheet(f"""
             QLabel {{
@@ -140,7 +109,6 @@ class USBScreenView(QWidget):
             }}""")
     
     def blink_status(self):
-        """Toggles the opacity of the status indicator for a blinking effect."""
         current_style = self.status_indicator.styleSheet()
         if "0.1" in current_style:
             new_style = current_style.replace("0.1", "0.05")
@@ -149,17 +117,12 @@ class USBScreenView(QWidget):
         self.status_indicator.setStyleSheet(new_style)
     
     def start_blinking(self):
-        """Starts the blinking effect."""
         self.blink_timer.start(700)
     
     def stop_blinking(self):
-        """Stops the blinking effect."""
         self.blink_timer.stop()
     
-    
-    
     def get_initial_status_style(self):
-        """Returns the initial style for the status indicator."""
         return """
             QLabel {
                 color: #555; font-size: 18px; padding: 10px 20px;
@@ -167,9 +130,7 @@ class USBScreenView(QWidget):
                 background-color: rgba(255, 255, 255, 0.1);
             }"""
 
-
     def get_back_button_style(self):
-        """Returns the style for the back button."""
         return """
             QPushButton { 
                 background-color: #6c757d; color: white; font-size: 14px;
@@ -178,16 +139,6 @@ class USBScreenView(QWidget):
             QPushButton:hover { background-color: #5a6268; }
         """
     
-    def show_safety_warning(self, message):
-        """Shows a safety warning message."""
-        self.safety_warning.setText(message)
-        self.safety_warning.show()
-    
-    def hide_safety_warning(self):
-        """Hides the safety warning message."""
-        self.safety_warning.hide()
-    
     def show_message(self, title, text):
-        """Shows a message to the user."""
         QMessageBox.information(self, title, text)
 
