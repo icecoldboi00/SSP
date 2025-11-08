@@ -1,17 +1,14 @@
 import os
-import time
-import threading
-from typing import Tuple, List, Dict
-from PyQt5.QtCore import QObject, QThread, pyqtSignal, QTimer
-from managers.hopper_manager import ChangeDispenser, DispenseThread, PIGPIO_AVAILABLE as HOPPER_GPIO_AVAILABLE
+from PyQt5.QtCore import QObject, pyqtSignal, QTimer
+from managers.hopper_manager import ChangeDispenser, DispenseThread
 from managers.payment_algorithm_manager import PaymentAlgorithmManager
 from database.db_manager import DatabaseManager
 from managers.payment_handler import get_payment_handler, cleanup_payment_handler
 
-
+# Controller for the payment handler
 class PaymentGPIOController(QObject):
     coin_inserted = pyqtSignal(int)
-    special_coin_inserted = pyqtSignal(int)  # Special coins that cannot be given as change
+    special_coin_inserted = pyqtSignal(int)  # Old 5 peso
     bill_inserted = pyqtSignal(int)
     payment_status = pyqtSignal(str)
     
@@ -21,68 +18,44 @@ class PaymentGPIOController(QObject):
         self.initialized = False
     
     def initialize(self):
-        """Initialize the payment handler."""
         try:
-            # Clean up any existing handler first
             cleanup_payment_handler()
             
+            # Listens from payment handler signals and emits to this controller
             self.payment_handler = get_payment_handler()
             if self.payment_handler:
-                # Debug: Check if the special_coin_inserted signal exists
-                if hasattr(self.payment_handler, 'special_coin_inserted'):
-                    print("PaymentGPIOController: special_coin_inserted signal found")
-                else:
-                    print("PaymentGPIOController: ERROR - special_coin_inserted signal NOT found!")
-                    print(f"PaymentGPIOController: Available signals: {[attr for attr in dir(self.payment_handler) if 'Signal' in str(type(getattr(self.payment_handler, attr, None)))]}")
-                
-                # Connect signals
                 self.payment_handler.coin_inserted.connect(self.coin_inserted.emit)
                 self.payment_handler.special_coin_inserted.connect(self.special_coin_inserted.emit)
                 self.payment_handler.bill_inserted.connect(self.bill_inserted.emit)
                 self.payment_handler.payment_status.connect(self.payment_status.emit)
                 
                 self.initialized = True
-                print("PaymentGPIOController: Initialized successfully")
+                print("PaymentController: Initialized")
                 return True
             else:
-                print("PaymentGPIOController: Failed to get payment handler")
                 return False
         except Exception as e:
-            print(f"PaymentGPIOController: Initialization failed - {e}")
+            print(f"Failed {e}")
             return False
     
     def enable_payments(self):
-        """Enable payment acceptors."""
         if self.payment_handler and self.initialized:
             return self.payment_handler.enable_payments()
         return False
     
     def disable_payments(self):
-        """Disable payment acceptors."""
         if self.payment_handler and self.initialized:
             return self.payment_handler.disable_payments()
         return False
     
-    def get_status(self):
-        """Get payment handler status."""
-        if self.payment_handler and self.initialized:
-            return self.payment_handler.get_status()
-        return {'initialized': False}
-    
     def cleanup(self):
-        """Clean up resources."""
         if self.payment_handler:
             self.payment_handler.cleanup()
             self.payment_handler = None
         self.initialized = False
 
-    
-
 
 class PaymentModel(QObject):
-    """Model for the Payment screen - handles payment logic, GPIO, and change dispensing."""
-
-    # Signals for UI updates
     payment_data_updated = pyqtSignal(dict)  # payment_data
     payment_status_updated = pyqtSignal(str)  # status_message
     suggestion_updated = pyqtSignal(str)      # inline best payment suggestion
@@ -90,13 +63,12 @@ class PaymentModel(QObject):
     change_updated = pyqtSignal(float, str)  # change_amount, change_text
     payment_completed = pyqtSignal(dict)  # payment_info
     go_back_requested = pyqtSignal()  # request to go back
-    payment_button_enabled = pyqtSignal(bool)  # enable/disable payment button
     payment_mode_changed = pyqtSignal(bool)  # payment mode enabled/disabled
 
-    def __init__(self, main_app=None):
+    def __init__(self, main_app):
         super().__init__()
         self.db_manager = DatabaseManager()
-        self.payment_algorithm = PaymentAlgorithmManager(self.db_manager)
+        self.payment_algorithm = PaymentAlgorithmManager(self.db_manager) #Same db_manager instance
         self.main_app = main_app
         self.total_cost = 0
         self.amount_received = 0
@@ -110,7 +82,6 @@ class PaymentModel(QObject):
         self.best_payment_suggestion = None  # {'amount', 'change', 'reason'}
 
     def set_payment_data(self, payment_data):
-        """Sets the payment data and initializes payment state."""
         self.payment_data = payment_data
         self.total_cost = payment_data['total_cost']
         self.amount_received = 0
@@ -131,13 +102,10 @@ class PaymentModel(QObject):
             self.color_mode = payment_data['color_mode']
 
         # Compute best payment suggestion inline based on current coin inventory
-        try:
-            best = self.payment_algorithm.find_best_payment_amount(self.total_cost)
-            self.best_payment_suggestion = best
-            # Notify UI to show suggestion inline
-            self.suggestion_updated.emit(self._format_best_payment_status())
-        except Exception as e:
-            print(f"Error computing best payment suggestion: {e}")
+        best = self.payment_algorithm.find_best_payment_amount(self.total_cost)
+        self.best_payment_suggestion = best
+        self.suggestion_updated.emit(self._format_best_payment_status())
+
 
         # Prepare summary data for UI
         analysis = payment_data.get('analysis', {})
@@ -159,15 +127,11 @@ class PaymentModel(QObject):
         self.payment_status_updated.emit("Click 'Enable Payment' to begin")
 
     def setup_gpio(self):
-        """Setup GPIO controller for payment processing."""
-        
-        # Create and initialize GPIO controller
         self.gpio_controller = PaymentGPIOController()
         
-        # Initialize the controller
         if self.gpio_controller.initialize():
             
-            # Connect signals
+            # Listens from PaymentGPIOController signals and emits to this model
             self.gpio_controller.coin_inserted.connect(self.on_coin_inserted)
             self.gpio_controller.special_coin_inserted.connect(self.on_special_coin_inserted)
             self.gpio_controller.bill_inserted.connect(self.on_bill_inserted)
@@ -176,11 +140,10 @@ class PaymentModel(QObject):
             # Set initial payment status
             self.payment_status_updated.emit("Payment system ready - Coin and bill acceptors disabled")
         else:
-            print("WARNING: GPIO controller initialization failed - payment will use simulation mode")
+            print(" broken")
             self.gpio_controller = None
 
     def enable_payment_mode(self):
-        """Enables payment mode using the new payment handler."""
         if self.total_cost <= 0:
             return
 
@@ -191,63 +154,36 @@ class PaymentModel(QObject):
             if self.gpio_controller.enable_payments():
                 status_text = "Payment mode enabled - Insert coins or bills"
             else:
-                status_text = "Payment mode enabled - Use simulation buttons"
+                status_text = "Hardware broken"
         else:
-            status_text = "Payment mode enabled - Use simulation buttons"
+            status_text = "Hardware broken"
 
         # Emit status update
         self.payment_status_updated.emit(status_text)
         self.payment_mode_changed.emit(True)
 
     def disable_payment_mode(self):
-        """Disables payment mode using the new payment handler."""
         self.payment_ready = False
         
-        # Disable payments using the new controller
         if self.gpio_controller and self.gpio_controller.initialized:
-            if self.gpio_controller.disable_payments():
-                print("SUCCESS: Payment acceptors disabled via new payment handler")
-            else:
-                print("WARNING: Failed to disable payments via controller")
-        else:
-            print("WARNING: GPIO controller not available")
+            self.gpio_controller.disable_payments()
 
         status_text = "Payment mode disabled"
         self.payment_status_updated.emit(status_text)
         self.payment_mode_changed.emit(False)
-    
-    def test_gpio_connection(self):
-        """Test GPIO connection and return status."""
-        try:
-            import pigpio
-            pi = pigpio.pi()
-            if pi.connected:
-                print("GPIO connection test successful")
-                pi.stop()
-                return True
-            else:
-                print("GPIO connection test failed - not connected")
-                return False
-        except Exception as e:
-            print(f"GPIO connection test failed: {e}")
-            return False
 
     def on_coin_inserted(self, coin_value):
-        """Handles coin insertion."""
         if not self.payment_ready:
             return
 
         self.amount_received += coin_value
         self.cash_received[coin_value] = self.cash_received.get(coin_value, 0) + 1
         
-        # Emit signals to update UI
         self.amount_received_updated.emit(self.amount_received)
         self._update_payment_status()
         self.payment_status_updated.emit(f"P{coin_value} coin received")
-        
     
     def on_special_coin_inserted(self, coin_value):
-        """Handles special coin insertion (coins that cannot be given as change)."""
         if not self.payment_ready:
             return
 
@@ -257,68 +193,42 @@ class PaymentModel(QObject):
         # Emit signals to update UI
         self.amount_received_updated.emit(self.amount_received)
         self._update_payment_status()
-        self.payment_status_updated.emit(f"P{coin_value} special coin received (not added to inventory)")
+        self.payment_status_updated.emit(f"P{coin_value} special coin received")
         
-    
-
     def on_bill_inserted(self, bill_value):
-        """Handles bill insertion."""
         if not self.payment_ready:
             return
 
         self.amount_received += bill_value
-        self.cash_received[bill_value] = self.cash_received.get(bill_value, 0) + 1
         self.amount_received_updated.emit(self.amount_received)
         self._update_payment_status()
         self.payment_status_updated.emit(f"P{bill_value} bill received")
 
-    def simulate_coin(self, value):
-        """Simulates coin insertion for testing."""
-        if self.payment_ready:
-            self.on_coin_inserted(value)
-
-    def simulate_bill(self, value):
-        """Simulates bill insertion for testing."""
-        if self.payment_ready:
-            self.on_bill_inserted(value)
-
-    def _update_payment_status(self):
-        """Updates payment status and calculates change."""
+    def _update_payment_status(self): # Everytime a coin or bill is inserted this is called
         try:
             # Prevent multiple automatic completions
             if hasattr(self, '_payment_completing') and self._payment_completing:
-                print("WARNING: Payment already completing, ignoring duplicate trigger")
+                print("Payment towards completion...")
                 return
 
             if self.amount_received >= self.total_cost and self.total_cost > 0:
                 change = self.amount_received - self.total_cost
                 change_text = f"Payment Complete. Change: P{change:.2f}" if change > 0 else "Payment Complete"
                 self.change_updated.emit(change, change_text)
-                self.payment_button_enabled.emit(True)  # Enable payment button when sufficient payment
 
                 if self.payment_ready and not (hasattr(self, '_payment_completing') and self._payment_completing):
                     self._payment_completing = True  # Prevent duplicate processing
-                    self.payment_status_updated.emit("Payment sufficient - Processing automatically...")
-                    self.disable_payment_mode()
-                    # Automatically proceed to payment completion
+                    self.payment_status_updated.emit("Payment sufficient")
+                    self.disable_payment_mode() # Disable acceptors
                     self._auto_complete_payment()
             else:
                 remaining = self.total_cost - self.amount_received
                 change_text = f"Remaining: P{remaining:.2f}"
                 self.change_updated.emit(0, change_text)
-                self.payment_button_enabled.emit(False)  # Disable payment button when insufficient payment
 
         except Exception as e:
-            print(f"ERROR: Error in payment status update: {e}")
+            print(f"Couldn'do payment status update: {e}")
             self.payment_status_updated.emit(f"Payment error: {str(e)}")
-
-        # Refresh inline suggestion each time status updates
-        try:
-            best = self.payment_algorithm.find_best_payment_amount(self.total_cost)
-            self.best_payment_suggestion = best
-            self.suggestion_updated.emit(self._format_best_payment_status())
-        except Exception as e:
-            print(f"Error refreshing best payment suggestion: {e}")
 
     def _format_best_payment_status(self) -> str:
         if not self.best_payment_suggestion:
@@ -330,80 +240,175 @@ class PaymentModel(QObject):
         return f"Max payment we can receive: P{amt:.2f} (available P{chg:.2f})"
 
     def _auto_complete_payment(self):
-        """Automatically complete payment when sufficient amount is received."""
-        print("Auto-completing payment...")
+        self.payment_status_updated.emit("Dispensing change please wait...")
 
-        # Show processing message
-        self.payment_status_updated.emit("Dispensing change and preparing to print...")
-
-        # Add a small delay to show the processing message
-        from PyQt5.QtCore import QTimer
-        QTimer.singleShot(1500, self._proceed_with_payment)
+        QTimer.singleShot(1500, self._proceed_with_payment) # 1.5 seconds delay before proceeding with payment
 
     def _proceed_with_payment(self):
-        """Proceed with payment completion after delay."""
-        print("Proceeding with payment completion...")
-
-        # Check if we have main_app reference
-        if hasattr(self, 'main_app') and self.main_app:
-            # Call the existing complete_payment method
-            success, message = self.complete_payment(self.main_app)
-            if success:
-                print("SUCCESS: Auto-payment completion successful")
-            else:
-                print(f"ERROR: Auto-payment completion failed: {message}")
-                self.payment_status_updated.emit(f"Payment error: {message}")
-                # Reset the flag if payment failed
-                self._payment_completing = False
-        else:
-            print("ERROR: No main_app reference available for auto-payment completion")
-            self.payment_status_updated.emit("Payment completion failed - no app reference")
-            # Reset the flag if no main_app reference
+        success, message = self.complete_payment()
+        if not success:
+            print(f"Payment completion failed: {message}")
+            self.payment_status_updated.emit(f"Payment error: {message}")
+            # Reset the flag if payment failed
             self._payment_completing = False
 
-    def _check_payment_capabilities(self):
-        """Check payment capabilities and emit suggestions to UI."""
+    def log_transaction(self, payment_info):
         try:
-            # Get payment suggestions
-            suggestions = self.payment_algorithm.find_optimal_payment_amounts(self.total_cost)
-            status_message = self.payment_algorithm.get_payment_status_message(self.total_cost)
+            print(f"Logging transaction")
+            # Extract transaction data
+            pdf_data = payment_info.get('pdf_data', {})
+            file_path = pdf_data.get('path', 'unknown.pdf')
+            selected_pages = payment_info.get('selected_pages', [])
+            
+            transaction_data = {
+                'file_name': os.path.basename(file_path),
+                'pages': len(selected_pages),
+                'copies': payment_info.get('copies', 1),
+                'color_mode': payment_info.get('color_mode', 'Color'),
+                'total_cost': payment_info.get('total_cost', 0),
+                'amount_paid': payment_info.get('amount_received', 0),
+                'change_given': payment_info.get('change', 0),
+                'status': 'paid'  # Mark as paid, will update to 'completed' after printing
+            }
+            
+            # Log to database using PaymentModel's db_manager
+            self.db_manager.log_transaction(transaction_data)
+            print(f"Transaction logged immediately: {transaction_data['file_name']}")
+                
+        except Exception as e:
+            print(f"Error logging transaction immediately: {e}")
 
-            # Emit payment suggestions to UI
-            self.payment_status_updated.emit(status_message)
+    def update_coin_inventory_after_payment(self):
+        try:
+            # Add received coins to inventory
+            if hasattr(self, 'cash_received') and self.cash_received:
+                self._update_coin_inventory_items(self.cash_received, add=True)
 
-            # Store suggestions for UI to display
-            self.payment_suggestions = suggestions
+            print(f"Coin inventory updated")
+                
+        except Exception as e:
+            print(f"Error updating coin inventory: {e}")
 
-            print(f"Payment capabilities checked. Status: {status_message}")
-            print(f"Found {len(suggestions)} payment suggestions")
+    def _update_coin_inventory_items(self, coin_data, add=True):
+        try:
+            for denomination, count in coin_data.items():
+                if count > 0:
+                    is_bill = denomination >= 20
+                    
+                    # Get current count
+                    current_inventory = self.db_manager.get_cash_inventory()
+                    current_count = 0
+                    
+                    for item in current_inventory:
+                        if (item.get('denomination') == denomination and 
+                            item.get('type') == ('bill' if is_bill else 'coin')):
+                            current_count = item.get('count', 0)
+                            break
+                    
+                    # Calculate new count
+                    if add:
+                        new_count = current_count + count
+                    else:
+                        new_count = max(0, current_count - count)  # Don't go below 0
+                    
+                    # Update database
+                    self.db_manager.update_cash_inventory(
+                        denomination=denomination,
+                        count=new_count,
+                        type='bill' if is_bill else 'coin'
+                    )
+                    
+                    operation_symbol = "+" if add else "-"
+                    print(f"Updated {denomination} {'bill' if is_bill else 'coin'}: {current_count} {operation_symbol}{count} = {new_count}")
+            
+            print("Coin inventory items updated")
+                    
+        except Exception as e:
+            print(f"Error updating coin inventory items: {e}")
+
+    def complete_payment(self): # Returns true if success
+        try:
+            # Validate payment data exists
+            if not hasattr(self, 'payment_data') or self.payment_data is None:
+                return False, "No payment data available"
+
+            # Calculate change to dispense
+            change_amount = self.amount_received - self.total_cost
+            print(f"Payment calculation - received: {self.amount_received}, cost: {self.total_cost}, change: {change_amount}")
+
+            # Create transaction data and log immediately so it exists regardless of print outcome
+            pdf_path = None
+            selected_pages = []
+            copies = 1
+            color_mode = 'Color'
+
+            if hasattr(self, 'payment_data') and self.payment_data:
+                pdf_info = self.payment_data.get('pdf_data') or {}
+                pdf_path = pdf_info.get('path')
+                selected_pages = self.payment_data.get('selected_pages') or []
+                copies = int(self.payment_data.get('copies') or 1)
+                color_mode = self.payment_data.get('color_mode') or 'Color'
+
+            file_name = os.path.basename(pdf_path) if pdf_path else 'unknown.pdf'
+
+            self.transaction_data = {
+                'file_name': file_name,
+                'pages': len(selected_pages),
+                'copies': copies,
+                'color_mode': color_mode,
+                'total_cost': float(self.total_cost or 0),
+                'amount_paid': float(self.amount_received or 0),
+                'change_given': float(change_amount or 0),
+                'status': 'completed'
+            }
+            print(f"Transaction data created")
+            self.db_manager.log_transaction(self.transaction_data)
+
+            # Stop any existing dispense thread to prevent conflicts
+            if hasattr(self, 'dispense_thread') and self.dispense_thread and self.dispense_thread.isRunning():
+                self.dispense_thread.terminate()
+                self.dispense_thread.wait(1000)
+                self.dispense_thread = None
+
+            # Create change dispenser if it was cleaned up (ex: after leaving payment screen)
+            if self.change_dispenser is None:
+                from managers.hopper_manager import ChangeDispenser
+                self.change_dispenser = ChangeDispenser()
+
+            # Start dispensing change in a separate thread
+            if change_amount > 0:
+                print(f"Starting change dispensing for P{change_amount:.2f}")
+                # Compute required coins using payment algorithm 
+                can_dispense, reason, required_coins = self.payment_algorithm.can_dispense_change(change_amount)
+                if not can_dispense:
+                    print(f"Change not dispensable: {reason}. Not giving u back ur money.")
+                    required_coins = None
+
+                self.dispense_thread = DispenseThread(
+                    dispenser=self.change_dispenser,
+                    amount=change_amount,
+                    admin_screen=self.main_app.admin_screen,
+                    db_threader=self.main_app.db_threader,
+                    required_coins=required_coins
+                )
+                self.dispense_thread.status_update.connect(self.payment_status_updated.emit)
+                self.dispense_thread.dispensing_finished.connect(self._on_dispensing_finished)
+                self.dispense_thread.start()
+                print("Dispense thread started")
+            else:
+                print("No change to dispense, proceeding to printing")
+                self._start_printing()
+
+            return True, "Payment processing started"
 
         except Exception as e:
-            print(f"Error checking payment capabilities: {e}")
-            self.payment_status_updated.emit("Error checking payment capabilities")
-
-    def validate_payment_amount(self, payment_amount: float) -> Tuple[bool, str]:
-        """Validate if a payment amount can be processed."""
-        return self.payment_algorithm.validate_payment(self.total_cost, payment_amount)
-
-    def get_payment_suggestions(self) -> List[Dict]:
-        """Get payment suggestions for the current total cost."""
-        return self.payment_algorithm.find_optimal_payment_amounts(self.total_cost)
-
-
-    def log_transaction_after_print_success(self):
-        """Log the transaction to database after successful printing."""
-        if hasattr(self, 'transaction_data'):
-            print(f"Transaction already logged during payment completion: {self.transaction_data['file_name']}")
-            # Optionally update status to 'printed' if you want to track print completion
-            # self.transaction_data['status'] = 'printed'
-        else:
-            print("No transaction data available to log")
-
-    # Print job signals are now handled by the thank you screen
-    # No need to connect them here since the thank you screen will manage the entire print lifecycle
+            print(f"ERROR: Error in payment completion: {e}")
+            # Reset payment completing flag on error
+            if hasattr(self, '_payment_completing'):
+                self._payment_completing = False
+            return False, f"Payment completion failed: {str(e)}"
 
     def _on_dispensing_finished(self, result):
-        """Handles the completion of change dispensing."""
         try:
             if isinstance(result, dict) and result.get('success', False):
                 # New flow: Update database with actual coins dispensed, then print
@@ -422,7 +427,7 @@ class PaymentModel(QObject):
                 # Update database immediately when coins are dispensed
                 if coins_1 > 0 or coins_5 > 0:
                     print(f"Updating database immediately with dispensed coins: P1={coins_1}, P5={coins_5}")
-                    self._update_coin_inventory_immediately(coins_1, coins_5)
+                    self._subtract_dispensed_coins_from_inventory(coins_1, coins_5)
                     # Prevent double subtraction later in the post-print step
                     self.change_dispensed = None
                     print("change_dispensed cleared after immediate decrement to avoid double subtraction")
@@ -463,133 +468,57 @@ class PaymentModel(QObject):
         except Exception as e:
             print(f"Error cleaning up dispense thread: {e}")
 
-
-
-    # Print job success/failure handling is now done by the thank you screen
-    # The thank you screen will monitor lpstat and handle print completion
-
-    # Print timeout handling is now done by the thank you screen
-    # The thank you screen will handle all print job monitoring and timeouts
-
-    def _update_coin_inventory_immediately(self, coins_1, coins_5):
-        """Update coin inventory immediately when coins are dispensed."""
+    def _subtract_dispensed_coins_from_inventory(self, coins_1, coins_5):
         try:
-            print(f"Updating coin inventory immediately - P1: {coins_1}, P5: {coins_5}")
-
-            # Get current inventory
+            # Get current coin counts from inventory
             inventory = self.db_manager.get_cash_inventory()
-            current_1 = 0
-            current_5 = 0
-
+            current_counts = {1: 0, 5: 0} # Cooler way to do it than using 2 separate variables
+            
             for item in inventory:
-                if item['denomination'] == 1 and item['type'] == 'coin':
-                    current_1 = item['count']
-                elif item['denomination'] == 5 and item['type'] == 'coin':
-                    current_5 = item['count']
+                if item['type'] == 'coin': # Only update coin counts
+                    denom = item['denomination']
+                    if denom in current_counts: # Only update if the denomination is in the current counts
+                        current_counts[denom] = item['count'] # Update the count
 
             # Calculate new counts (prevent negative)
-            new_1 = max(0, current_1 - coins_1)
-            new_5 = max(0, current_5 - coins_5)
+            new_counts = {
+                1: max(0, current_counts[1] - coins_1),
+                5: max(0, current_counts[5] - coins_5)
+            }
 
             # Update database
-            self.db_manager.update_cash_inventory(1, new_1, 'coin')
-            self.db_manager.update_cash_inventory(5, new_5, 'coin')
+            self.db_manager.update_cash_inventory(1, new_counts[1], 'coin')
+            self.db_manager.update_cash_inventory(5, new_counts[5], 'coin')
 
-            print(f"Coin inventory updated immediately: P1 {current_1} -> {new_1}, P5 {current_5} -> {new_5}")
+            print(f"Coin inventory updated: P1 {current_counts[1]} -> {new_counts[1]}, P5 {current_counts[5]} -> {new_counts[5]}")
 
         except Exception as e:
-            print(f"Error updating coin inventory immediately: {e}")
+            print(f"Error subtracting dispensed coins from inventory: {e}")
 
-    def log_transaction(self, payment_info):
-        """Log transaction to database immediately after payment."""
+    def _start_printing(self):
         try:
-            print(f"Logging transaction")
-            
-            # Extract transaction data
-            pdf_data = payment_info.get('pdf_data', {})
-            file_path = pdf_data.get('path', 'unknown.pdf')
-            selected_pages = payment_info.get('selected_pages', [])
-            
-            transaction_data = {
-                'file_name': os.path.basename(file_path),
-                'pages': len(selected_pages),
-                'copies': payment_info.get('copies', 1),
-                'color_mode': payment_info.get('color_mode', 'Color'),
-                'total_cost': payment_info.get('total_cost', 0),
-                'amount_paid': payment_info.get('amount_received', 0),
-                'change_given': payment_info.get('change', 0),
-                'status': 'paid'  # Mark as paid, will update to 'completed' after printing
+            # Store print job details in main app for thank you screen
+            print_job_details = {
+                'file_path': self.payment_data['pdf_data']['path'],
+                'selected_pages': self.payment_data.get('selected_pages', [1]),
+                'copies': self.payment_data.get('copies', 1),
+                'color_mode': self.payment_data.get('color_mode', 'Color')
             }
-            
-            # Log to database using PaymentModel's db_manager
-            self.db_manager.log_transaction(transaction_data)
-            print(f"Transaction logged immediately: {transaction_data['file_name']}")
-                
-        except Exception as e:
-            print(f"Error logging transaction immediately: {e}")
+            self.main_app.current_print_job = print_job_details
 
-    def update_coin_inventory_after_payment(self):
-        """Update coin inventory after payment completion."""
-        try:
-            print(f"Updating coin inventory")
-            
-            # Add received coins to inventory
-            if hasattr(self, 'cash_received') and self.cash_received:
-                print(f"Adding received coins: {self.cash_received}")
-                self._update_coin_inventory_items(self.cash_received, add=True)
-            
-            # Subtract dispensed change from inventory
-            if hasattr(self, 'change_dispensed') and self.change_dispensed:
-                print(f"Subtracting dispensed change: {self.change_dispensed}")
-                self._update_coin_inventory_items(self.change_dispensed, add=False)
-            
-            print(f"Coin inventory updated after payment")
-                
-        except Exception as e:
-            print(f"Error updating coin inventory: {e}")
+            self._navigate_to_thank_you()
 
-    def _update_coin_inventory_items(self, coin_data, add=True):
-        """Helper method to update coin inventory items."""
-        try:
-            for denomination, count in coin_data.items():
-                if count > 0:
-                    is_bill = denomination >= 20
-                    
-                    # Get current count
-                    current_inventory = self.db_manager.get_cash_inventory()
-                    current_count = 0
-                    
-                    for item in current_inventory:
-                        if (item.get('denomination') == denomination and 
-                            item.get('type') == ('bill' if is_bill else 'coin')):
-                            current_count = item.get('count', 0)
-                            break
-                    
-                    # Calculate new count
-                    if add:
-                        new_count = current_count + count
-                    else:
-                        new_count = max(0, current_count - count)  # Don't go below 0
-                    
-                    # Update database
-                    self.db_manager.update_cash_inventory(
-                        denomination=denomination,
-                        count=new_count,
-                        type='bill' if is_bill else 'coin'
-                    )
-                    
-                    operation_symbol = "+" if add else "-"
-                    print(f"Updated {denomination} {'bill' if is_bill else 'coin'}: {current_count} {operation_symbol}{count} = {new_count}")
-            
-            print("Coin inventory items updated successfully")
-                    
         except Exception as e:
-            print(f"Error updating coin inventory items: {e}")
-            import traceback
-            print(f"Full error traceback: {traceback.format_exc()}")
+            print(f"Error starting printing: {e}")
+            self.payment_status_updated.emit(f"Printing error: {str(e)}")
+            # Try to navigate to thank you screen anyway
+            try:
+                self._navigate_to_thank_you()
+            except Exception as nav_error:
+                print(f"Error navigating to thank you screen: {nav_error}")
+
 
     def _navigate_to_thank_you(self):
-        """Navigate to thank you screen after all operations are complete."""
         try:
             # Create payment_info with all necessary data including cash_received
             if hasattr(self, 'payment_data') and self.payment_data:
@@ -607,131 +536,52 @@ class PaymentModel(QObject):
             else:
                 print("No payment data available to create payment info")
 
-            if hasattr(self, 'main_app') and self.main_app:
-                self.main_app.show_screen('thank_you')
-            else:
-                print("No main_app available for navigation")
+            self.main_app.show_screen('thank_you')
         except Exception as e:
             print(f"ERROR: Exception in _navigate_to_thank_you: {e}")
-            # Try to navigate anyway as a fallback
-            try:
-                if hasattr(self, 'main_app') and self.main_app:
-                    self.main_app.show_screen('thank_you')
-            except Exception as fallback_error:
-                print(f"ERROR: Fallback navigation also failed: {fallback_error}")
 
-    def on_enter(self):
-        """Called when the payment screen is shown."""
-        print("=== PAYMENT MODEL ON_ENTER START ===")
-        print("Payment screen entered")
-        try:
-            self.setup_gpio()
-            print("setup_gpio() completed successfully")
-        except Exception as e:
-            print(f"setup_gpio() failed with error: {e}")
+    def reset_payment_state(self):
+        # Reset payment completing flag
+        if hasattr(self, '_payment_completing'):
+            self._payment_completing = False
 
-        # Reset payment state
+        # Reset payment amounts
         self.amount_received = 0
+        self.total_cost = 0
         self.cash_received = {}
-        self.payment_processing = False
-        self._payment_completing = False  # Reset payment completion flag
 
-        self.amount_received_updated.emit(0)
-        self.change_updated.emit(0, "")
-
-        # Automatically enable payment mode if we have valid payment data
-        if hasattr(self, 'total_cost') and self.total_cost > 0:
-            self.enable_payment_mode()
-        else:
-            print("No valid payment data yet, payment mode will be enabled when data is set")
-        print("=== PAYMENT MODEL ON_ENTER END ===")
-
-    def on_leave(self):
-        """Called when leaving the payment screen."""
-        print("=== PAYMENT MODEL ON_LEAVE START ===")
-        print("Payment screen leaving")
-
-        # Disable payment mode and coin acceptor
-        print("Disabling payment mode...")
-        self.disable_payment_mode()
-
-        # Stop and cleanup GPIO controller
-        if hasattr(self, 'gpio_controller') and self.gpio_controller:
-            print("About to cleanup GPIO controller")
-            self.gpio_controller.cleanup()
-            self.gpio_controller = None
-            print("GPIO controller cleaned up")
-        else:
-            print("No GPIO controller to cleanup")
-        
-        # Clean up global payment handler to prevent conflicts
-        cleanup_payment_handler()
-        print("Payment screen cleanup completed")
+        # Reset payment data
+        self.payment_data = None
 
         # Stop any running dispense thread
-        if hasattr(self, 'dispense_thread') and self.dispense_thread:
-            print("Stopping dispense thread...")
-            try:
-                if self.dispense_thread.isRunning():
-                    self.dispense_thread.terminate()
-                    self.dispense_thread.wait(1000)
-            except Exception as e:
-                print(f"Error stopping dispense thread: {e}")
-            finally:
-                # Clear the thread reference
-                self.dispense_thread = None
+        if hasattr(self, 'dispense_thread') and self.dispense_thread and self.dispense_thread.isRunning():
+            print("Stopping dispense thread during reset")
+            self.dispense_thread.terminate()
+            self.dispense_thread.wait(1000)
+            self.dispense_thread = None
 
-        # Clean up change dispenser if it exists and is not being used
-        if hasattr(self, 'change_dispenser') and self.change_dispenser:
-            # Check if there's an active dispense thread
-            if hasattr(self, 'dispense_thread') and self.dispense_thread and self.dispense_thread.isRunning():
-                print("Payment screen: Skipping change dispenser cleanup - dispense thread still running")
-            else:
-                try:
-                    print("Cleaning up change dispenser...")
-                    self.change_dispenser.cleanup()
-                except Exception as e:
-                    print(f"Error cleaning up change dispenser: {e}")
-                finally:
-                    self.change_dispenser = None
+        # Reset payment ready state
+        self.payment_ready = False
 
-    def _log_partial_payment(self):
-        """Log partial payment when user cancels transaction."""
-        try:
-            if not (self.amount_received and self.payment_data):
-                return
+        # Emit reset signals
+        self.amount_received_updated.emit(0)
+        self.change_updated.emit(0, "")
+        self.payment_status_updated.emit("Payment screen ready")
 
-            # Defensive guards for keys
-            pdf_data = self.payment_data.get('pdf_data') or {}
-            file_path = pdf_data.get('path') or "unknown.pdf"
-            selected_pages = self.payment_data.get('selected_pages') or []
-            copies = int(self.payment_data.get('copies') or 1)
-            color_mode = self.payment_data.get('color_mode') or 'Color'
+        print("Payment state reset")
 
-            # Log cancelled transaction with partial payment
-            transaction_data = {
-                'file_name': os.path.basename(file_path),
-                'pages': len(selected_pages),
-                'copies': copies,
-                'color_mode': color_mode,
-                'total_cost': float(self.total_cost or 0),
-                'amount_paid': float(self.amount_received or 0),
-                'change_given': 0,  # No change given since transaction cancelled
-                'status': 'cancelled_partial_payment'
-            }
-            try:
-                self.db_manager.log_transaction(transaction_data)
-            except Exception as log_err:
-                print(f"WARNING: Failed to log cancelled transaction: {log_err}")
 
-            # Safely increment cash inventory with received money (do not overwrite totals)
+    def go_back(self):
+        # Update inventory with received money (no refunds, so money stays in machine)
+        if self.amount_received > 0 and self.cash_received:
+            print(f"Adding received money to inventory - {self.cash_received}")
             try:
                 current_inventory = {}
                 for item in (self.db_manager.get_cash_inventory() or []):
                     if item.get('type') == 'coin' or item.get('type') == 'bill':
                         current_inventory[(item.get('type'), int(item.get('denomination')))] = int(item.get('count') or 0)
 
-                for denomination, count in (self.cash_received or {}).items():
+                for denomination, count in self.cash_received.items():
                     if not count:
                         continue
                     is_bill = denomination >= 20
@@ -742,212 +592,60 @@ class PaymentModel(QObject):
                         count=new_count,
                         type='bill' if is_bill else 'coin'
                     )
+                print(f"DEBUG: Inventory updated with received money")
             except Exception as inv_err:
                 print(f"WARNING: Failed to update cash inventory on cancel: {inv_err}")
-
-            print(f"Logged cancelled transaction: {self.amount_received} received, {self.total_cost} required")
-        except Exception as e:
-            print(f"WARNING: _log_partial_payment encountered an error but will not block navigation: {e}")
-
-    def complete_payment(self, main_app):
-        """Complete the payment process - dispense change and start printing."""
-        print("Starting payment completion process...")
-        print(f"Payment completion - amount_received: {self.amount_received}, total_cost: {self.total_cost}")
-
-        try:
-            # Validate payment data exists
-            if not hasattr(self, 'payment_data') or self.payment_data is None:
-                print("ERROR: No payment data available")
-                return False, "No payment data available"
-
-            # Validate main_app reference
-            if not main_app:
-                print("ERROR: No main app reference")
-                return False, "No main app reference"
-
-            # Calculate change to dispense
-            change_amount = self.amount_received - self.total_cost
-            print(f"Change to dispense: P{change_amount:.2f}")
-            print(f"Payment calculation - received: {self.amount_received}, cost: {self.total_cost}, change: {change_amount}")
-
-            # Create transaction data and log immediately so it exists regardless of print outcome
-            try:
-                pdf_path = None
-                selected_pages = []
-                copies = 1
-                color_mode = 'Color'
-
-                if hasattr(self, 'payment_data') and self.payment_data:
-                    pdf_info = self.payment_data.get('pdf_data') or {}
-                    pdf_path = pdf_info.get('path')
-                    selected_pages = self.payment_data.get('selected_pages') or []
-                    copies = int(self.payment_data.get('copies') or 1)
-                    color_mode = self.payment_data.get('color_mode') or 'Color'
-
-                file_name = os.path.basename(pdf_path) if pdf_path else 'unknown.pdf'
-
-                self.transaction_data = {
-                    'file_name': file_name,
-                    'pages': len(selected_pages),
-                    'copies': copies,
-                    'color_mode': color_mode,
-                    'total_cost': float(self.total_cost or 0),
-                    'amount_paid': float(self.amount_received or 0),
-                    'change_given': float(change_amount or 0),
-                    'status': 'completed'
-                }
-                print(f"Transaction data (late path) created: {self.transaction_data}")
-                try:
-                    self.db_manager.log_transaction(self.transaction_data)
-                    print(f"Transaction logged immediately (late path): {self.transaction_data['file_name']}")
-                except Exception as log_err:
-                    print(f"Error logging transaction immediately (late path): {log_err}")
-            except Exception as tx_err:
-                print(f"Error creating transaction data (late path): {tx_err}")
-
-            # Stop any existing dispense thread to prevent conflicts
-            if hasattr(self, 'dispense_thread') and self.dispense_thread and self.dispense_thread.isRunning():
-                print("WARNING: Stopping existing dispense thread")
-                self.dispense_thread.terminate()
-                self.dispense_thread.wait(1000)
-                self.dispense_thread = None
-
-            # Create change dispenser if not exists
-            if not hasattr(self, 'change_dispenser') or self.change_dispenser is None:
-                from managers.hopper_manager import ChangeDispenser
-                self.change_dispenser = ChangeDispenser()
-                print("SUCCESS: Change dispenser created")
-
-            # Start dispensing change in a separate thread
-            if change_amount > 0:
-                print(f"Starting change dispensing for P{change_amount:.2f}")
-                # Compute required coins using payment algorithm (respects inventory)
-                can_dispense, reason, required_coins = self.payment_algorithm.can_dispense_change(change_amount)
-                if not can_dispense:
-                    print(f"WARNING: Algorithm reports change not dispensable: {reason}. Proceeding with best-effort greedy.")
-                    required_coins = None
-
-                self.dispense_thread = DispenseThread(
-                    dispenser=self.change_dispenser,
-                    amount=change_amount,
-                    admin_screen=main_app.admin_screen,
-                    db_threader=main_app.db_threader,
-                    required_coins=required_coins
-                )
-                self.dispense_thread.status_update.connect(self.payment_status_updated.emit)
-                self.dispense_thread.dispensing_finished.connect(self._on_dispensing_finished)
-                self.dispense_thread.start()
-                print("SUCCESS: Dispense thread started")
-            else:
-                # No change to dispense, proceed directly to printing
-                print("SUCCESS: No change to dispense, proceeding to printing")
-                self._start_printing()
-
-            return True, "Payment processing started"
-
-        except Exception as e:
-            print(f"ERROR: Error in payment completion: {e}")
-            # Reset payment completing flag on error
-            if hasattr(self, '_payment_completing'):
-                self._payment_completing = False
-            return False, f"Payment completion failed: {str(e)}"
-
-    def _start_printing(self):
-        """Start the printing process."""
-        print("Starting printing process...")
-
-        try:
-            # Validate payment data exists
-            if not hasattr(self, 'payment_data') or not self.payment_data:
-                print("ERROR: No payment data available for printing")
-                self.payment_status_updated.emit("No payment data available for printing")
-                return
-
-            # Validate main app reference
-            if not hasattr(self, 'main_app') or not self.main_app:
-                print("ERROR: No main app reference for printing")
-                self.payment_status_updated.emit("No main app reference for printing")
-                return
-
-            # Validate PDF data exists
-            if 'pdf_data' not in self.payment_data or not self.payment_data['pdf_data']:
-                print("ERROR: No PDF data available for printing")
-                self.payment_status_updated.emit("No PDF data available for printing")
-                return
-
-            # Store print job details in main app for thank you screen
-            print_job_details = {
-                'file_path': self.payment_data['pdf_data']['path'],
-                'selected_pages': self.payment_data.get('selected_pages', [1]),
-                'copies': self.payment_data.get('copies', 1),
-                'color_mode': self.payment_data.get('color_mode', 'Color')
-            }
-            self.main_app.current_print_job = print_job_details
-            print(f"SUCCESS: Print job details stored: {print_job_details}")
-
-            # Navigate to thank you screen
-            self._navigate_to_thank_you()
-
-        except Exception as e:
-            print(f"ERROR: Error starting printing: {e}")
-            self.payment_status_updated.emit(f"Printing error: {str(e)}")
-            # Try to navigate to thank you screen anyway
-            try:
-                self._navigate_to_thank_you()
-            except Exception as nav_error:
-                print(f"ERROR: Error navigating to thank you screen: {nav_error}")
-
-
-    def reset_payment_state(self):
-        """Reset payment state for new transactions."""
-        print("Resetting payment state...")
-
-        try:
-            # Reset payment completing flag
-            if hasattr(self, '_payment_completing'):
-                self._payment_completing = False
-
-            # Reset payment amounts
-            self.amount_received = 0
-            self.total_cost = 0
-            self.cash_received = {}
-
-            # Reset payment data
-            self.payment_data = None
-
-            # Stop any running dispense thread
-            if hasattr(self, 'dispense_thread') and self.dispense_thread and self.dispense_thread.isRunning():
-                print("WARNING: Stopping dispense thread during reset")
-                self.dispense_thread.terminate()
-                self.dispense_thread.wait(1000)
-                self.dispense_thread = None
-
-            # Reset payment ready state
-            self.payment_ready = False
-
-            # Emit reset signals
-            self.amount_received_updated.emit(0)
-            self.change_updated.emit(0, "")
-            self.payment_status_updated.emit("Payment screen ready")
-
-            print("SUCCESS: Payment state reset complete")
-
-        except Exception as e:
-            print(f"ERROR: Error resetting payment state: {e}")
-
-    def go_back(self):
-        """Goes back to print options screen."""
-        print("Payment screen: going back to print options")
-
-        # Only log partial payment if user received cash but amount was insufficient
-        if self.amount_received > 0 and self.amount_received < self.total_cost:
-            print(f"DEBUG: Logging partial payment - received {self.amount_received}, required {self.total_cost}")
-            self._log_partial_payment()
-        elif self.amount_received >= self.total_cost:
-            print(f"DEBUG: Payment was sufficient ({self.amount_received} >= {self.total_cost}), not logging as cancelled")
-        else:
-            print("DEBUG: No payment received, not logging transaction")
 
         self.on_leave()
         self.reset_payment_state()
         self.go_back_requested.emit()
+
+    def on_enter(self):
+        self.setup_gpio()
+        # Reset payment state
+        self.amount_received = 0
+        self.cash_received = {}
+        self.payment_processing = False
+        self._payment_completing = False  # Reset payment completion flag
+
+        self.amount_received_updated.emit(0)
+        self.change_updated.emit(0, "")
+
+        # If data ready, enable payment mode
+        if hasattr(self, 'total_cost') and self.total_cost > 0:
+            self.enable_payment_mode()
+        else:
+            print("No payment data yet.")
+
+    def on_leave(self):
+        # Disable payment mode and coin acceptor
+        self.disable_payment_mode()
+
+        # Stop and cleanup GPIO controller
+        if hasattr(self, 'gpio_controller') and self.gpio_controller:
+            self.gpio_controller.cleanup()
+            self.gpio_controller = None
+        
+        # Clean up global payment handler to in case
+        cleanup_payment_handler()
+
+        # Stop any running dispense thread in case
+        if hasattr(self, 'dispense_thread') and self.dispense_thread:
+            try:
+                if self.dispense_thread.isRunning():
+                    self.dispense_thread.terminate()
+                    self.dispense_thread.wait(1000)
+            except Exception as e:
+                print(f"Error stopping dispense thread: {e}")
+            finally:
+                # Clear the thread reference
+                self.dispense_thread = None
+
+        # Clean up change dispenser (thread is already stopped above)
+        if hasattr(self, 'change_dispenser') and self.change_dispenser:
+            try:
+                self.change_dispenser.cleanup()
+            except Exception as e:
+                print(f"Error cleaning up change dispenser: {e}")
+            finally:
+                self.change_dispenser = None

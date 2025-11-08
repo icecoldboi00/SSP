@@ -365,7 +365,7 @@ class ChangeDispenser:
                     available_ones = int(item.get('count', 0))
             # print(f"DEBUG: Inventory - 5-peso: {available_fives}, 1-peso: {available_ones}")
         except Exception as e:
-            print(f"WARNING: Could not read coin inventory with fresh DB connection: {e}")
+            print(f"Could not read coin inventory with fresh DB connection: {e}")
             available_fives = None
             available_ones = None
 
@@ -391,10 +391,10 @@ class ChangeDispenser:
             if disp_value < int(amount):
                 # Not enough coins to make exact change
                 if total_available_value <= 0:
-                    print("INFO: No coins available in database. Skipping dispense.")
+                    print("No coins available in database. No dispense.")
                     return {'success': True, 'coins_1': 0, 'coins_5': 0, 'actual_change': 0, 'expected_change': int(amount)}
                 # Fallback: dispense all available coins
-                print("INFO: Insufficient coins for exact change. Dispensing all available coins as fallback.")
+                print("Insufficient coins for exact change. Dispensing all available coins.")
                 num_fives = max(0, available_fives)
                 num_ones = max(0, available_ones)
         else:

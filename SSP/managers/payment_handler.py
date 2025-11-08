@@ -1,9 +1,7 @@
-# managers/payment_handler.py
-
 import time
 import threading
-from typing import Dict, Optional, Callable
-from PyQt5.QtCore import QObject, pyqtSignal, QTimer
+from typing import Dict
+from PyQt5.QtCore import QObject, pyqtSignal
 
 # Check for pigpio availability
 try:
@@ -16,12 +14,6 @@ except ImportError:
 
 
 class PaymentHandler(QObject):
-    """
-    Payment handler using the exact implementation from coinbill.py.
-    Handles GPIO operations, pulse detection, and payment processing.
-    """
-    
-    # Signals for payment events
     coin_inserted = pyqtSignal(int)  # coin_value
     special_coin_inserted = pyqtSignal(int)  # special coin_value (cannot be given as change)
     bill_inserted = pyqtSignal(int)  # bill_value

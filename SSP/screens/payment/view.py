@@ -1,32 +1,17 @@
 import os
 from PyQt5.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QFrame,
-    QMessageBox, QScrollArea, QStackedLayout, QSizePolicy
-)
+    QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QStackedLayout)
 from PyQt5.QtCore import Qt, pyqtSignal
 from PyQt5.QtGui import QPixmap
 
-try:
-    import pigpio
-    PAYMENT_GPIO_AVAILABLE = True
-except ImportError:
-    PAYMENT_GPIO_AVAILABLE = False
-
 class PaymentScreenView(QWidget):
-    """View for the Payment screen - handles UI components and presentation."""
-    
-    # Signals for user interactions
     back_button_clicked = pyqtSignal()
-    # Inline suggestion now
-    simulation_coin_clicked = pyqtSignal(int)  # coin_value
-    simulation_bill_clicked = pyqtSignal(int)  # bill_value
     
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setup_ui()
     
     def setup_ui(self):
-        """Sets up the user interface for the screen."""
         stacked_layout = QStackedLayout()
         stacked_layout.setContentsMargins(0, 0, 0, 0)
         stacked_layout.setStackingMode(QStackedLayout.StackAll)
@@ -90,10 +75,6 @@ class PaymentScreenView(QWidget):
         )
         main_layout.addWidget(self.change_label)
 
-        # Add simulation buttons if GPIO not available
-        if not PAYMENT_GPIO_AVAILABLE:
-            self._add_simulation_buttons(main_layout)
-
         # Add stretch to push buttons to the bottom
         main_layout.addStretch(2)
 
@@ -119,7 +100,6 @@ class PaymentScreenView(QWidget):
         self.main_layout = stacked_layout
     
     def _load_background_image(self):
-        """Loads the background image."""
         assets_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "assets"))
         image_filename = "payment_dialog_background.png"
         abs_path = os.path.join(assets_dir, image_filename)
@@ -132,29 +112,7 @@ class PaymentScreenView(QWidget):
             print("WARNING: Payment dialog background not found at:", abs_path)
             self.background_label.setStyleSheet("background-color: #1f1f38;")
     
-    def _add_simulation_buttons(self, layout):
-        """Adds simulation buttons for testing when GPIO is not available."""
-        sim_label = QLabel("Simulation Mode - Test Payment:")
-        sim_label.setStyleSheet("QLabel { font-size: 14px; font-weight: bold; color: #856404; background-color: #fff3cd; padding: 8px; border-radius: 4px; margin: 8px 0; }")
-        layout.addWidget(sim_label)
-        
-        sim_layout = QHBoxLayout()
-        sim_layout.setSpacing(10)
-        
-        for val in [1, 5, 10, 20, 50, 100]:
-            btn = QPushButton(f"P{val}")
-            btn.setMinimumHeight(35)
-            btn.setStyleSheet(self.get_simulation_button_style())
-            if val <= 10:
-                btn.clicked.connect(lambda _, v=val: self.simulation_coin_clicked.emit(v))
-            else:
-                btn.clicked.connect(lambda _, v=val: self.simulation_bill_clicked.emit(v))
-            sim_layout.addWidget(btn)
-        
-        layout.addLayout(sim_layout)
-    
     def update_payment_data(self, summary_data):
-        """Updates the payment data display."""
         self.total_label.setText(f"Total Amount Due: P{summary_data['total_cost']:.2f}")
         
         summary_lines = [
@@ -167,15 +125,12 @@ class PaymentScreenView(QWidget):
         self.summary_label.setText("<br>".join(summary_lines))
     
     def update_payment_status(self, status_text):
-        """Updates the payment status label."""
         self.payment_status_label.setText(status_text)
     
     def update_amount_received(self, amount):
-        """Updates the amount received display."""
         self.amount_received_label.setText(f"Amount Received: P{amount:.2f}")
     
     def update_change_display(self, change_amount, change_text):
-        """Updates the change display."""
         self.change_label.setText(change_text)
         
         if change_amount > 0:
@@ -188,27 +143,14 @@ class PaymentScreenView(QWidget):
             # Payment complete, no change
             self.change_label.setStyleSheet("QLabel { color: #155724; font-size: 18px; font-weight: bold; padding: 10px; background-color: #d4edda; border-radius: 6px; }")
     
-    
-    
     def set_buttons_enabled(self, back_enabled):
-        """Sets the enabled state of all buttons."""
         self.back_btn.setEnabled(back_enabled)
     
     def get_back_button_style(self):
-        """Returns the style for the back button."""
         return (
             "QPushButton { background-color: #1e440a; color: white; border: none; border-radius: 6px; font-size: 16px; font-weight: bold; padding: 12px 24px; } "
             "QPushButton:hover { background-color: #2a5f10; }"
         )
-    
-    def get_simulation_button_style(self):
-        """Returns the style for simulation buttons."""
-        return (
-            "QPushButton { background-color: #ffc107; color: black; border: none; border-radius: 4px; font-size: 12px; font-weight: bold; padding: 8px 12px; } "
-            "QPushButton:hover { background-color: #e0a800; }"
-        )
-    
-    # removed popup suggestions style
 
     def update_inline_suggestion(self, text: str):
         self.suggestion_label.setText(text or "")
