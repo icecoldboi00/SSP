@@ -55,11 +55,9 @@ class InkAnalysisThreadManager(QObject):
                 # Get operation from queue with timeout
                 operation = self.operation_queue.get(timeout=0.1)
                 
-                if operation.operation_type == "analyze_and_update":
-                    self._handle_analyze_and_update(operation)
-                else:
-                    operation.error = f"Unknown operation type: {operation.operation_type}"
-                
+                operation.operation_type == "analyze_and_update"
+                self._handle_analyze_and_update(operation)
+
                 # Execute callback if provided
                 if operation.callback:
                     operation.callback(operation)
@@ -79,7 +77,19 @@ class InkAnalysisThreadManager(QObject):
                 if operation and operation.callback:
                     operation.error = str(e)
                     operation.callback(operation)
-    
+
+    def analyze_and_update(self, pdf_path, selected_pages=None, copies=1, dpi=150, color_mode="Color", callback=None):
+        operation = InkAnalysisOperation("analyze_and_update", {
+            'pdf_path': pdf_path,
+            'selected_pages': selected_pages,
+            'copies': copies,
+            'dpi': dpi,
+            'color_mode': color_mode
+        }, callback)
+        self.operation_queue.put(operation)
+        return operation
+
+
     def _handle_analyze_and_update(self, operation):
         try:
             pdf_path = operation.data['pdf_path']
@@ -120,14 +130,5 @@ class InkAnalysisThreadManager(QObject):
             print(f"Error in ink analysis: {e}")
             self.database_updated.emit(False)
     
-    def analyze_and_update(self, pdf_path, selected_pages=None, copies=1, dpi=150, color_mode="Color", callback=None):
-        operation = InkAnalysisOperation("analyze_and_update", {
-            'pdf_path': pdf_path,
-            'selected_pages': selected_pages,
-            'copies': copies,
-            'dpi': dpi,
-            'color_mode': color_mode
-        }, callback)
-        self.operation_queue.put(operation)
-        return operation
+
 

@@ -546,7 +546,7 @@ class USBFileManager:
             self.operation_in_progress = False
             self.current_usb_drive = None
             
-            # Try to unmount the drive (Linux/macOS)
+            # Try to unmount the drive (Linux only)
             if platform.system() == "Linux":
                 try:
                     import subprocess
@@ -556,8 +556,13 @@ class USBFileManager:
                     if result.returncode == 0:
                         device = result.stdout.strip()
                         print(f"Unmounting device: {device}")
-                        subprocess.run(['umount', usb_path], timeout=10)
-                        print(f"USB drive unmounted successfully")
+                        # Use sudo to ensure unmount works
+                        unmount_result = subprocess.run(['sudo', 'umount', usb_path], 
+                                                       capture_output=True, text=True, timeout=10)
+                        if unmount_result.returncode == 0:
+                            print(f"USB drive unmounted successfully")
+                        else:
+                            print(f"Failed to unmount USB drive: {unmount_result.stderr}")
                     else:
                         print("Could not find device for unmounting")
                 except Exception as e:

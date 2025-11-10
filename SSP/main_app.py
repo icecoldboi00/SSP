@@ -285,19 +285,17 @@ class PrintingSystemApp(QMainWindow):
         # Clear the print job after successful completion to prevent re-printing
         self.current_print_job = None
         
+        # Note: thank_you screen's _on_print_success() handles the UI update automatically
+        # via the print_job_successful signal connection, so no need to call finish_printing() here
         current_screen = self.stacked_widget.currentWidget()
         
-        if current_screen == self.thank_you_screen:
-            # Print completed while on thank you screen - finish and start redirect timer
-            self.thank_you_screen.finish_printing()
-        elif current_screen == self.idle_screen:
+        if current_screen == self.idle_screen:
             # Print completed while on idle screen - this is normal, no need to show thank you screen
             print("Print completed while on idle screen - no action needed")
-        else:
+        elif current_screen != self.thank_you_screen:
             # Print job completed but we're on wrong screen - navigate to thank you screen
             print(f"Print completed on wrong screen, navigating to thank you screen")
             self.show_screen('thank_you')
-            QTimer.singleShot(100, lambda: self.thank_you_screen.finish_printing())
 
     def _trigger_ink_analysis(self):
         if not hasattr(self, 'current_print_job') or not self.current_print_job:

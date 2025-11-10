@@ -3,8 +3,6 @@ import sqlite3
 from datetime import datetime
 
 def init_db():
-    """Initialize the database and create tables if they don't exist"""
-    # Get absolute path to database directory
     base_dir = os.path.dirname(os.path.dirname(__file__))
     db_dir = os.path.join(base_dir, 'database')
     db_path = os.path.join(db_dir, 'ssp_database.db')
@@ -19,7 +17,7 @@ def init_db():
     conn = sqlite3.connect(db_path)
     cursor = conn.cursor()
     
-    print("Creating database tables...")
+    print("Creating database tables")
 
     # Create Transactions table
     cursor.execute('''
@@ -37,7 +35,7 @@ def init_db():
         error_message TEXT
     )
     ''')
-    print("OK - Created transactions table")
+    print("Created transactions table")
 
     # Create CashInventory table
     cursor.execute('''
@@ -48,7 +46,7 @@ def init_db():
         last_updated DATETIME NOT NULL
     )
     ''')
-    print("OK - Created cash_inventory table")
+    print("Created cash_inventory table")
 
     # Create ErrorLog table
     cursor.execute('''
@@ -61,7 +59,7 @@ def init_db():
         resolved BOOLEAN DEFAULT FALSE
     )
     ''')
-    print("OK - Created error_log table")
+    print("Created error_log table")
 
     # Create PrinterStatus table
     cursor.execute('''
@@ -73,7 +71,7 @@ def init_db():
         status TEXT NOT NULL
     )
     ''')
-    print("OK - Created printer_status table")
+    print("Created printer_status table")
 
     # Create CMYK Ink Levels table
     cursor.execute('''
@@ -87,7 +85,7 @@ def init_db():
         last_updated DATETIME NOT NULL
     )
     ''')
-    print("OK - Created cmyk_ink_levels table")
+    print("Created cmyk_ink_levels table")
 
     # Create Settings table
     cursor.execute('''
@@ -96,11 +94,11 @@ def init_db():
         value TEXT NOT NULL
     )
     ''')
-    print("OK - Created settings table")
+    print("Created settings table")
 
     # Initialize default settings if they don't exist
     cursor.execute("INSERT OR IGNORE INTO settings (key, value) VALUES ('paper_count', '100')")
-    print("OK - Initialized paper_count setting")
+    print("Initialized paper_count setting")
     
     # Initialize default CMYK ink levels if none exist
     cursor.execute("SELECT COUNT(*) FROM cmyk_ink_levels")
@@ -111,10 +109,10 @@ def init_db():
             INSERT INTO cmyk_ink_levels (cyan_level, magenta_level, yellow_level, black_level, timestamp, last_updated)
             VALUES (100.0, 100.0, 100.0, 100.0, ?, ?)
         """, (datetime.now(), datetime.now()))
-        print("OK - Initialized default CMYK ink levels (100%)")
+        print("Initialized default CMYK ink levels (100%)")
     else:
-        print("OK - CMYK ink levels already exist")
+        print("CMYK ink levels already exist")
 
     conn.commit()
     conn.close()
-    print("OK - Database initialization complete")
+    print("Database initialization complete")

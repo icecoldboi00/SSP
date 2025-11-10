@@ -1,7 +1,5 @@
 from PyQt5.QtCore import QObject, pyqtSignal, QTimer
 import subprocess
-import os
-
 
 class ThankYouModel(QObject):
     status_updated = pyqtSignal(str, str)
@@ -10,7 +8,6 @@ class ThankYouModel(QObject):
     admin_override_hidden = pyqtSignal()
     
     def __init__(self):
-        """Initialize the Thank You model."""
         super().__init__()
         
         # Redirect timer for auto-navigation back to idle
@@ -30,40 +27,24 @@ class ThankYouModel(QObject):
         self.error_type = None
         
     def _unmount_usb_drive(self):
-        """Unmount the USB drive to make it safe to remove."""
         try:
-            if hasattr(self.main_app, 'usb_screen') and self.main_app.usb_screen:
+            if hasattr(self, 'main_app') and self.main_app and hasattr(self.main_app, 'usb_screen') and self.main_app.usb_screen:
                 usb_manager = self.main_app.usb_screen.model.usb_manager
                 if hasattr(usb_manager, 'current_usb_drive') and usb_manager.current_usb_drive:
                     drive_path = usb_manager.current_usb_drive
-                    print(f"Unmounting USB drive: {drive_path}")
-                    
                     # Use the existing auto-eject functionality
-                    if hasattr(usb_manager, '_auto_eject_usb_drive'):
-                        usb_manager._auto_eject_usb_drive(drive_path)
-                        print(f"USB drive unmounted successfully")
-                    else:
-                        print(f"Auto-eject method not available")
+                    usb_manager._auto_eject_usb_drive(drive_path)
                 else:
                     print(f"No USB drive to unmount")
             else:
-                print(f"USB screen not available for unmounting")
+                print(f"Can't unmount")
         except Exception as e:
-            print(f"Error unmounting USB drive: {e}")
+            print(f"Error unmounting USB: {e}")
     
     def _on_timer_timeout(self):
-        """Handle redirect timer timeout."""
         self.redirect_to_idle.emit()
         
     def on_enter(self, main_app):
-        """
-        Called when the screen is shown.
-        
-        Connects to printer signals and starts the print job if not already started.
-        
-        Args:
-            main_app: Reference to main application window
-        """
         self.main_app = main_app
         
         # Prevent duplicate print job starts
@@ -73,7 +54,7 @@ class ThankYouModel(QObject):
         
         # Check if there's a valid print job to start
         if not hasattr(main_app, 'current_print_job') or not main_app.current_print_job:
-            print(f"No valid print job available, skipping print start")
+            print(f"No valid print job available")
             return
         
         # Unmount USB drive
@@ -109,67 +90,14 @@ class ThankYouModel(QObject):
             print("No printer manager found")
             self.redirect_timer.start(10000)
     
-    def finish_printing(self):
-        """
-        Update state to show print completion.
-        
-        Called when print job completes successfully. Starts 5-second timer
-        before redirecting to idle screen.
-        """
-        # Prevent duplicate finish_printing calls
-        if self.print_job_finished:
-            print("Thank you screen: Print job already finished, skipping duplicate call")
-            return
-            
-        # Stop any existing timers that might be near expiry (safety/monitor timers)
-        try:
-            if self.redirect_timer.isActive():
-                self.redirect_timer.stop()
-                print("Thank you screen: Stopped existing redirect/safety timer before finishing")
-        except Exception:
-            pass
-        try:
-            if self.status_check_timer.isActive():
-                self.status_check_timer.stop()
-                print("Thank you screen: Stopped status check timer on finish")
-        except Exception:
-            pass
-
-        self.print_job_finished = True
-        self.current_state = "completed"
-        self.status_updated.emit(
-            "Thank you for printing with us",
-            "Kindly collect your documents. We hope to see you again!"
-        )
-        
-        # Only start redirect timer if the thank you screen is currently visible
-        # This prevents the screen from appearing when user is already on idle/admin
-        if hasattr(self, 'main_app') and self.main_app:
-            current_screen = self.main_app.stacked_widget.currentWidget()
-            if current_screen == self.main_app.thank_you_screen:
-                # Start 5-second timer before returning to idle
-                self.redirect_timer.start(5000)
-                print("Thank you screen: Starting redirect timer (screen is visible)")
-            else:
-                print(f"Thank you screen: Skipping redirect timer (current screen is not thank you)")
-        else:
-            print("Thank you screen: No main_app reference, skipping redirect timer")
-    
     def show_waiting_for_print(self):
-        """Update state to show that print job is in progress."""
         self.current_state = "waiting"
         self.status_updated.emit(
-            "Thank you for printing with us",
-            "Your document is being processed."
+            "Your document is being processed.",
+            "Please remove your USB drive."
         )
     
     def show_printing_error(self, message: str):
-        """
-        Update state to show a printing error.
-        
-        Args:
-            message: Error message from printer manager
-        """
         self.current_state = "error"
         
         # Stop any existing safety timeout since we're now in error state
@@ -180,12 +108,10 @@ class ThankYouModel(QObject):
         is_paper_jam = "paper jam" in message.lower() or "jam" in message.lower()
         
         # Sanitize common verbose CUPS errors for better UX
-        if "client-error-document-format-not-supported" in message:
-            clean_message = "Document format is not supported by the printer."
-        elif "CUPS Error" in message:
+        if "CUPS Error" in message:
             clean_message = "Could not communicate with the printer."
         elif is_paper_jam:
-            clean_message = "Paper jam detected. Please clear the paper jam."
+            clean_message = "Paper jam detected."
         else:
             clean_message = "An error occurred."
         
@@ -196,27 +122,17 @@ class ThankYouModel(QObject):
             f"Error: {clean_message}\nPlease contact an administrator."
         )
         
-        # SMS notification disabled for print job failures (not critical enough)
-        # Only log to database for tracking
-        print(f"Print job failure (SMS disabled): {clean_message}")
-        
-        # Log error to database
+        # SMS notification is sent by main_app.on_print_failed() not here bro
+        # Only log to database here
         try:
             from utils.error_logger import log_error
             log_error("Printing Error", message, "thank_you_screen")
         except Exception as db_error:
             print(f"Failed to log error to database: {db_error}")
         
-        # Show admin override button
         self.admin_override_requested.emit()
     
     def show_no_paper_error(self, paper_count: int):
-        """
-        Update state to show a no paper error.
-        
-        Args:
-            paper_count: Current paper count (0 or 1)
-        """
         self.current_state = "error"
         self.error_type = "no_paper"
         
@@ -227,24 +143,18 @@ class ThankYouModel(QObject):
         if paper_count == 0:
             self.status_updated.emit(
                 "NO PAPER AVAILABLE",
-                "The printer is out of paper. Please contact an administrator to refill paper."
+                "The printer is out of paper. Please contact an administrator."
             )
         else:  # paper_count == 1
             self.status_updated.emit(
                 "LOW PAPER WARNING",
-                "Only 1 page remaining. Please contact an administrator to refill paper."
+                "Only 1 page remaining. Please contact an administrator."
             )
         
         # Show admin override button
         self.admin_override_requested.emit()
     
     def show_paper_jam_error(self, message: str):
-        """
-        Update state to show a paper jam error specifically.
-        
-        Args:
-            message: Paper jam error message
-        """
         self.current_state = "error"
         self.error_type = "paper_jam"
         
@@ -254,18 +164,17 @@ class ThankYouModel(QObject):
         
         self.status_updated.emit(
             "PAPER JAM DETECTED",
-            "Paper jam detected. Please clear the paper jam and try again.\nContact an administrator if needed."
+            "Paper jam detected. Please contact an administrator."
         )
         
         # Show admin override button
         self.admin_override_requested.emit()
     
     def handle_admin_override(self):
-        """Handle admin override - navigates to admin screen."""
         self.current_state = "admin_override"
         self.status_updated.emit(
             "ADMIN OVERRIDE",
-            "Navigating to admin screen..."
+            "Navigating to admin screen"
         )
         # Hide admin override button since override is being processed
         self.admin_override_hidden.emit()
@@ -274,13 +183,8 @@ class ThankYouModel(QObject):
             self.main_app.show_screen('admin')
     
     def _on_print_success(self):
-        """Handle successful print completion."""
-        # Stop all timers since we got the success signal
         if self.redirect_timer.isActive():
             self.redirect_timer.stop()
-        
-        if hasattr(self, 'warning_timer') and self.warning_timer.isActive():
-            self.warning_timer.stop()
         
         if self.status_check_timer.isActive():
             self.status_check_timer.stop()
@@ -295,7 +199,7 @@ class ThankYouModel(QObject):
         self.current_state = "completed"
         self.status_updated.emit(
             "Thank you for printing with us",
-            "Kindly collect your documents. We hope to see you again!"
+            "Kindly collect your documents."
         )
         
         # ==================== LOW COIN INVENTORY SMS CHECK =====================
@@ -336,34 +240,23 @@ class ThankYouModel(QObject):
                     # Refill/reset occurred, clear alert flag
                     db_manager.update_setting('low_coin_5_alert_active', '0')
         except Exception as sms_e:
-            print(f"WARNING: Failed to send low coin SMS after print: {sms_e}")
+            print(f"Failed to send: {sms_e}")
         # ==================== END LOW COIN INVENTORY SMS CHECK =================
         # Start 5-second redirect timer
         self.redirect_timer.start(5000)
     
     def _cleanup_temp_files(self):
-        """Clean up temporary files after successful printing."""
         try:
-            print("Cleaning up temporary files after printing...")
+            print("Cleaning up temp files")
+        
+            from managers.usb_file_manager import USBFileManager
             
-            # Import USBFileManager to access cleanup methods
-            try:
-                from managers.usb_file_manager import USBFileManager
-                
-                # Create a temporary USB manager instance to access cleanup methods
-                temp_usb_manager = USBFileManager()
-                
-                # Clean up all temp folders from previous sessions
-                if hasattr(temp_usb_manager, 'cleanup_all_temp_folders'):
-                    temp_usb_manager.cleanup_all_temp_folders()
-                    print("Cleaned up all temporary folders")
-                else:
-                    print("cleanup_all_temp_folders method not available")
-                    
-            except ImportError as e:
-                print(f"Could not import USBFileManager: {e}")
-            except Exception as e:
-                print(f"Error during temp file cleanup: {e}")
+            # Create a temporary USB manager instance to access cleanup methods
+            temp_usb_manager = USBFileManager()
+            
+            # Clean up all temp folders from previous sessions
+            temp_usb_manager.cleanup_all_temp_folders()
+            print("Cleaned up all temporary folders")
                 
         except Exception as e:
             print(f"Error during temp file cleanup: {e}")
@@ -386,13 +279,6 @@ class ThankYouModel(QObject):
             self.show_printing_error("No print job details available")
     
     def _check_print_status(self):
-        """
-        Fallback method to check printer status if signals fail.
-        
-        Uses lpstat command to check if printer is idle/ready as a backup
-        method in case print completion signals don't arrive.
-        Improved to handle multiple printers and detect active printer completion.
-        """
         # Only check if we're still waiting
         if self.current_state != "waiting":
             return
@@ -423,9 +309,9 @@ class ThankYouModel(QObject):
                         header_line = detailed_result.stdout.split('\n', 1)[0].strip().lower()
                         if " now printing " in header_line or header_line.startswith(f"printer {target_printer.lower()} now printing"):
                             is_printing = True
-                            print(f"Fallback: '{target_printer}' actively printing (lpstat header)")
+                            print(f"'{target_printer}' printing")
                         elif " is idle." in header_line:
-                            print(f"Fallback: '{target_printer}' reported idle (lpstat header)")
+                            print(f"'{target_printer}' now idle")
                     except Exception:
                         pass
 
@@ -434,7 +320,7 @@ class ThankYouModel(QObject):
                         line = line.strip()
                         if line.startswith("Alerts:"):
                             alerts_text = line.replace("Alerts:", "").strip()
-                            print(f"Fallback: Printer alerts for {target_printer}: {alerts_text}")
+                            print(f"Printer alerts for {target_printer}: {alerts_text}")
                             
                             if alerts_text and alerts_text != "none":
                                 alerts_found = [alert.strip() for alert in alerts_text.split()]
@@ -442,7 +328,7 @@ class ThankYouModel(QObject):
                                 # Check if printer is actively printing
                                 if "cups-waiting-for-job-completed" in alerts_found:
                                     is_printing = True
-                                    print(f"Fallback: Printer '{target_printer}' still processing/printing (cups-waiting-for-job-completed)")
+                                    print(f"Printer '{target_printer}' still processing/printing (cups-waiting-for-job-completed)")
                                 
                                 # Check for specific error conditions
                                 if "media-jam-error" in alerts_found or "paper-jam" in alerts_found:
@@ -459,15 +345,15 @@ class ThankYouModel(QObject):
                                     return
                             else:
                                 # No alerts found
-                                print(f"Fallback: {target_printer}: no alerts")
+                                print(f"{target_printer}: no alerts")
                             break
                 
                 # Do NOT mark complete here; rely on real printer signals.
                 # Only manage safety timer while printing; avoid premature redirects.
                 if not is_printing:
-                    print(f"Fallback: Target printer '{target_printer}' appears idle; waiting for official completion signal")
+                    print(f"'{target_printer}' appears idle; waiting for official completion signal")
                 else:
-                    print(f"Fallback: Still waiting for target printer '{target_printer}' to finish printing")
+                    print(f"Still waiting for '{target_printer}' to finish printing")
                     
         except subprocess.TimeoutExpired:
             print("Fallback lpstat command timed out")
@@ -475,18 +361,15 @@ class ThankYouModel(QObject):
             print(f"Fallback status check error: {e}")
     
     def _start_timers(self):
-        """Start monitoring timers in the main thread."""
         # Start periodic printer status check as fallback (every 5 seconds)
         self.status_check_timer.start(5000)
         
         # Do not auto-redirect while printing; stay on Thank You until success/failure
     
     def _on_print_failed(self, error_message):
-        print(f"Print job failed: {error_message}")
         self.show_printing_error(error_message)
     
     def on_leave(self):
-        """Called when the screen is hidden - cleanup connections and timers."""
         # Disconnect printer signals
         if hasattr(self, 'main_app') and hasattr(self.main_app, 'printer_manager'):
             try:
@@ -506,15 +389,6 @@ class ThankYouModel(QObject):
         self.print_job_finished = False
     
     def get_status_style(self, state):
-        """
-        Get CSS style for status label based on state.
-        
-        Args:
-            state: Current screen state
-            
-        Returns:
-            CSS style string for status label
-        """
         styles = {
             "printing": "color: #36454F; font-size: 42px; font-weight: bold;",
             "waiting": "color: #ffc107; font-size: 42px; font-weight: bold;",

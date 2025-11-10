@@ -281,7 +281,7 @@ class PaymentModel(QObject):
     def update_coin_inventory_after_payment(self):
         try:
             # Add received coins to inventory
-            if hasattr(self, 'cash_received') and self.cash_received:
+            if self.cash_received:
                 self._update_coin_inventory_items(self.cash_received, add=True)
 
             print(f"Coin inventory updated")
@@ -329,7 +329,7 @@ class PaymentModel(QObject):
     def complete_payment(self): # Returns true if success
         try:
             # Validate payment data exists
-            if not hasattr(self, 'payment_data') or self.payment_data is None:
+            if self.payment_data is None:
                 return False, "No payment data available"
 
             # Calculate change to dispense
@@ -342,7 +342,7 @@ class PaymentModel(QObject):
             copies = 1
             color_mode = 'Color'
 
-            if hasattr(self, 'payment_data') and self.payment_data:
+            if self.payment_data:
                 pdf_info = self.payment_data.get('pdf_data') or {}
                 pdf_path = pdf_info.get('path')
                 selected_pages = self.payment_data.get('selected_pages') or []
@@ -387,8 +387,6 @@ class PaymentModel(QObject):
                 self.dispense_thread = DispenseThread(
                     dispenser=self.change_dispenser,
                     amount=change_amount,
-                    admin_screen=self.main_app.admin_screen,
-                    db_threader=self.main_app.db_threader,
                     required_coins=required_coins
                 )
                 self.dispense_thread.status_update.connect(self.payment_status_updated.emit)
@@ -450,7 +448,7 @@ class PaymentModel(QObject):
 
         # Clean up change dispenser after dispensing is complete
         try:
-            if hasattr(self, 'change_dispenser') and self.change_dispenser:
+            if self.change_dispenser:
                 print("Cleaning up change dispenser after dispensing complete")
                 self.change_dispenser.cleanup()
                 # Don't set to None here as it might be needed for future transactions
@@ -459,7 +457,7 @@ class PaymentModel(QObject):
 
         # Clean up the dispense thread
         try:
-            if hasattr(self, 'dispense_thread') and self.dispense_thread:
+            if self.dispense_thread:
                 print("Cleaning up dispense thread after completion")
                 if self.dispense_thread.isRunning():
                     self.dispense_thread.terminate()
@@ -521,7 +519,7 @@ class PaymentModel(QObject):
     def _navigate_to_thank_you(self):
         try:
             # Create payment_info with all necessary data including cash_received
-            if hasattr(self, 'payment_data') and self.payment_data:
+            if self.payment_data:
                 self.payment_info = {
                     'pdf_data': self.payment_data.get('pdf_data', {}),
                     'selected_pages': self.payment_data.get('selected_pages', []),
@@ -612,7 +610,7 @@ class PaymentModel(QObject):
         self.change_updated.emit(0, "")
 
         # If data ready, enable payment mode
-        if hasattr(self, 'total_cost') and self.total_cost > 0:
+        if self.total_cost > 0:
             self.enable_payment_mode()
         else:
             print("No payment data yet.")
@@ -622,7 +620,7 @@ class PaymentModel(QObject):
         self.disable_payment_mode()
 
         # Stop and cleanup GPIO controller
-        if hasattr(self, 'gpio_controller') and self.gpio_controller:
+        if self.gpio_controller:
             self.gpio_controller.cleanup()
             self.gpio_controller = None
         
@@ -630,7 +628,7 @@ class PaymentModel(QObject):
         cleanup_payment_handler()
 
         # Stop any running dispense thread in case
-        if hasattr(self, 'dispense_thread') and self.dispense_thread:
+        if self.dispense_thread:
             try:
                 if self.dispense_thread.isRunning():
                     self.dispense_thread.terminate()
@@ -642,7 +640,7 @@ class PaymentModel(QObject):
                 self.dispense_thread = None
 
         # Clean up change dispenser (thread is already stopped above)
-        if hasattr(self, 'change_dispenser') and self.change_dispenser:
+        if self.change_dispenser:
             try:
                 self.change_dispenser.cleanup()
             except Exception as e:

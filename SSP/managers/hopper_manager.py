@@ -324,7 +324,7 @@ class ChangeDispenser:
             print(f"Error reinitializing hoppers: {e}")
             return False
 
-    def dispense_change(self, amount: float, status_callback=None, admin_screen=None, db_threader=None, required_coins=None):
+    def dispense_change(self, amount: float, status_callback=None, required_coins=None):
         """Calculates and dispenses the correct change, one coin at a time, respecting inventory limits.
         If exact change cannot be made due to low inventory, dispense all available coins as fallback.
         Returns actual coins dispensed.
@@ -515,20 +515,16 @@ class ChangeDispenser:
 
 
 class DispenseThread(QThread):
-    """A dedicated thread to run the dispensing logic without freezing the GUI."""
     status_update = pyqtSignal(str)
     dispensing_finished = pyqtSignal(dict)  # Changed to emit the full result dict
 
-    def __init__(self, dispenser: ChangeDispenser, amount: float, admin_screen=None, db_threader=None, required_coins=None):
+    def __init__(self, dispenser: ChangeDispenser, amount: float, required_coins=None):
         super().__init__()
         self.dispenser = dispenser
         self.amount = amount
-        self.admin_screen = admin_screen
-        self.db_threader = db_threader
         self.required_coins = required_coins
 
     def run(self):
-        """This method is executed when the thread starts."""
         if self.dispenser is None:
             print("ERROR: Dispenser is None, cannot dispense change")
             result = {
@@ -543,8 +539,6 @@ class DispenseThread(QThread):
         result = self.dispenser.dispense_change(
             self.amount,
             self.status_update.emit,
-            self.admin_screen,
-            self.db_threader,
             required_coins=self.required_coins
         )
         self.dispensing_finished.emit(result)

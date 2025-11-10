@@ -1,47 +1,38 @@
-# database/db_manager.py
-
 import sqlite3
 import os
 from datetime import datetime
 
 class DatabaseManager:
     def __init__(self, db_name="ssp_database.db"):
-        # Use the same database file as models.py
+        # Use the same database file as models.py and models handles creating tables
         base_dir = os.path.dirname(os.path.dirname(__file__))
         db_dir = os.path.join(base_dir, 'database')
         os.makedirs(db_dir, exist_ok=True)
         self.db_path = os.path.join(db_dir, db_name)
         self.conn = None
         self.connect()
-        # Remove create_tables() call since models.py handles initialization
 
     def connect(self):
-        """Establish a connection to the SQLite database."""
         try:
             self.conn = sqlite3.connect(self.db_path)
             self.conn.row_factory = self.dict_factory
-            print(f"✅ Database connection established: {self.db_path}")
+            print(f"Database connection established: {self.db_path}")
         except sqlite3.Error as e:
-            print(f"❌ Database connection error: {e}")
+            print(f"Database connection error: {e}")
             self.conn = None
 
     def close(self):
-        """Close the database connection."""
         if self.conn:
             self.conn.close()
 
     def dict_factory(self, cursor, row):
-        """Convert query results into dictionaries."""
         d = {}
         for idx, col in enumerate(cursor.description):
             d[col[0]] = row[idx]
         return d
 
-    # create_tables() method removed - database initialization is handled by models.py
 
-    # --- NEW: get_setting method ---
     def get_setting(self, key, default=None):
-        """Gets a value from the settings table."""
         if not self.conn:
             return default
         try:
@@ -59,9 +50,7 @@ class DatabaseManager:
             print(f"Error getting setting '{key}': {e}")
             return default
 
-    # --- NEW: update_setting method ---
     def update_setting(self, key, value):
-        """Updates or inserts a value in the settings table."""
         if not self.conn:
             return
         try:
@@ -94,19 +83,19 @@ class DatabaseManager:
 
     def get_transaction_history(self):
         if not self.conn: 
-            print("❌ ERROR: No database connection for get_transaction_history")
+            print("No database connection")
             return []
         try:
             cursor = self.conn.cursor()
             cursor.execute("SELECT * FROM transactions ORDER BY timestamp DESC")
             results = cursor.fetchall()
-            print(f"✅ Retrieved {len(results)} transactions from database")
+            print(f"Retrieved {len(results)} transactions from database")
             return results
         except sqlite3.Error as e:
-            print(f"❌ ERROR: Failed to get transaction history: {e}")
+            print(f"Failed to get transaction history: {e}")
             return []
         except Exception as e:
-            print(f"❌ ERROR: Unexpected error in get_transaction_history: {e}")
+            print(f"Unexpected error in get_transaction_history: {e}")
             return []
 
     def update_cash_inventory(self, denomination, count, type):
@@ -132,19 +121,19 @@ class DatabaseManager:
 
     def get_cash_inventory(self):
         if not self.conn: 
-            print("❌ ERROR: No database connection for get_cash_inventory")
+            print("No database connection for get_cash_inventory")
             return []
         try:
             cursor = self.conn.cursor()
             cursor.execute("SELECT * FROM cash_inventory ORDER BY denomination ASC")
             results = cursor.fetchall()
-            print(f"✅ Retrieved {len(results)} cash inventory items from database")
+            print(f"Retrieved {len(results)} cash inventory items from database")
             return results
         except sqlite3.Error as e:
-            print(f"❌ ERROR: Failed to get cash inventory: {e}")
+            print(f"Failed to get cash inventory: {e}")
             return []
         except Exception as e:
-            print(f"❌ ERROR: Unexpected error in get_cash_inventory: {e}")
+            print(f"Unexpected error in get_cash_inventory: {e}")
             return []
 
     def log_error(self, error_type, message, context):
@@ -161,77 +150,22 @@ class DatabaseManager:
 
     def get_error_log(self):
         if not self.conn: 
-            print("❌ ERROR: No database connection for get_error_log")
+            print("ERROR: No database connection for get_error_log")
             return []
         try:
             cursor = self.conn.cursor()
             cursor.execute("SELECT * FROM error_log ORDER BY timestamp DESC")
             results = cursor.fetchall()
-            print(f"✅ Retrieved {len(results)} error log entries from database")
+            print(f"Retrieved {len(results)} error log entries from database")
             return results
         except sqlite3.Error as e:
-            print(f"❌ ERROR: Failed to get error log: {e}")
+            print(f"ERROR: Failed to get error log: {e}")
             return []
         except Exception as e:
-            print(f"❌ ERROR: Unexpected error in get_error_log: {e}")
+            print(f"ERROR: Unexpected error in get_error_log: {e}")
             return []
 
-    # --- NEW: get_supplies_status method ---
-    def get_supplies_status(self):
-        """Get current paper and coin inventory status."""
-        if not self.conn:
-            return None
-            
-        try:
-            cursor = self.conn.cursor()
-            
-            # Get paper count from settings
-            cursor.execute("SELECT value FROM settings WHERE key = 'paper_count'")
-            paper_result = cursor.fetchone()
-            paper_count = int(paper_result['value']) if paper_result else 0
-            
-            # Get coin inventory
-            cursor.execute("""
-                SELECT denomination, count 
-                FROM cash_inventory 
-                WHERE type = 'coin' AND denomination IN (1.0, 5.0)
-            """)
-            coins = {row['denomination']: row['count'] for row in cursor.fetchall()}
-            
-            # Build status dictionary
-            status = {
-                "paper_count": paper_count,
-                "coins": {
-                    "peso_1": coins.get(1.0, 0),
-                    "peso_5": coins.get(5.0, 0)
-                },
-                "warnings": []
-            }
-            
-            # Add warnings based on thresholds
-            if paper_count < 20:
-                status["warnings"].append("Low paper level!")
-            if coins.get(1.0, 0) < 50:
-                status["warnings"].append("Low on ₱1 coins!")
-            if coins.get(5.0, 0) < 20:
-                status["warnings"].append("Low on ₱5 coins!")
-                
-            return status
-            
-        except sqlite3.Error as e:
-            print(f"Error getting supplies status: {e}")
-            return None
-
-    def update_paper_count(self, count):
-        """Update the paper count in settings."""
-        self.update_setting('paper_count', count)
-
-    # --- NEW: CMYK Ink Level Methods ---
     def get_cmyk_ink_levels(self):
-        """Get the current CMYK ink levels."""
-        import threading
-        current_thread = threading.current_thread()
-        
         if not self.conn:
             return None
         try:
@@ -269,7 +203,6 @@ class DatabaseManager:
             return None
 
     def update_cmyk_ink_levels(self, cyan, magenta, yellow, black):
-        """Update CMYK ink levels with decimal precision."""
         if not self.conn:
             return False
         try:
@@ -307,25 +240,7 @@ class DatabaseManager:
             print(f"Error converting CMYK values to float: {e}")
             return False
 
-    def get_cmyk_ink_history(self, limit=10):
-        """Get CMYK ink level history."""
-        if not self.conn:
-            return []
-        try:
-            cursor = self.conn.cursor()
-            cursor.execute("""
-                SELECT cyan_level, magenta_level, yellow_level, black_level, last_updated
-                FROM cmyk_ink_levels 
-                ORDER BY last_updated DESC 
-                LIMIT ?
-            """, (limit,))
-            return cursor.fetchall()
-        except sqlite3.Error as e:
-            print(f"Error getting CMYK ink history: {e}")
-            return []
-
     def get_supplies_status_with_cmyk(self):
-        """Get current supplies status including CMYK ink levels."""
         if not self.conn:
             return None
             

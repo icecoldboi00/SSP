@@ -56,7 +56,7 @@ class AdminModel(QObject):
             self.paper_count = max(0, self.paper_count - pages_to_print)
             self.db_manager.update_setting('paper_count', self.paper_count)
             self.check_low_paper_alert()
-            self.load_paper_count() # Emit signal to update any listening UI
+            self.load_paper_count() 
             print(f"Paper count updated to {self.paper_count} sheets.")
             return True
         else:
