@@ -19,7 +19,6 @@ class InkAnalysisThreadManager(QObject):
     database_updated = pyqtSignal(bool)
     
     def __init__(self):
-        """Initialize the ink analysis thread manager."""
         super().__init__()
         self.operation_queue = queue.Queue()
         self.db_manager = None
@@ -28,14 +27,12 @@ class InkAnalysisThreadManager(QObject):
         self.running = False
         
     def start(self):
-        """Start the ink analysis worker thread."""
         if self.thread is None or not self.thread.is_alive():
             self.running = True
             self.thread = threading.Thread(target=self._ink_analysis_worker, daemon=True)
             self.thread.start()
     
     def stop(self):
-        """Stop the ink analysis worker thread."""
         self.running = False
         if self.thread and self.thread.is_alive():
             self.thread.join(timeout=1.0)
@@ -129,6 +126,3 @@ class InkAnalysisThreadManager(QObject):
             operation.error = str(e)
             print(f"Error in ink analysis: {e}")
             self.database_updated.emit(False)
-    
-
-

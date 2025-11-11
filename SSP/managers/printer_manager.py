@@ -11,16 +11,13 @@ class PrinterManager(QObject):
     print_job_waiting = pyqtSignal()
 
     def __init__(self):
-        """Initialize printer manager."""
         super().__init__()
         config = get_config()
         self.printer_name = config.printer_name
         self.print_thread = None
         self.check_printer_availability()
 
-    def print_file(self, file_path, copies, color_mode, selected_pages):
-        print(f"📄 Print request: {len(selected_pages)} pages × {copies} copies ({color_mode})")
-        
+    def print_file(self, file_path, copies, color_mode, selected_pages): 
         # Prevent duplicate print jobs
         if hasattr(self, 'print_thread') and self.print_thread and self.print_thread.isRunning():
             print("Print job already running, ignoring duplicate request")
@@ -51,49 +48,22 @@ class PrinterManager(QObject):
         self.print_thread.start()
 
     def check_printer_availability(self):
-        try:
-            print(f"Checking printer availability for: {self.printer_name}")
-            
-            # Check if lp command exists
-            result = subprocess.run(['which', 'lp'], capture_output=True, text=True)
-            if result.returncode != 0:
-                print("'lp' command not found. Is CUPS installed?")
-                print("   Install CUPS: sudo apt-get install cups")
-                return False
-            print("CUPS lp command found")
-            
+        try:      
             # Check if CUPS daemon is running
             try:
                 result = subprocess.run(['pgrep', 'cupsd'], capture_output=True, text=True)
                 if result.returncode != 0:
-                    print("CUPS daemon (cupsd) is not running")
-                    print("   Start CUPS: sudo systemctl start cups")
                     return False
                 print("CUPS daemon is running")
             except Exception as e:
                 print(f"Error checking CUPS daemon: {e}")
                 return False
                 
-            # List all available printers first
-            try:
-                result = subprocess.run(['lpstat', '-p'], capture_output=True, text=True, timeout=10)
-                if result.returncode == 0:
-                    print(f"Available printers:")
-                    for line in result.stdout.split('\n'):
-                        if line.strip():
-                            print(f"   {line}")
-                else:
-                    print("Could not list printers")
-            except Exception as e:
-                print(f"Error listing printers: {e}")
-                
             # Check if printer exists
             result = subprocess.run(['lpstat', '-p', self.printer_name], 
                                   capture_output=True, text=True, timeout=10)
             if result.returncode != 0:
                 print(f"Printer '{self.printer_name}' not found")
-                print(f"   Available printers listed above")
-                print(f"   Update printer name in config.py")
                 return False
             print(f"Printer '{self.printer_name}' found")
             
@@ -112,7 +82,6 @@ class PrinterManager(QObject):
                 return False
             else:
                 print(f"Printer is ready")
-                
             return True
             
         except Exception as e:
@@ -192,5 +161,4 @@ class PrinterManager(QObject):
                 print(f"Error cleaning up temp PDF: {e}")
     
     def on_thread_finished(self):
-        """Handle print thread completion."""
         self.print_thread = None

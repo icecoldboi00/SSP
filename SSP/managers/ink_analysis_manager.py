@@ -1,17 +1,13 @@
-# managers/ink_analysis_manager.py
-
-import fitz  # PyMuPDF
+import fitz
 import numpy as np
 from datetime import datetime
 
 class InkAnalysisManager:
-    """Manages ink usage analysis for PDF files and updates database accordingly."""
-    
     # Standard coverage percentage for a single channel (C, M, Y, or K) on a "standard page".
     # Industry standard for ISO yield tests is often around 5% per channel.
     STANDARD_CHANNEL_COVERAGE_PERCENT = 5.0
     
-    def __init__(self, db_manager=None):
+    def __init__(self, db_manager):
         self.db_manager = db_manager
         # Track which cartridges have already sent low ink alerts
         self.low_ink_alerts_sent = {
@@ -152,9 +148,6 @@ class InkAnalysisManager:
 
     def _calculate_job_costs(self, avg_k, avg_c, avg_m, avg_y, total_pages, 
                            yield_black=7000, yield_color=7000, standard_coverage=5.0):
-        """
-        Calculates the percentage of each individual cartridge used for a print job.
-        """
         # Calculate individual channel costs
         c_cost = self._calculate_channel_cost(avg_c, total_pages, yield_color, self.STANDARD_CHANNEL_COVERAGE_PERCENT)
         m_cost = self._calculate_channel_cost(avg_m, total_pages, yield_color, self.STANDARD_CHANNEL_COVERAGE_PERCENT)
@@ -168,7 +161,7 @@ class InkAnalysisManager:
             'yellow': y_cost,
             'black': k_cost
         }
-    
+    # Added here just to avoid errors
     def _create_empty_result(self):
         return {
             'success': True,
@@ -180,9 +173,8 @@ class InkAnalysisManager:
             'job_costs': {'cyan': 0, 'magenta': 0, 'yellow': 0, 'black': 0},
             'timestamp': datetime.now()
         }
-    
+    # Added here just to avoid errors
     def _create_error_result(self, error_message):
-        """Create an error result."""
         return {
             'success': False,
             'error': error_message,
@@ -268,7 +260,6 @@ class InkAnalysisManager:
         return analysis_result
     
     def _check_and_send_low_ink_alerts(self):
-        """Check current ink levels and send SMS alerts for cartridges below 20%."""
         try:
             # Get current ink levels
             current_levels = self.db_manager.get_cmyk_ink_levels()
@@ -323,17 +314,16 @@ class InkAnalysisManager:
             print(f"Error checking ink levels for SMS alerts: {e}")
     
     def reset_low_ink_alerts(self):
-        """Reset all low ink alert flags (call this when cartridges are refilled)."""
         self.low_ink_alerts_sent = {
             'cyan': False,
             'magenta': False,
             'yellow': False,
             'black': False
         }
-        print("Low ink alert flags reset - cartridges refilled")
+        print("Low ink flags reset")
     
+    # Added instead of checking in thank you screen to avoid spamming
     def _check_and_send_low_coin_alerts(self):
-        """Check current coin levels and send SMS alerts for coins below threshold."""
         try:
             # Get current coin counts from database
             inventory = self.db_manager.get_cash_inventory()

@@ -201,47 +201,7 @@ class ThankYouModel(QObject):
             "Thank you for printing with us",
             "Kindly collect your documents."
         )
-        
-        # ==================== LOW COIN INVENTORY SMS CHECK =====================
-        try:
-            from database.db_manager import DatabaseManager
-            db_manager = DatabaseManager()
-            inventory = db_manager.get_cash_inventory()
-            low_threshold_1 = 5
-            low_threshold_5 = 3
-            current_1 = 0
-            current_5 = 0
-            for item in inventory:
-                if item['denomination'] == 1 and item['type'] == 'coin':
-                    current_1 = item['count']
-                elif item['denomination'] == 5 and item['type'] == 'coin':
-                    current_5 = item['count']
-            alert_1_active = bool(int(db_manager.get_setting('low_coin_1_alert_active', 0)))
-            alert_5_active = bool(int(db_manager.get_setting('low_coin_5_alert_active', 0)))
-            from managers.sms_manager import send_low_coin_sms
-            # 1-peso coin alert logic
-            if current_1 <= low_threshold_1:
-                if not alert_1_active:
-                    send_low_coin_sms('1-peso', current_1)
-                    print(f"Low coin SMS sent for 1-peso: {current_1} remaining (after print)")
-                    db_manager.update_setting('low_coin_1_alert_active', '1')
-            else:
-                if alert_1_active:
-                    # Refill/reset occurred, clear alert flag
-                    db_manager.update_setting('low_coin_1_alert_active', '0')
-            # 5-peso coin alert logic
-            if current_5 <= low_threshold_5:
-                if not alert_5_active:
-                    send_low_coin_sms('5-peso', current_5)
-                    print(f"Low coin SMS sent for 5-peso: {current_5} remaining (after print)")
-                    db_manager.update_setting('low_coin_5_alert_active', '1')
-            else:
-                if alert_5_active:
-                    # Refill/reset occurred, clear alert flag
-                    db_manager.update_setting('low_coin_5_alert_active', '0')
-        except Exception as sms_e:
-            print(f"Failed to send: {sms_e}")
-        # ==================== END LOW COIN INVENTORY SMS CHECK =================
+
         # Start 5-second redirect timer
         self.redirect_timer.start(5000)
     
@@ -396,3 +356,6 @@ class ThankYouModel(QObject):
             "error": "color: #dc3545; font-size: 42px; font-weight: bold;"
         }
         return styles.get(state, styles["printing"])
+
+
+# Low coin inventory alerts handled in InkAnalysisManager

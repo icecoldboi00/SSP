@@ -1,18 +1,11 @@
 import os
 import subprocess
 import tempfile
+import fitz  # PyMuPDF
 from PyQt5.QtCore import QThread, pyqtSignal
 from config import get_config
 from managers.sms_manager import send_paper_jam_sms, send_printing_error_sms, send_no_paper_sms
 
-try:
-    import fitz  # PyMuPDF
-    PYMUPDF_AVAILABLE = True
-    print("PyMuPDF library found. PDF page selection is ENABLED.")
-except ImportError:
-    PYMUPDF_AVAILABLE = False
-    print("PyMuPDF library not found. PDF page selection will be DISABLED.")
-    print("   Install with: pip install PyMuPDF")
 
 
 class PrinterThread(QThread):
@@ -30,11 +23,6 @@ class PrinterThread(QThread):
         self.temp_pdf_path = None
 
     def run(self):
-        """Execute the complete print workflow."""
-        if not PYMUPDF_AVAILABLE:
-            self.print_failed.emit("PyMuPDF library is not installed. Please install with: pip install PyMuPDF")
-            return
-
         try:
             # Create temporary PDF with selected pages
             self.create_temp_pdf_with_selected_pages()
@@ -59,11 +47,7 @@ class PrinterThread(QThread):
                 check=True,
                 timeout=config.printer_timeout
             )
-            
-            print(f"CUPS output: {process.stdout}")
-            if process.stderr:
-                print(f"CUPS stderr: {process.stderr}")
-
+    
             # Validate print job was accepted by CUPS
             if not process.stdout or "request id is" not in process.stdout:
                 self.print_failed.emit("Print job was not accepted by CUPS. Check printer connection.")
@@ -97,8 +81,8 @@ class PrinterThread(QThread):
         except Exception as e:
             self._handle_print_error(f"An unexpected error occurred: {str(e)}")
         finally:
-            # Only clean up temp PDF if print failed
-            # On success, main app will clean it up after ink analysis
+            # Clean up temp PDF if print failed
+            # Main app will clean it up after ink analysis if success
             if not hasattr(self, '_print_succeeded'):
                 self.cleanup_temp_pdf()
 
@@ -198,7 +182,6 @@ class PrinterThread(QThread):
         media_empty_sms_sent = False
         
         print(f"Starting print completion monitoring (timeout: {max_wait_time}s, min_print_time: {min_print_time}s)")
-        print(f"Waiting {initial_startup_delay}s for printer to start processing job...")
         time.sleep(initial_startup_delay)
         elapsed_time += initial_startup_delay
         
@@ -333,7 +316,6 @@ class PrinterThread(QThread):
         return command
 
     def cleanup_temp_pdf(self):
-        """Delete the temporary PDF file if it was created."""
         if self.temp_pdf_path and os.path.exists(self.temp_pdf_path):
             try:
                 os.remove(self.temp_pdf_path)

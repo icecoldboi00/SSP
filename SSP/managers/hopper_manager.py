@@ -1,88 +1,54 @@
 # screens/hopper_manager.py
-
+import pigpio
 import time
 from PyQt5.QtCore import QThread, pyqtSignal
 from database.db_manager import DatabaseManager
 
-# --- Check for pigpio and set a flag ---
-try:
-    import pigpio
-    PIGPIO_AVAILABLE = True
-    print("SUCCESS: pigpio library found. Hopper control is ENABLED.")
-except ImportError:
-    PIGPIO_AVAILABLE = False
-    print("WARNING: pigpio library not found. Hopper control will be SIMULATED.")
-
-
-# --- General Configuration ---
 COIN_DELAY = 1.0         # Delay after a successful dispense before next one
 DISPENSING_TIMEOUT = 10  # Maximum time to wait for a single coin
-MAX_RETRY_ATTEMPTS = 5   # Maximum attempts per coin before giving up (increased from 3)
+MAX_RETRY_ATTEMPTS = 3   # Maximum attempts per coin before giving up 
 RETRY_DELAY = 0.5        # Delay between retry attempts
 
-# --- Centralized configuration for the two hoppers ---
-# Hopper A dispenses 1-peso coins
-# Hopper B dispenses 5-peso coins
 HOPPER_CONFIGS = {
     'A': {
-        'signal_pin': 10,  # Coin pulse input for Hopper A  1 Peso
-        'enable_pin': 24   # Hopper enable control for Hopper A
+        'signal_pin': 10,  # Coin pulse input for 1 Peso
+        'enable_pin': 24   # Hopper enable control 
     },
     'B': {
-        'signal_pin': 26,   # Coin pulse input for Hopper B
-        'enable_pin': 25   # Hopper enable control for Hopper B
+        'signal_pin': 26,   # Coin pulse input for 5 Peso
+        'enable_pin': 25   # Hopper enable control 
     }
 }
 
 
 class HopperController:
-    """
-    Controls a single coin hopper motor and sensor.
-    This class is adapted from the user-provided script.
-    """
     def __init__(self, pi_instance, name, signal_pin, enable_pin):
         self.pi = pi_instance
-        if not self.pi.connected:
-            raise Exception("Failed to connect to pigpiod")
 
-        # Hopper-specific identifiers
         self.name = name
         self.signal_pin = signal_pin
         self.enable_pin = enable_pin
 
-        # State variables
         self.enabled = False
         self.dispensing = False
 
-        # Sensor state tracking
+        # Passage tracking
         self.sensor_active = False
-        self.coin_passage_detected = False
         self.coin_passage_count = 0
         self.last_sensor_change = 0
 
-        if PIGPIO_AVAILABLE and self.pi and self.pi.connected:
-            try:
-                # Setup GPIO
-                self.pi.set_mode(self.signal_pin, pigpio.INPUT)
-                self.pi.set_pull_up_down(self.signal_pin, pigpio.PUD_UP)
-                self.pi.set_mode(self.enable_pin, pigpio.OUTPUT)
+        self.pi.set_mode(self.signal_pin, pigpio.INPUT)
+        self.pi.set_pull_up_down(self.signal_pin, pigpio.PUD_UP)
+        self.pi.set_mode(self.enable_pin, pigpio.OUTPUT)
 
-                # Monitor both rising and falling edges to track coin passage
-                # Each instance will have its own callback tied to its specific signal pin
-                self.callback = self.pi.callback(self.signal_pin, pigpio.EITHER_EDGE, self._sensor_callback)
+        # Monitor both rising and falling edges to track coin passage
+        # Each instance will have its own callback tied to its specific signal pin
+        self.callback = self.pi.callback(self.signal_pin, pigpio.EITHER_EDGE, self._sensor_callback)
 
-                # Start with hopper disabled
-                self._disable_hopper()
-                print(f"[{self.name}] GPIO setup completed successfully")
-            except Exception as e:
-                print(f"[{self.name}] ERROR: Failed to setup GPIO: {e}")
-                self.callback = None
-        else:
-            print(f"[{self.name}] WARNING: pigpio not available or not connected")
-            self.callback = None
+        self._disable_hopper()
+        print(f"[{self.name}] hopper setup completed successfully")
 
     def cleanup(self):
-        """Clean up GPIO resources."""
         try:
             # First disable the hopper to stop any ongoing operations
             if getattr(self, 'pi', None) and hasattr(self.pi, 'connected') and self.pi.connected:
@@ -234,33 +200,21 @@ class ChangeDispenser:
     def __init__(self):
         self.pi = None
         self.hoppers = {}
-        self.simulated = not PIGPIO_AVAILABLE
 
-        if not self.simulated:
-            try:
-                self.pi = pigpio.pi()
-                if not self.pi.connected:
-                    raise RuntimeError("Could not connect to pigpiod daemon.")
-                
-                # Create a controller for each hopper defined in config
-                for name, config in HOPPER_CONFIGS.items():
-                    print(f"Initializing Hopper '{name}' on Signal={config['signal_pin']}, Enable={config['enable_pin']}")
-                    self.hoppers[name] = HopperController(
-                        pi_instance=self.pi,
-                        name=name,
-                        signal_pin=config['signal_pin'],
-                        enable_pin=config['enable_pin']
-                    )
-                    
-            except Exception as e:
-                print(f"CRITICAL: Failed to initialize pigpio or hoppers: {e}. Switching to simulation mode.")
-                self.simulated = True
+        self.pi = pigpio.pi()
+        
+        # Create a controller for each hopper defined in config
+        for name, config in HOPPER_CONFIGS.items():
+            print(f"Initializing Hopper '{name}' on Signal={config['signal_pin']}, Enable={config['enable_pin']}")
+            self.hoppers[name] = HopperController(
+                pi_instance=self.pi,
+                name=name,
+                signal_pin=config['signal_pin'],
+                enable_pin=config['enable_pin']
+            )
 
     def check_connection(self):
         """Check if pigpio connection is still valid and try to reconnect if needed."""
-        if self.simulated:
-            return True
-            
         if not self.pi or not self.pi.connected:
             print("pigpio connection lost, attempting to reconnect...")
             try:
@@ -293,7 +247,6 @@ class ChangeDispenser:
 
 
     def __del__(self):
-        """Destructor to ensure cleanup."""
         try:
             self.cleanup_all_hoppers()
             if self.pi:
@@ -303,7 +256,7 @@ class ChangeDispenser:
 
     def reinitialize_hoppers(self):
         """Reinitialize all hoppers with current pigpio connection."""
-        if self.simulated or not self.pi or not self.pi.connected:
+        if not self.pi or not self.pi.connected:
             return False
         
         try:
@@ -418,14 +371,9 @@ class ChangeDispenser:
             if status_callback: status_callback(msg)
             print(msg)
             
-            if self.simulated:
-                time.sleep(1.5) # Simulate dispense time
-                success = True
-                # print(f"DEBUG: Simulated 5-peso coin dispense successful")
-            else:
-                # print(f"DEBUG: Calling hoppers['B'].dispense_single_coin() for 5-peso coin {i + 1}")
-                success = self.hoppers['B'].dispense_single_coin()
-                # print(f"DEBUG: Hopper B dispense result: {success}")
+            # print(f"DEBUG: Calling hoppers['B'].dispense_single_coin() for 5-peso coin {i + 1}")
+            success = self.hoppers['B'].dispense_single_coin()
+            # print(f"DEBUG: Hopper B dispense result: {success}")
 
             if success:
                 actual_fives += 1
@@ -448,11 +396,7 @@ class ChangeDispenser:
             if status_callback: status_callback(msg)
             print(msg)
             
-            if self.simulated:
-                time.sleep(1.5)
-                success = True
-            else:
-                success = self.hoppers['A'].dispense_single_coin()
+            success = self.hoppers['A'].dispense_single_coin()
 
             if success:
                 actual_ones += 1
@@ -467,11 +411,7 @@ class ChangeDispenser:
         # Calculate actual change dispensed
         actual_change = (actual_fives * 5) + (actual_ones * 1)
         expected_change = (num_fives * 5) + (num_ones * 1)
-        
-        # print(f"DEBUG: Final change calculation:")
-        # print(f"DEBUG: Expected: {num_fives}x₱5 + {num_ones}x₱1 = ₱{expected_change}")
-        # print(f"DEBUG: Actual: {actual_fives}x₱5 + {actual_ones}x₁ = ₱{actual_change}")
-        # print(f"DEBUG: Difference: ₱{expected_change - actual_change}")
+
         
         final_msg = f"Change dispensing complete. Dispensed ₱{actual_change:.2f} (₱{actual_fives}x5 + ₱{actual_ones}x1) of ₱{expected_change:.2f} expected."
         if status_callback: status_callback(final_msg)
@@ -486,7 +426,6 @@ class ChangeDispenser:
         }
     
     def cleanup_all_hoppers(self):
-        """Clean up all hopper controllers."""
         print("Cleaning up all hopper controllers...")
         for name, hopper in self.hoppers.items():
             try:
@@ -494,12 +433,10 @@ class ChangeDispenser:
                 print(f"[{name}] Hopper cleaned up")
             except Exception as e:
                 print(f"[{name}] Error cleaning up hopper: {e}")
-        # Clear the hoppers dictionary
-        self.hoppers.clear()
+        self.hoppers.clear() # Clear the hoppers dictionary
     
     def cleanup(self):
-        """Safely shut down all hoppers and the pigpio connection."""
-        if self.pi and not self.simulated:
+        if self.pi:
             print("Cleaning up all hopper controllers...")
             # Clean up all hoppers first
             self.cleanup_all_hoppers()
