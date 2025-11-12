@@ -35,8 +35,11 @@ class PrintingSystemApp(QMainWindow):
         super().__init__()
         self.setWindowTitle("Printing System GUI")
         
-        self.setGeometry(100, 100, 1024, 600)
+        self.setWindowFlags(Qt.FramelessWindowHint)
+        self.setGeometry(0, 0, 1024, 600)
         self.setMinimumSize(1024, 600) # 1280x720
+        self.setMinimumSize(1024, 600)
+        self.setMaximumSize(1024, 600)
 
         # Initialize stacked widget for screen management
         self.stacked_widget = QStackedWidget()
@@ -437,7 +440,7 @@ def main():
         window = PrintingSystemApp()
 
         # Show window (size and mode determined by _setup_display)
-        window.showFullScreen()
+        window.show()
         
         # Set up cleanup on exit
         import atexit
