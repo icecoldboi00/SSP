@@ -2,7 +2,9 @@ import sys
 import os
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
+
 from PyQt5.QtWidgets import QApplication, QMainWindow, QStackedWidget
+from PyQt5.QtCore import Qt
 from screens.idle import IdleController
 from screens.usb import USBController
 from screens.file_browser import FileBrowserController
@@ -36,10 +38,9 @@ class PrintingSystemApp(QMainWindow):
         self.setWindowTitle("Printing System GUI")
         
         self.setWindowFlags(Qt.FramelessWindowHint)
-        self.setGeometry(0, 0, 1024, 600)
+        self.setGeometry(100, 100, 1024, 600)
         self.setMinimumSize(1024, 600) # 1280x720
-        self.setMinimumSize(1024, 600)
-        self.setMaximumSize(1024, 600)
+
 
         # Initialize stacked widget for screen management
         self.stacked_widget = QStackedWidget()
@@ -440,7 +441,7 @@ def main():
         window = PrintingSystemApp()
 
         # Show window (size and mode determined by _setup_display)
-        window.show()
+        window.showFullScreen()
         
         # Set up cleanup on exit
         import atexit
