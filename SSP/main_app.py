@@ -3,7 +3,6 @@ import os
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 from PyQt5.QtWidgets import QApplication, QMainWindow, QStackedWidget
-from PyQt5.QtCore import Qt, QTimer
 from screens.idle import IdleController
 from screens.usb import USBController
 from screens.file_browser import FileBrowserController
@@ -15,7 +14,6 @@ from screens.thank_you import ThankYouController
 from database.models import init_db
 from managers.usb_file_manager import USBFileManager
 from managers.printer_manager import PrinterManager
-from managers.db_threader import DatabaseThreadManager
 from managers.ink_analysis_threader import InkAnalysisThreadManager
 from managers.sms_manager import cleanup_sms
 
@@ -37,16 +35,14 @@ class PrintingSystemApp(QMainWindow):
         super().__init__()
         self.setWindowTitle("Printing System GUI")
         
-        # Get screen dimensions and set appropriate window size
-        self._setup_display()
+        self.setGeometry(100, 100, 1024, 600)
+        self.setMinimumSize(1024, 600) # 1280x720
 
         # Initialize stacked widget for screen management
         self.stacked_widget = QStackedWidget()
         self.setCentralWidget(self.stacked_widget)
 
-        self.db_threader = DatabaseThreadManager()
-        self.ink_analysis_threader = InkAnalysisThreadManager()
-        
+        # Initialize all screen controllers
         self.idle_screen = IdleController(self)
         self.usb_screen = USBController(self)
         self.file_browser_screen = FileBrowserController(self)
@@ -54,7 +50,8 @@ class PrintingSystemApp(QMainWindow):
         self.payment_screen = PaymentController(self)
         self.admin_screen = AdminController(self)
         
-        self.db_threader.start()
+        # Initialize thread managers for background operations
+        self.ink_analysis_threader = InkAnalysisThreadManager()
         self.ink_analysis_threader.start()
         
         # Connect thread managers for real-time data updates
@@ -64,7 +61,6 @@ class PrintingSystemApp(QMainWindow):
         self.printer_manager = PrinterManager()
         
         # Initialize USB file manager for session management
-
         self.usb_file_manager = USBFileManager()
         print("USB file manager initialized successfully")
 
@@ -110,24 +106,6 @@ class PrintingSystemApp(QMainWindow):
                 background-color: transparent;
             }
         """)
-    
-    def _setup_display(self):
-        # Get the geometry of the primary screen
-        screen = QApplication.primaryScreen()
-        screen_geometry = screen.geometry()
-        
-        # Move the window to the top-left corner of the screen
-        self.move(screen_geometry.topLeft())
-        
-        # Set the window to the full size of the screen
-        # This makes the transition to fullscreen smoother
-        self.resize(screen_geometry.size())
-
-        # Set window flags for a true kiosk experience
-        self.setWindowFlags(Qt.Window | Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint)
-        
-        # Go fullscreen on startup
-        self.showFullScreen()
     
     def _connect_thread_managers(self):
         # Connect ink analysis completion for database updates
@@ -462,7 +440,7 @@ def main():
         window = PrintingSystemApp()
 
         # Show window (size and mode determined by _setup_display)
-        window.show()
+        window.showFullScreen()
         
         # Set up cleanup on exit
         import atexit

@@ -1,4 +1,3 @@
-# screens/hopper_manager.py
 import pigpio
 import time
 from PyQt5.QtCore import QThread, pyqtSignal
@@ -66,7 +65,7 @@ class HopperController:
                 except Exception as callback_error:
                     print(f"[{self.name}] Error canceling callback: {callback_error}")
             
-            # Finally, clear pigpio instance reference to avoid later use in callbacks
+            # Clear pigpio instance reference to avoid later use in callbacks
             self.pi = None
                 
         except Exception as e:
@@ -119,51 +118,43 @@ class HopperController:
                 elapsed = pigpio.tickDiff(self.last_sensor_change, current_time) / 1000000.0
                 if elapsed > 0.01:  # Debounce: Minimum time for valid coin passage (10ms)
                     self.coin_passage_count += 1
-                    # Removed console flooding print statement
+                
 
     def _wait_for_coin_passage(self):
-        """Wait for exactly one coin passage through the sensor."""
-        print(f"[{self.name}] Waiting for exactly one coin passage...")
-
+        print(f"[{self.name}] Waiting for exactly one coin")
         # Reset detection counters for this attempt
         self.coin_passage_count = 0
         self.sensor_active = False
 
         timeout_start = time.time()
-        while (time.time() - timeout_start) < DISPENSING_TIMEOUT:
+        while (time.time() - timeout_start) < DISPENSING_TIMEOUT: # Spin hopper 10 seconds until coin pass
             if self.coin_passage_count == 1:
-                print(f"[{self.name}] SUCCESS: Exactly one coin passage detected!")
+                print(f"[{self.name}] one coin pass")
                 return True
             if self.coin_passage_count > 1:
-                print(f"[{self.name}] FAILURE: Multiple coins detected ({self.coin_passage_count})! Stopping motor.")
+                print(f"[{self.name}] multiple coins detected ({self.coin_passage_count})! Stopping motor.")
                 return False
             time.sleep(0.01)
 
-        # Handle timeout condition
+        # Last check if coin pass
         if self.coin_passage_count == 1:
-            print(f"[{self.name}] SUCCESS: Exactly one coin passage detected (at timeout).")
+            print(f"[{self.name}] one coin pass")
             return True
         else:
-            print(f"[{self.name}] TIMEOUT: Waited {DISPENSING_TIMEOUT}s. Found {self.coin_passage_count} passages.")
+            print(f"[{self.name}] timeout. Found {self.coin_passage_count} passages.")
             return False
 
     def _dispense_single_coin_attempt(self):
-        """Single attempt to dispense exactly one coin."""
-        # Enable hopper motor
         self._enable_hopper()
 
-        # Wait for exactly one coin passage
         success = self._wait_for_coin_passage()
 
-        # Stop motor immediately after detection (success or failure)
         self._disable_hopper()
 
         return success
 
     def dispense_single_coin(self):
-        """Dispense exactly one coin with retry logic."""
         if self.dispensing:
-            print(f"[{self.name}] Cannot start new dispense, already in progress.")
             return False
             
         self.dispensing = True
@@ -196,7 +187,6 @@ class HopperController:
         return success
 
 class ChangeDispenser:
-    """High-level manager for all hoppers."""
     def __init__(self):
         self.pi = None
         self.hoppers = {}
@@ -213,8 +203,8 @@ class ChangeDispenser:
                 enable_pin=config['enable_pin']
             )
 
+    # If pigpio connection is lost, try to reconnect
     def check_connection(self):
-        """Check if pigpio connection is still valid and try to reconnect if needed."""
         if not self.pi or not self.pi.connected:
             print("pigpio connection lost, attempting to reconnect...")
             try:
@@ -245,17 +235,8 @@ class ChangeDispenser:
                 return False
         return True
 
-
-    def __del__(self):
-        try:
-            self.cleanup_all_hoppers()
-            if self.pi:
-                self.pi.stop()
-        except Exception as e:
-            print(f"Error in destructor: {e}")
-
+    # Recreate hopper controllers with the existing pigpio connection if needed
     def reinitialize_hoppers(self):
-        """Reinitialize all hoppers with current pigpio connection."""
         if not self.pi or not self.pi.connected:
             return False
         
@@ -278,16 +259,12 @@ class ChangeDispenser:
             return False
 
     def dispense_change(self, amount: float, status_callback=None, required_coins=None):
-        """Calculates and dispenses the correct change, one coin at a time, respecting inventory limits.
-        If exact change cannot be made due to low inventory, dispense all available coins as fallback.
-        Returns actual coins dispensed.
-        """
         if amount <= 0:
             return {'success': True, 'coins_1': 0, 'coins_5': 0}
 
         # Check connection before starting
         if not self.check_connection():
-            error_msg = "CRITICAL: pigpio connection not available. Cannot dispense change."
+            error_msg = "Pigpio not available. Cannot dispense change."
             print(error_msg)
             if status_callback:
                 status_callback(error_msg)
@@ -295,9 +272,9 @@ class ChangeDispenser:
         
         # Reinitialize hoppers if needed
         if not self.hoppers:
-            print("Hoppers not properly initialized, reinitializing...")
+            print("Hoppers not initialized properly, reinitializing")
             if not self.reinitialize_hoppers():
-                error_msg = "CRITICAL: Failed to reinitialize hoppers. Cannot dispense change."
+                error_msg = "Failed to reinitialize hoppers. Cannot dispense change."
                 print(error_msg)
                 if status_callback:
                     status_callback(error_msg)
@@ -355,7 +332,7 @@ class ChangeDispenser:
             num_fives = desired_fives
             num_ones = desired_ones
         
-        print(f"Dispensing ₱{amount:.2f}: {num_fives}x 5-peso, {num_ones}x 1-peso")
+        print(f"Dispensing 'P{amount:.2f}: {num_fives}x 5-peso, {num_ones}x 1-peso")
         # print(f"DEBUG: Change calculation - Amount: {amount}, 5-peso coins: {num_fives}, 1-peso coins: {num_ones}")
         if status_callback:
             status_callback(f"Preparing to dispense ₱{amount:.2f}...")
@@ -379,7 +356,7 @@ class ChangeDispenser:
                 actual_fives += 1
                 # print(f"DEBUG: Successfully dispensed 5-peso coin {actual_fives}/{num_fives}")
             else:
-                error_msg = f"CRITICAL: Failed to dispense 5-peso coin {i + 1}. Dispensed {actual_fives}/{num_fives} so far."
+                error_msg = f"Failed to dispense 5-peso coin {i + 1}. Dispensed {actual_fives}/{num_fives}."
                 if status_callback: status_callback(error_msg)
                 print(error_msg)
                 # Continue and try to make up with ₱1 coins later
@@ -389,7 +366,7 @@ class ChangeDispenser:
         makeup_ones = max(0, (num_fives - actual_fives) * 5)
         total_ones_to_dispense = num_ones + makeup_ones
         if makeup_ones > 0:
-            print(f"INFO: Making up shortfall of ₱5 coins with {makeup_ones} additional ₱1 coins")
+            print(f"Making up shortfall of ₱5 coins with {makeup_ones} additional ₱1 coins")
 
         for i in range(total_ones_to_dispense):
             msg = f"Dispensing 1-peso coin ({i + 1} of {total_ones_to_dispense})"
@@ -402,7 +379,7 @@ class ChangeDispenser:
                 actual_ones += 1
                 # print(f"DEBUG: Successfully dispensed 1-peso coin {actual_ones}/{total_ones_to_dispense}")
             else:
-                error_msg = f"CRITICAL: Failed to dispense 1-peso coin {i + 1}. Dispensed {actual_ones}/{total_ones_to_dispense} so far."
+                error_msg = f"Failed to dispense 1-peso coin {i + 1}. Dispensed {actual_ones}/{total_ones_to_dispense}."
                 if status_callback: status_callback(error_msg)
                 print(error_msg)
                 # Continue with what we have instead of failing completely
@@ -413,7 +390,7 @@ class ChangeDispenser:
         expected_change = (num_fives * 5) + (num_ones * 1)
 
         
-        final_msg = f"Change dispensing complete. Dispensed ₱{actual_change:.2f} (₱{actual_fives}x5 + ₱{actual_ones}x1) of ₱{expected_change:.2f} expected."
+        final_msg = f"Change dispensing complete. Dispensed P{actual_change:.2f} (P{actual_fives}x5 + P{actual_ones}x1) of P{expected_change:.2f} expected."
         if status_callback: status_callback(final_msg)
         print(final_msg)
         
@@ -426,10 +403,9 @@ class ChangeDispenser:
         }
     
     def cleanup_all_hoppers(self):
-        print("Cleaning up all hopper controllers...")
         for name, hopper in self.hoppers.items():
             try:
-                hopper.cleanup()
+                hopper.cleanup() # Predefined method to clean up hopper
                 print(f"[{name}] Hopper cleaned up")
             except Exception as e:
                 print(f"[{name}] Error cleaning up hopper: {e}")
@@ -437,11 +413,8 @@ class ChangeDispenser:
     
     def cleanup(self):
         if self.pi:
-            print("Cleaning up all hopper controllers...")
-            # Clean up all hoppers first
-            self.cleanup_all_hoppers()
+            self.cleanup_all_hoppers() # Clean up all hoppers
             
-            # Then stop the pigpio connection
             try:
                 self.pi.stop()
                 print("pigpio connection stopped.")
@@ -449,6 +422,9 @@ class ChangeDispenser:
                 print(f"Error stopping pigpio connection: {e}")
             finally:
                 self.pi = None
+
+    def __del__(self):
+        self.cleanup()
 
 
 class DispenseThread(QThread):

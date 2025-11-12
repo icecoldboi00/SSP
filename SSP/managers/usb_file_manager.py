@@ -7,10 +7,8 @@ import threading
 from datetime import datetime
 
 class USBFileManager:
-    """Handles USB detection and PDF file filtering"""
-    
     def __init__(self):
-        # FIX: Create a unique session ID and a session-specific temp directory
+        # Create a unique session ID and a session-specific temp directory
         self.session_id = datetime.now().strftime('%Y%m%d_%H%M%S')
         temp_base_dir = os.path.join(tempfile.gettempdir(), "PrintingSystem")
         self.destination_dir = os.path.join(temp_base_dir, f"Session_{self.session_id}")
@@ -28,7 +26,6 @@ class USBFileManager:
         self._should_stop = False  # Flag to stop operations
     
     def _safe_pdf_page_count(self, file_path, timeout=5):
-        """Safely get PDF page count with timeout to prevent crashes."""
         result = [1]  # Default fallback
         
         def get_page_count():
@@ -67,7 +64,6 @@ class USBFileManager:
         return result[0]
     
     def get_usb_drives(self):
-        """Detect ONLY actual USB/removable drives - optimized for speed"""
         usb_drives = []
         
         try:
@@ -79,7 +75,6 @@ class USBFileManager:
         return usb_drives
     
     def _get_linux_usb_drives(self):
-        """Linux-specific USB drive detection - light mode"""
         usb_drives = []
         
         try:
@@ -126,7 +121,6 @@ class USBFileManager:
     
     
     def check_for_new_drives(self):
-        """Check if new USB drives have been inserted"""
         current_drives = set(self.get_usb_drives())
         new_drives = current_drives - self.last_known_drives
         removed_drives = self.last_known_drives - current_drives
@@ -136,8 +130,7 @@ class USBFileManager:
         return list(new_drives), list(removed_drives)
     
     def scan_pdf_files(self, source_dir):
-        """Scan for PDF files from USB drive without copying them - light mode"""
-        print(f"\nStarting light PDF scan for {source_dir}")
+        print(f"\nStarting PDF scan for {source_dir}")
         scanned_files = []
 
         # Reset stop flag for new operation
@@ -239,10 +232,6 @@ class USBFileManager:
             return []
     
     def copy_selected_file(self, file_info):
-        """Copy only the selected file to temp directory for printing.
-        Does not mutate the input dict; returns a new dict on success.
-        Skips copying if the file is already in the current session directory.
-        """
         try:
             # Defensive copy; never mutate caller's dict
             result_info = dict(file_info) if isinstance(file_info, dict) else None
@@ -294,7 +283,6 @@ class USBFileManager:
             return None
     
     def stop_all_operations(self):
-        """Stop all file operations to prevent system freezes."""
         try:
             print("Stopping USB file operations...")
             self._should_stop = True
@@ -304,7 +292,6 @@ class USBFileManager:
             print(f"Error stopping USB operations: {e}")
         
     def cleanup_temp_files(self):
-        """Delete all files in the temporary directory after printing"""
         try:
             if os.path.exists(self.destination_dir):
                 print(f"Cleaning up temporary files in {self.destination_dir}")
@@ -330,7 +317,6 @@ class USBFileManager:
             print(f"Error during cleanup: {e}")
     
     def cleanup_all_temp_folders(self):
-        """Clean up all old temporary folders from previous sessions"""
         try:
             # FIX: Use the correct base directory
             temp_base_dir = os.path.join(tempfile.gettempdir(), "PrintingSystem")
@@ -363,7 +349,6 @@ class USBFileManager:
                 print(f"Failed to log error: {log_error}")
     
     def get_temp_folder_info(self):
-        """Get information about the current temporary folder"""
         try:
             if os.path.exists(self.destination_dir):
                 files = os.listdir(self.destination_dir)
@@ -388,12 +373,10 @@ class USBFileManager:
 
     
     def set_current_drive(self, drive_path):
-        """Set the current USB drive being used."""
         self.current_usb_drive = drive_path
         print(f"Set current USB drive: {drive_path}")
     
     def is_drive_safe_to_remove(self):
-        """Check if the current USB drive is safe to remove."""
         if not self.current_usb_drive:
             return True, "No USB drive currently in use"
         
@@ -415,23 +398,19 @@ class USBFileManager:
             return False, f"USB drive access error: {e}"
     
     def mark_file_in_use(self, file_path):
-        """Mark a file as being processed."""
         self.files_in_use.add(file_path)
         print(f"Marked file as in use: {file_path}")
     
     def mark_file_complete(self, file_path):
-        """Mark a file as no longer being processed."""
         self.files_in_use.discard(file_path)
         print(f"Marked file as complete: {file_path}")
     
     def set_operation_in_progress(self, in_progress):
-        """Set the operation in progress flag."""
         self.operation_in_progress = in_progress
         status = "started" if in_progress else "completed"
         print(f"File operation {status}")
     
     def get_safety_warning(self):
-        """Get a safety warning message for the user."""
         if not self.current_usb_drive:
             return None
         
@@ -442,7 +421,6 @@ class USBFileManager:
         return f"DO NOT REMOVE USB DRIVE: {message}"
     
     def force_safe_eject(self):
-        """Force safe ejection by clearing all operations."""
         print("Force safe ejection requested")
         self.files_in_use.clear()
         self.operation_in_progress = False
@@ -450,7 +428,6 @@ class USBFileManager:
         print("USB drive marked as safe to remove")
     
     def force_cleanup_all_resources(self):
-        """Force cleanup of all resources to prevent memory leaks."""
         try:
             print("Force cleaning up all USB file manager resources...")
             
@@ -479,7 +456,6 @@ class USBFileManager:
                 print(f"Failed to log error: {log_error}")
     
     def _create_new_session(self):
-        """Create a new session directory for each USB drive."""
         # Generate new session ID with current timestamp
         self.session_id = datetime.now().strftime('%Y%m%d_%H%M%S')
         temp_base_dir = os.path.join(tempfile.gettempdir(), "PrintingSystem")
@@ -495,15 +471,12 @@ class USBFileManager:
         self.current_usb_drive = None
     
     def get_current_session_directory(self):
-        """Get the current session directory path."""
         return self.destination_dir
     
     def get_current_session_id(self):
-        """Get the current session ID."""
         return self.session_id
     
     def cleanup_session_directory(self):
-        """Clean up the current session directory after successful printing."""
         try:
             session_dir = self.get_current_session_directory()
             if session_dir and os.path.exists(session_dir):
@@ -518,7 +491,6 @@ class USBFileManager:
             return False
     
     def verify_file_in_session(self, file_path):
-        """Verify that a file exists in the current session directory."""
         if not file_path:
             return False
         
@@ -537,7 +509,6 @@ class USBFileManager:
         return True
     
     def _auto_eject_usb_drive(self, usb_path):
-        """Automatically eject USB drive after files are copied."""
         try:
             print(f"Auto-ejecting USB drive: {usb_path}")
             

@@ -55,11 +55,8 @@ class PaymentHandler(QObject):
         # Processing thread
         self.processing_thread = None
         self.stop_processing = False
-        
-        print("PaymentHandler initialized (exact coinbill.py implementation)")
     
     def initialize(self) -> bool:
-        """Initialize GPIO connection and setup (exact from coinbill.py)."""
         if not self.gpio_available:
             print("PaymentHandler: GPIO not available - running in simulation mode")
             return False
@@ -68,10 +65,10 @@ class PaymentHandler(QObject):
             # Initialize pigpio (exact from coinbill.py)
             self.pi = pigpio.pi()
             if not self.pi.connected:
-                print("PaymentHandler: Failed to connect to pigpio daemon")
+                print("Failed to connect to pigpio daemon")
                 return False
             
-            print("PaymentHandler: Successfully connected to pigpio daemon")
+            print("Successfully connected to pigpio daemon")
             
             # Setup GPIO pins (exact from coinbill.py + coin inhibit)
             self._setup_gpio_pins()
@@ -82,15 +79,14 @@ class PaymentHandler(QObject):
             # Start processing thread
             self._start_processing_thread()
             
-            print("PaymentHandler: Payment system initialization complete")
+            print("Payment system initialization complete")
             return True
             
         except Exception as e:
-            print(f"PaymentHandler: Initialization failed - {e}")
+            print(f"Initialization failed - {e}")
             return False
     
     def _setup_gpio_pins(self):
-        """Setup GPIO pins (exact from coinbill.py + coin inhibit)."""
         try:
             # Coin acceptor setup (exact from coinbill.py)
             self.pi.set_mode(self.COIN_PIN, pigpio.INPUT)
@@ -107,15 +103,14 @@ class PaymentHandler(QObject):
             
             self.bill_callback = self.pi.callback(self.BILL_PIN, pigpio.FALLING_EDGE, self._bill_pulse_detected)
             
-            print(f"PaymentHandler: GPIO pins configured - Coin: {self.COIN_PIN}, Bill: {self.BILL_PIN}")
-            print(f"PaymentHandler: Inhibit pins - Coin: {self.COIN_INHIBIT_PIN}, Bill: {self.BILL_INHIBIT_PIN}")
+            print(f"GPIO pins configured - Coin: {self.COIN_PIN}, Bill: {self.BILL_PIN}")
+            print(f"Inhibit pins - Coin: {self.COIN_INHIBIT_PIN}, Bill: {self.BILL_INHIBIT_PIN}")
             
         except Exception as e:
-            print(f"PaymentHandler: GPIO setup failed - {e}")
+            print(f"GPIO setup failed - {e}")
             raise
     
     def _coin_pulse_detected(self, gpio, level, tick):
-        """Handle coin pulse detection (exact from coinbill.py)."""
         if gpio != self.COIN_PIN:
             return
         
@@ -126,10 +121,9 @@ class PaymentHandler(QObject):
         if current_time - self.coin_last_pulse_time > self.DEBOUNCE_TIME:
             self.coin_pulse_count += 1
             self.coin_last_pulse_time = current_time
-            print(f"PaymentHandler: Coin pulse detected - Count: {self.coin_pulse_count}")
+            print(f"Coin pulse detected - Count: {self.coin_pulse_count}")
     
     def _bill_pulse_detected(self, gpio, level, tick):
-        """Handle bill pulse detection (exact from coinbill.py)."""
         if gpio != self.BILL_PIN:
             return
         
@@ -140,56 +134,53 @@ class PaymentHandler(QObject):
         if current_time - self.bill_last_pulse_time > self.DEBOUNCE_TIME:
             self.bill_pulse_count += 1
             self.bill_last_pulse_time = current_time
-            print(f"PaymentHandler: Bill pulse detected - Count: {self.bill_pulse_count}")
+            print(f"Bill pulse detected - Count: {self.bill_pulse_count}")
     
     def _start_processing_thread(self):
-        """Start the processing thread (exact from coinbill.py main loop)."""
         self.stop_processing = False
         self.processing_thread = threading.Thread(target=self._processing_loop, daemon=True)
         self.processing_thread.start()
-        print("PaymentHandler: Processing thread started")
+        print("Processing thread started")
     
     def _processing_loop(self):
-        """Main processing loop (exact from coinbill.py)."""
         while not self.stop_processing:
             try:
                 now = time.time()
                 
                 # Process coin pulses (exact from coinbill.py)
                 if self.coin_pulse_count > 0 and (now - self.coin_last_pulse_time > self.COIN_TIMEOUT):
-                    print(f"PaymentHandler: Processing coin with {self.coin_pulse_count} pulses")
+                    print(f"Processing coin with {self.coin_pulse_count} pulses")
                     value, is_special = self._get_coin_value(self.coin_pulse_count)
                     if value > 0:
                         if is_special:
-                            print(f"PaymentHandler: Processing special coin - {value} peso (cannot be given as change)")
+                            print(f"Processing special coin - {value} peso (cannot be given as change)")
                             self.special_coin_inserted.emit(value)
                         else:
-                            print(f"PaymentHandler: Processing regular coin - {value} peso")
+                            print(f"Processing regular coin - {value} peso")
                             self.coin_inserted.emit(value)
                     else:
-                        print(f"PaymentHandler: Coin with {self.coin_pulse_count} pulses not recognized as valid coin")
+                        print(f"Coin with {self.coin_pulse_count} pulses not recognized as valid coin")
                     self.coin_pulse_count = 0
                 
                 # Process bill pulses (exact from coinbill.py)
                 if self.bill_pulse_count > 0 and (now - self.bill_last_pulse_time > self.PULSE_TIMEOUT):
-                    print(f"PaymentHandler: Processing bill with {self.bill_pulse_count} pulses")
+                    print(f"Processing bill with {self.bill_pulse_count} pulses")
                     value = self._get_bill_value(self.bill_pulse_count)
                     if value > 0:
-                        print(f"PaymentHandler: Processing bill - {value} peso")
+                        print(f"Processing bill - {value} peso")
                         self.bill_inserted.emit(value)
                     else:
-                        print(f"PaymentHandler: Bill with {self.bill_pulse_count} pulses not recognized as valid bill")
+                        print(f"Bill with {self.bill_pulse_count} pulses not recognized as valid bill")
                     self.bill_pulse_count = 0
                 
                 time.sleep(0.05)  # Exact from coinbill.py
                 
             except Exception as e:
-                print(f"PaymentHandler: Error in processing loop - {e}")
+                print(f"Error in processing loop - {e}")
                 time.sleep(0.1)
     
     def _get_coin_value(self, pulses: int) -> tuple:
-        """Convert pulse count to coin value (exact from coinbill.py)."""
-        print(f"PaymentHandler: Processing {pulses} pulses for coin value")
+        print(f"Processing {pulses} pulses for coin value")
         
         # Exact implementation from coinbill.py
         if 3 <= pulses <= 4:
@@ -203,11 +194,10 @@ class PaymentHandler(QObject):
         elif 14 <= pulses <= 15:
             return (5, True)  # (value, is_special) - special 5 peso that cannot be given as change
         else:
-            print(f"PaymentHandler: Unknown coin pulse count: {pulses}")
+            print(f"Unknown coin pulse count: {pulses}")
             return (0, False)  # (value, is_special)
     
     def _get_bill_value(self, pulses: int) -> int:
-        """Convert pulse count to bill value (exact from coinbill.py)."""
         if pulses == 2:
             return 20  # ₱20 bill
         elif pulses == 5:
@@ -217,13 +207,12 @@ class PaymentHandler(QObject):
         elif pulses == 50:
             return 500  # ₱500 bill
         else:
-            print(f"PaymentHandler: Unknown bill pulse count: {pulses}")
+            print(f"Unknown bill pulse count: {pulses}")
             return 0
     
     def enable_payments(self):
-        """Enable both coin and bill acceptors."""
         if not self.gpio_available or not self.pi:
-            print("PaymentHandler: Cannot enable payments - GPIO not available")
+            print("Cannot enable payments - GPIO not available")
             return False
         
         try:
@@ -241,20 +230,19 @@ class PaymentHandler(QObject):
             
             self.accepting_payments = True
             
-            print("PaymentHandler: Payment acceptors enabled")
+            print("Payment acceptors enabled")
             self.payment_status.emit("Payment acceptors enabled - Insert coins or bills")
             self.acceptor_state_changed.emit(True)
             
             return True
             
         except Exception as e:
-            print(f"PaymentHandler: Failed to enable payments - {e}")
+            print(f"Failed to enable payments - {e}")
             return False
     
     def disable_payments(self):
-        """Disable both coin and bill acceptors."""
         if not self.gpio_available or not self.pi:
-            print("PaymentHandler: Cannot disable payments - GPIO not available")
+            print("Cannot disable payments - GPIO not available")
             return False
         
         try:
@@ -268,18 +256,17 @@ class PaymentHandler(QObject):
             
             self.accepting_payments = False
             
-            print("PaymentHandler: Payment acceptors disabled")
+            print("Payment acceptors disabled")
             self.payment_status.emit("Payment acceptors disabled")
             self.acceptor_state_changed.emit(False)
             
             return True
             
         except Exception as e:
-            print(f"PaymentHandler: Failed to disable payments - {e}")
+            print(f"Failed to disable payments - {e}")
             return False
     
     def disable_all_acceptors(self):
-        """Disable all acceptors (startup state)."""
         if self.gpio_available and self.pi:
             try:
                 self.pi.write(self.COIN_INHIBIT_PIN, 0)  # Disable coin acceptor (active low)
@@ -287,12 +274,11 @@ class PaymentHandler(QObject):
                 self.coin_enabled = False
                 self.bill_enabled = False
                 self.accepting_payments = False
-                print("PaymentHandler: All acceptors disabled")
+                print("All acceptors disabled")
             except Exception as e:
-                print(f"PaymentHandler: Error disabling acceptors - {e}")
+                print(f"Error disabling acceptors - {e}")
     
     def get_status(self) -> Dict:
-        """Get current payment handler status."""
         return {
             'gpio_available': self.gpio_available,
             'connected': self.pi.connected if self.pi else False,
@@ -303,25 +289,22 @@ class PaymentHandler(QObject):
         }
     
     def test_coin_detection(self, value: int = 1):
-        """Test coin detection by simulating a coin insertion."""
         if self.accepting_payments:
-            print(f"PaymentHandler: Testing coin detection - {value} peso")
+            print(f"Testing coin detection - {value} peso")
             self.coin_inserted.emit(value)
         else:
-            print("PaymentHandler: Cannot test - payments not enabled")
+            print("Cannot test - payments not enabled")
     
     def test_bill_detection(self, value: int = 20):
-        """Test bill detection by simulating a bill insertion."""
         if self.accepting_payments:
-            print(f"PaymentHandler: Testing bill detection - {value} peso")
+            print(f"Testing bill detection - {value} peso")
             self.bill_inserted.emit(value)
         else:
-            print("PaymentHandler: Cannot test - payments not enabled")
+            print("Cannot test - payments not enabled")
     
     def cleanup(self):
-        """Clean up GPIO resources."""
         try:
-            print("PaymentHandler: Starting cleanup...")
+            print("Starting cleanup")
             # Stop processing thread
             self.stop_processing = True
             if hasattr(self, 'processing_thread') and self.processing_thread and getattr(self.processing_thread, 'is_alive', lambda : False)():
@@ -331,20 +314,20 @@ class PaymentHandler(QObject):
                 try:
                     self.disable_all_acceptors()
                 except Exception as e:
-                    print(f"PaymentHandler: Error disabling acceptors - {e}")
+                    print(f"Error disabling acceptors - {e}")
                 # Clean up callbacks
                 if getattr(self, 'coin_callback', None):
                     try:
                         self.coin_callback.cancel()
                     except Exception as e:
-                        print(f"PaymentHandler: Error canceling coin callback - {e}")
+                        print(f"Error canceling coin callback - {e}")
                     finally:
                         self.coin_callback = None
                 if getattr(self, 'bill_callback', None):
                     try:
                         self.bill_callback.cancel()
                     except Exception as e:
-                        print(f"PaymentHandler: Error canceling bill callback - {e}")
+                        print(f"Error canceling bill callback - {e}")
                     finally:
                         self.bill_callback = None
                 # Close pigpio connection
@@ -352,7 +335,7 @@ class PaymentHandler(QObject):
                     if hasattr(self.pi, 'connected') and self.pi.connected:
                         self.pi.stop()
                 except Exception as e:
-                    print(f"PaymentHandler: Error stopping pigpio - {e}")
+                    print(f"Error stopping pigpio - {e}")
                 finally:
                     self.pi = None
             # Reset all state
@@ -361,15 +344,14 @@ class PaymentHandler(QObject):
             self.accepting_payments = False
             self.coin_pulse_count = 0
             self.bill_pulse_count = 0
-            print("PaymentHandler: Cleanup complete")
+            print("Cleanup complete")
         except Exception as e:
-            print(f"PaymentHandler: Cleanup error - {e}")
+            print(f"Cleanup error - {e}")
         finally:
             # Ensure we're in a clean state
             self.gpio_available = False
     
     def __del__(self):
-        """Destructor to ensure cleanup."""
         self.cleanup()
 
 
@@ -377,23 +359,22 @@ class PaymentHandler(QObject):
 _payment_handler_instance = None
 
 def get_payment_handler() -> PaymentHandler:
-    """Get the global payment handler instance."""
     global _payment_handler_instance
     
     # Always create a fresh instance to ensure we have the latest code
     if _payment_handler_instance is not None:
-        print("PaymentHandler: Cleaning up existing instance before creating new one")
+        print("Cleaning up existing instance before creating new one")
         try:
             _payment_handler_instance.cleanup()
         except Exception as e:
-            print(f"PaymentHandler: Error during cleanup - {e}")
+            print(f"Error during cleanup - {e}")
         finally:
             _payment_handler_instance = None
     
     # Create new instance
     _payment_handler_instance = PaymentHandler()
     if not _payment_handler_instance.initialize():
-        print("PaymentHandler: Initialization failed, cleaning up")
+        print("Initialization failed, cleaning up")
         _payment_handler_instance.cleanup()
         _payment_handler_instance = None
         return None
@@ -401,12 +382,11 @@ def get_payment_handler() -> PaymentHandler:
     return _payment_handler_instance
 
 def cleanup_payment_handler():
-    """Clean up the global payment handler instance."""
     global _payment_handler_instance
     if _payment_handler_instance:
         try:
             _payment_handler_instance.cleanup()
         except Exception as e:
-            print(f"PaymentHandler: Error during cleanup - {e}")
+            print(f"Error during cleanup - {e}")
         finally:
             _payment_handler_instance = None

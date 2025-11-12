@@ -35,7 +35,6 @@ class PaymentAlgorithmManager:
             self.MAX_CHANGE_LIMIT = 50.0
     
     def get_coin_inventory(self) -> Dict[int, int]:
-        """Get current coin inventory from database."""
         try:
             inventory = self.db_manager.get_cash_inventory()
             coin_inventory = {}
