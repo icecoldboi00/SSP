@@ -10,9 +10,6 @@ class AdminController(QWidget):
 
         self.model = AdminModel()
         self.view = AdminScreenView()
-        
-        # Connect to database thread manager
-        self._connect_to_database_thread_manager()
 
         layout = QGridLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
@@ -44,20 +41,6 @@ class AdminController(QWidget):
         self.model.coin_count_changed.connect(self.view.update_coin_count_display)
         self.model.cmyk_levels_changed.connect(self.view.update_cmyk_display)
         self.model.show_message.connect(self.view.show_message_box)
-    
-    def _connect_to_database_thread_manager(self):
-        self.main_app.db_threader.cmyk_levels_updated.connect(self._on_cmyk_levels_updated)
-        print("Connected to database thread manager")
-    
-    def _on_cmyk_levels_updated(self, cmyk_data):
-        print(f"Admin screen received CMYK update: {cmyk_data}")
-        if cmyk_data:
-            self.model.cmyk_levels_changed.emit(
-                cmyk_data['cyan'],
-                cmyk_data['magenta'], 
-                cmyk_data['yellow'],
-                cmyk_data['black']
-            )
     
     def on_enter(self):
         print("Admin screen entered. Refreshing data.")

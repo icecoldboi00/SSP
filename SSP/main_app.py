@@ -118,7 +118,7 @@ class PrintingSystemApp(QMainWindow):
             # Handle signal payload (dict from ink_analysis_threader)
             if isinstance(result, dict) and result.get('database_updated', False) and 'cmyk_levels' in result:
                 print(f"CMYK levels updated: {result['cmyk_levels']}")
-                self.db_threader.cmyk_levels_updated.emit(result['cmyk_levels'])
+                # Note: CMYK levels are already updated in database by ink_analysis_threader
         finally:
             # Always clean up temp PDF after analysis completes
             self.printer_manager.cleanup_last_temp_pdf()
@@ -388,10 +388,7 @@ class PrintingSystemApp(QMainWindow):
         try:
             print("Starting application cleanup")
             
-            # Stop database operations first to prevent SQLite thread errors
-            if hasattr(self, 'db_threader'):
-                print("Stopping database threader")
-                self.db_threader.stop()
+            # Stop thread managers
             if hasattr(self, 'ink_analysis_threader'):
                 print("Stopping ink analysis threader")
                 self.ink_analysis_threader.stop()
