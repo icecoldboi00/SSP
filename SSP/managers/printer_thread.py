@@ -172,7 +172,16 @@ class PrinterThread(QThread):
         import time
         
         config = get_config()
-        max_wait_time = config.printer_timeout * 10
+        # Calculate timeout based on number of pages and copies
+        # Base timeout: 1.5 minutes per page, minimum 3 minutes, maximum 30 minutes
+        # This is a safety limit - job will complete as soon as printer is done
+        estimated_pages = len(self.selected_pages) * self.copies
+        base_timeout = max(180, estimated_pages * 90)  # At least 3 min, or 1.5 min per page
+        max_wait_time = min(base_timeout, 1800)  # Cap at 30 minutes (safety limit)
+        max_wait_time = max(max_wait_time, config.printer_timeout * 10)  # At least config timeout
+        
+        print(f"Timeout calculation: {estimated_pages} pages × 1.5 min = {estimated_pages * 90}s, capped at 30 min")
+        
         min_print_time = 15  # Minimum time to wait for physical printing (15 seconds)
         post_completion_wait = 15  # Wait 15 seconds after completion detection to ensure all pages printed
         check_interval = 3
@@ -181,7 +190,7 @@ class PrinterThread(QThread):
         completion_time = None
         media_empty_sms_sent = False
         
-        print(f"Starting print completion monitoring (timeout: {max_wait_time}s, min_print_time: {min_print_time}s)")
+        print(f"Starting print completion monitoring (timeout: {max_wait_time}s, pages: {estimated_pages}, min_print_time: {min_print_time}s)")
         time.sleep(initial_startup_delay)
         elapsed_time += initial_startup_delay
         
@@ -261,8 +270,11 @@ class PrinterThread(QThread):
                                 print(f"Printer '{target_printer}': no alerts")
                             break
                 
+                # Check CUPS job status directly as additional verification
+                cups_job_still_active = self._check_cups_job_status(job_id)
+                
                 # Enhanced completion logic with minimum wait time
-                if not printer_actively_printing:
+                if not printer_actively_printing and not cups_job_still_active:
                     # Ensure minimum print time has passed
                     if elapsed_time < min_print_time:
                         print(f"Waiting for minimum print time ({min_print_time}s) - {elapsed_time}s elapsed")
@@ -270,22 +282,28 @@ class PrinterThread(QThread):
                         elapsed_time += check_interval
                         continue
                     
-                    # No printer is actively printing and minimum time has passed
+                    # No printer is actively printing and CUPS job is done, minimum time has passed
                     if completion_time is None:
                         completion_time = elapsed_time
-                        print(f"Print job appears completed after {elapsed_time}s, monitoring for {post_completion_wait}s...")
+                        print(f"Print job appears completed after {elapsed_time}s (printer idle, CUPS job done), monitoring for {post_completion_wait}s...")
                     else:
                         # Check if post-completion monitoring is complete
                         time_since_completion = elapsed_time - completion_time
                         if time_since_completion >= post_completion_wait:
-                            print(f"Print job successful - no printers actively printing for {post_completion_wait}s")
+                            print(f"Print job successful - no printers actively printing and CUPS job completed for {post_completion_wait}s")
                             return True
                 else:
-                    # Printer became active again - reset completion timer
+                    # Printer became active again or CUPS job still active - reset completion timer
                     if completion_time is not None:
-                        print(f"Printer became active again - resetting completion timer")
+                        if printer_actively_printing:
+                            print(f"Printer became active again - resetting completion timer")
+                        if cups_job_still_active:
+                            print(f"CUPS job still active - resetting completion timer")
                         completion_time = None
-                    print(f"Waiting for printer '{target_printer}' to finish printing...")
+                    if printer_actively_printing:
+                        print(f"Waiting for printer '{target_printer}' to finish printing...")
+                    if cups_job_still_active:
+                        print(f"Waiting for CUPS job {job_id} to complete...")
                     
                 time.sleep(check_interval)
                 elapsed_time += check_interval
@@ -296,7 +314,30 @@ class PrinterThread(QThread):
                 elapsed_time += check_interval
         
         print(f"Print job timed out after {max_wait_time} seconds")
+        # Final check: verify CUPS job status one more time
+        if not self._check_cups_job_status(job_id):
+            print(f"CUPS job {job_id} appears completed despite timeout - marking as success")
+            return True
         return False
+    
+    def _check_cups_job_status(self, job_id):
+        """Check if CUPS job is still in the queue"""
+        try:
+            # Check if job is still in CUPS queue
+            result = subprocess.run(['lpstat', '-o'], capture_output=True, text=True, timeout=5)
+            if result.returncode == 0:
+                # Look for the job ID in the output
+                for line in result.stdout.split('\n'):
+                    if job_id in line:
+                        # Job still in queue
+                        return True
+                # Job not found in queue - it's completed
+                return False
+            return False
+        except Exception as e:
+            print(f"Error checking CUPS job status: {e}")
+            # On error, assume job might still be active to be safe
+            return True
 
     def build_print_command(self):
         mode_str = "color" if self.color_mode == "Color" else "monochrome"
