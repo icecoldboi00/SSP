@@ -46,8 +46,9 @@ class PaymentHandler(QObject):
         self.DEBOUNCE_TIME = 0.1    # Minimum time between pulses
         
         # Noise filtering (to handle electrical noise from high current devices)
-        self.MIN_PULSE_WIDTH = 0.01  # Minimum pulse width in seconds (1ms) - filters out noise spikes
-        self.MAX_PULSE_WIDTH = 0.5    # Maximum pulse width in seconds (100ms) - filters out stuck signals
+        # Based on observed data: valid pulses are 10-70ms, noise is < 9ms
+        self.MIN_PULSE_WIDTH = 0.01  # Minimum pulse width in seconds (10ms) - filters out noise spikes < 10ms
+        self.MAX_PULSE_WIDTH = 0.1   # Maximum pulse width in seconds (100ms) - filters out stuck signals > 100ms
         self.PULSE_VERIFY_TIMEOUT = 0.05  # Timeout to verify pulse is valid (50ms)
         
         # Payment state
