@@ -187,6 +187,11 @@ class FileBrowserController(QWidget):
         self.timeout_timer.stop()
 
     def _on_timeout(self):
+        # Safety check: Only navigate if we're still on this screen
+        if self.main_app.stacked_widget.currentWidget() != self:
+            print("File browser timeout fired but we're not on this screen anymore - ignoring")
+            return
+        
         print("File browser screen timeout - returning to idle screen")
         self.main_app.show_screen('idle')
 

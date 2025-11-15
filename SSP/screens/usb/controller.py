@@ -97,6 +97,11 @@ class USBController(QWidget):
                 print(f"Failed to log error: {log_error}")
     
     def _on_timeout(self):
+        # Safety check: Only navigate if we're still on this screen
+        if self.main_app.stacked_widget.currentWidget() != self:
+            print("USB timeout fired but we're not on this screen anymore - ignoring")
+            return
+        
         print("USB screen timeout - returning to idle screen")
         self.main_app.show_screen('idle')
     
