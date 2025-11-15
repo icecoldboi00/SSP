@@ -346,13 +346,17 @@ class PrinterThread(QThread):
             "lp",
             "-d", self.printer_name,
             "-o", f"print-color-mode={mode_str}",
-            self.temp_pdf_path
         ]
         
-        # Add copies if more than 1
-        if self.copies > 1:
-            command.insert(-1, "-n")
-            command.insert(-1, str(self.copies))
+        # Add copies parameter (always add, even if 1, to be explicit)
+        # Use -n flag for number of copies
+        command.extend(["-n", str(self.copies)])
+        
+        # Add file path at the end
+        command.append(self.temp_pdf_path)
+        
+        print(f"Print command: {' '.join(command)}")
+        print(f"Copies value: {self.copies} (type: {type(self.copies)})")
         
         return command
 
