@@ -34,14 +34,21 @@ class PaymentHandler(QObject):
         # Pulse counting variables (exact from coinbill.py)
         self.coin_pulse_count = 0
         self.coin_last_pulse_time = time.time()
+        self.coin_pulse_start_tick = None  # For noise filtering
         
         self.bill_pulse_count = 0
         self.bill_last_pulse_time = time.time()
+        self.bill_pulse_start_tick = None  # For noise filtering
         
         # Timing constants (exact from coinbill.py)
         self.COIN_TIMEOUT = 0.3     # Time to wait for coin completion
         self.PULSE_TIMEOUT = 0.5    # Time to wait for bill completion
         self.DEBOUNCE_TIME = 0.1    # Minimum time between pulses
+        
+        # Noise filtering (to handle electrical noise from high current devices)
+        self.MIN_PULSE_WIDTH = 0.001  # Minimum pulse width in seconds (1ms) - filters out noise spikes
+        self.MAX_PULSE_WIDTH = 0.1    # Maximum pulse width in seconds (100ms) - filters out stuck signals
+        self.PULSE_VERIFY_TIMEOUT = 0.05  # Timeout to verify pulse is valid (50ms)
         
         # Payment state
         self.coin_enabled = False
@@ -91,7 +98,8 @@ class PaymentHandler(QObject):
             # Coin acceptor setup (exact from coinbill.py)
             self.pi.set_mode(self.COIN_PIN, pigpio.INPUT)
             self.pi.set_pull_up_down(self.COIN_PIN, pigpio.PUD_UP)
-            self.coin_callback = self.pi.callback(self.COIN_PIN, pigpio.FALLING_EDGE, self._coin_pulse_detected)
+            # Use EITHER_EDGE to measure pulse width for noise filtering
+            self.coin_callback = self.pi.callback(self.COIN_PIN, pigpio.EITHER_EDGE, self._coin_pulse_detected)
             
             # Bill acceptor setup (exact from coinbill.py)
             self.pi.set_mode(self.BILL_PIN, pigpio.INPUT)
@@ -101,7 +109,8 @@ class PaymentHandler(QObject):
             # Coin acceptor inhibit pin (new addition)
             self.pi.set_mode(self.COIN_INHIBIT_PIN, pigpio.OUTPUT)
             
-            self.bill_callback = self.pi.callback(self.BILL_PIN, pigpio.FALLING_EDGE, self._bill_pulse_detected)
+            # Use EITHER_EDGE to measure pulse width for noise filtering
+            self.bill_callback = self.pi.callback(self.BILL_PIN, pigpio.EITHER_EDGE, self._bill_pulse_detected)
             
             print(f"GPIO pins configured - Coin: {self.COIN_PIN}, Bill: {self.BILL_PIN}")
             print(f"Inhibit pins - Coin: {self.COIN_INHIBIT_PIN}, Bill: {self.BILL_INHIBIT_PIN}")
@@ -117,11 +126,36 @@ class PaymentHandler(QObject):
         if not self.accepting_payments:
             return
         
-        current_time = time.time()
-        if current_time - self.coin_last_pulse_time > self.DEBOUNCE_TIME:
-            self.coin_pulse_count += 1
-            self.coin_last_pulse_time = current_time
-            print(f"Coin pulse detected - Count: {self.coin_pulse_count}")
+        # Noise filtering: Track pulse start time and measure width
+        if level == 0:  # FALLING_EDGE - pulse starts
+            self.coin_pulse_start_tick = tick
+        elif level == 1 and self.coin_pulse_start_tick is not None:  # Rising edge - pulse ends
+            # Calculate pulse width (handle tick wraparound)
+            pulse_width_us = tick - self.coin_pulse_start_tick
+            if pulse_width_us < 0:  # Handle 32-bit wraparound
+                pulse_width_us += 2**32
+            pulse_width_sec = pulse_width_us / 1000000.0  # Convert to seconds
+            
+            # Filter out noise spikes (pulses too short to be valid)
+            if pulse_width_sec < self.MIN_PULSE_WIDTH:
+                print(f"Coin pulse filtered as noise (width: {pulse_width_sec*1000:.2f}ms < {self.MIN_PULSE_WIDTH*1000:.2f}ms)")
+                self.coin_pulse_start_tick = None
+                return
+            
+            # Filter out stuck signals (pulses too long to be valid)
+            if pulse_width_sec > self.MAX_PULSE_WIDTH:
+                print(f"Coin pulse filtered as stuck signal (width: {pulse_width_sec*1000:.2f}ms > {self.MAX_PULSE_WIDTH*1000:.2f}ms)")
+                self.coin_pulse_start_tick = None
+                return
+            
+            # Valid pulse - apply debouncing
+            current_time = time.time()
+            if current_time - self.coin_last_pulse_time > self.DEBOUNCE_TIME:
+                self.coin_pulse_count += 1
+                self.coin_last_pulse_time = current_time
+                print(f"Coin pulse detected - Count: {self.coin_pulse_count}, Width: {pulse_width_sec*1000:.2f}ms")
+            
+            self.coin_pulse_start_tick = None
     
     def _bill_pulse_detected(self, gpio, level, tick):
         if gpio != self.BILL_PIN:
@@ -130,11 +164,36 @@ class PaymentHandler(QObject):
         if not self.accepting_payments:
             return
         
-        current_time = time.time()
-        if current_time - self.bill_last_pulse_time > self.DEBOUNCE_TIME:
-            self.bill_pulse_count += 1
-            self.bill_last_pulse_time = current_time
-            print(f"Bill pulse detected - Count: {self.bill_pulse_count}")
+        # Noise filtering: Track pulse start time and measure width
+        if level == 0:  # FALLING_EDGE - pulse starts
+            self.bill_pulse_start_tick = tick
+        elif level == 1 and self.bill_pulse_start_tick is not None:  # Rising edge - pulse ends
+            # Calculate pulse width (handle tick wraparound)
+            pulse_width_us = tick - self.bill_pulse_start_tick
+            if pulse_width_us < 0:  # Handle 32-bit wraparound
+                pulse_width_us += 2**32
+            pulse_width_sec = pulse_width_us / 1000000.0  # Convert to seconds
+            
+            # Filter out noise spikes (pulses too short to be valid)
+            if pulse_width_sec < self.MIN_PULSE_WIDTH:
+                print(f"Bill pulse filtered as noise (width: {pulse_width_sec*1000:.2f}ms < {self.MIN_PULSE_WIDTH*1000:.2f}ms)")
+                self.bill_pulse_start_tick = None
+                return
+            
+            # Filter out stuck signals (pulses too long to be valid)
+            if pulse_width_sec > self.MAX_PULSE_WIDTH:
+                print(f"Bill pulse filtered as stuck signal (width: {pulse_width_sec*1000:.2f}ms > {self.MAX_PULSE_WIDTH*1000:.2f}ms)")
+                self.bill_pulse_start_tick = None
+                return
+            
+            # Valid pulse - apply debouncing
+            current_time = time.time()
+            if current_time - self.bill_last_pulse_time > self.DEBOUNCE_TIME:
+                self.bill_pulse_count += 1
+                self.bill_last_pulse_time = current_time
+                print(f"Bill pulse detected - Count: {self.bill_pulse_count}, Width: {pulse_width_sec*1000:.2f}ms")
+            
+            self.bill_pulse_start_tick = None
     
     def _start_processing_thread(self):
         self.stop_processing = False
