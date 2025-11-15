@@ -93,7 +93,6 @@ class PrintingSystemApp(QMainWindow):
         self.show_screen('idle')
         
         # Connect printer manager signals immediately after initialization
-        from PyQt5.QtCore import Qt
         self.printer_manager.print_job_successful.connect(self.on_print_successful, Qt.QueuedConnection)
         self.printer_manager.print_job_failed.connect(self.on_print_failed, Qt.QueuedConnection)
         self.printer_manager.print_job_waiting.connect(self.on_print_waiting, Qt.QueuedConnection)
