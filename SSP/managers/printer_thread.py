@@ -145,26 +145,43 @@ class PrinterThread(QThread):
             
             temp_doc = fitz.open()
             
-            # Copy selected pages - handle copies in PDF itself to avoid separator pages
-            # Instead of using CUPS -n flag, duplicate pages in the PDF
-            # Order: All pages of copy 1, then all pages of copy 2, etc.
-            # Example: 2 copies of pages [1,2,3] = [page1, page2, page3, page1, page2, page3]
+            # Copy selected pages
+            # For single-page documents with multiple copies: use CUPS -n flag (don't duplicate in PDF)
+            # For multi-page documents: duplicate pages in PDF to avoid separator pages
+            is_single_page = len(self.selected_pages) == 1
+            
             if self.copies < 1:
                 raise ValueError(f"Invalid copies value: {self.copies}. Must be at least 1.")
             
-            pages_added = 0
-            for copy_num in range(self.copies):
+            if is_single_page and self.copies > 1:
+                # Single page with multiple copies: just copy the page once, use CUPS -n flag
+                print(f"Single page document with {self.copies} copies - using CUPS -n flag")
                 for page_num in pages_0_indexed:
-                    print(f"Copy {copy_num + 1}/{self.copies}: Copying page {page_num + 1} (0-indexed: {page_num})")
+                    print(f"Copying page {page_num + 1} (0-indexed: {page_num})")
                     temp_doc.insert_pdf(original_doc, from_page=page_num, to_page=page_num)
-                    pages_added += 1
-                    
-                    # Verify page was actually added
-                    if len(temp_doc) != pages_added:
-                        raise ValueError(f"Failed to add page {page_num + 1} - page count mismatch")
+            else:
+                # Multi-page or single copy: duplicate pages in PDF itself to avoid separator pages
+                # Order: All pages of copy 1, then all pages of copy 2, etc.
+                # Example: 2 copies of pages [1,2,3] = [page1, page2, page3, page1, page2, page3]
+                pages_added = 0
+                for copy_num in range(self.copies):
+                    for page_num in pages_0_indexed:
+                        print(f"Copy {copy_num + 1}/{self.copies}: Copying page {page_num + 1} (0-indexed: {page_num})")
+                        temp_doc.insert_pdf(original_doc, from_page=page_num, to_page=page_num)
+                        pages_added += 1
+                        
+                        # Verify page was actually added
+                        if len(temp_doc) != pages_added:
+                            raise ValueError(f"Failed to add page {page_num + 1} - page count mismatch")
             
             # Verify page count before saving
-            expected_pages = len(self.selected_pages) * self.copies
+            # For single-page with multiple copies, PDF should have 1 page (CUPS will handle copies)
+            # For multi-page, PDF should have all pages duplicated
+            if is_single_page and self.copies > 1:
+                expected_pages = 1  # Single page, CUPS will duplicate
+            else:
+                expected_pages = len(self.selected_pages) * self.copies
+            
             actual_pages = len(temp_doc)
             print(f"Temp PDF page count: {actual_pages} (expected: {expected_pages})")
             if actual_pages != expected_pages:
@@ -390,6 +407,10 @@ class PrinterThread(QThread):
             "-o", f"print-color-mode={mode_str}",
         ]
         
+        # Calculate total pages to print
+        total_pages = len(self.selected_pages) * self.copies
+        is_single_page_multiple_copies = len(self.selected_pages) == 1 and self.copies > 1
+        
         # Try multiple ways to disable separator pages
         # Some printers use different option names or formats
         # Try both formats: "none" and "none,none" (for start and end)
@@ -405,10 +426,30 @@ class PrinterThread(QThread):
         for opt in separator_disable_options:
             command.extend(["-o", opt])
         
-        # NOTE: Copies are now handled in the PDF itself (pages duplicated)
-        # So we always print 1 copy of the temp PDF (which already has all copies)
-        # This prevents CUPS from adding separator pages between copies
-        command.extend(["-n", "1"])
+        # For 10+ pages, add options to prevent job splitting or page breaks
+        # Some printers add separator pages when jobs are split into batches
+        if total_pages >= 10:
+            print(f"Large job detected ({total_pages} pages) - adding options to prevent job splitting")
+            # Options to prevent job splitting or page breaks
+            anti_split_options = [
+                "page-ranges=1-999999",  # Explicitly set page range to prevent splitting
+                "number-up=1",           # Ensure single page per sheet
+                "sides=one-sided",      # Force one-sided printing
+            ]
+            for opt in anti_split_options:
+                command.extend(["-o", opt])
+        
+        # Handle copies:
+        # - Single page with multiple copies: use CUPS -n flag (same as multi-page behavior)
+        # - Multi-page documents: pages are already duplicated in PDF, so use -n 1
+        if is_single_page_multiple_copies:
+            # Use CUPS -n flag for single-page documents with multiple copies
+            command.extend(["-n", str(self.copies)])
+            print(f"Using CUPS -n {self.copies} for single-page document with multiple copies")
+        else:
+            # Multi-page: copies are handled in PDF itself, so always print 1 copy
+            command.extend(["-n", "1"])
+            print(f"Using CUPS -n 1 (copies handled in PDF)")
         
         # Add file path at the end
         command.append(self.temp_pdf_path)
