@@ -156,15 +156,6 @@ class PrinterThread(QThread):
             for copy_num in range(self.copies):
                 for page_num in pages_0_indexed:
                     print(f"Copy {copy_num + 1}/{self.copies}: Copying page {page_num + 1} (0-indexed: {page_num})")
-                    # Check if page is blank before adding
-                    page = original_doc[page_num]
-                    # Get page text to check if it's blank
-                    page_text = page.get_text().strip()
-                    page_has_content = len(page_text) > 0 or page.get_pixmap().width > 0
-                    
-                    if not page_has_content:
-                        print(f"Warning: Page {page_num + 1} appears to be blank")
-                    
                     temp_doc.insert_pdf(original_doc, from_page=page_num, to_page=page_num)
                     pages_added += 1
                     
