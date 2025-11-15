@@ -32,7 +32,9 @@ class PrinterThread(QThread):
             # Build and execute CUPS print command
             command = self.build_print_command()
             config = get_config()
-            print(f"Printing: {len(self.selected_pages)} pages, {self.copies} copies, {self.color_mode}")
+            # Note: copies are handled in PDF, so temp PDF will have (pages × copies) pages
+            total_pages_in_pdf = len(self.selected_pages) * self.copies
+            print(f"Printing: {len(self.selected_pages)} selected pages × {self.copies} copies = {total_pages_in_pdf} total pages, {self.color_mode}")
             print(f"Command: {' '.join(command)}")
             print(f"Temp PDF: {self.temp_pdf_path}")
             
@@ -143,10 +145,28 @@ class PrinterThread(QThread):
             
             temp_doc = fitz.open()
             
-            # Copy selected pages
-            for page_num in pages_0_indexed:
-                print(f"Copying page {page_num + 1} (0-indexed: {page_num})")
-                temp_doc.insert_pdf(original_doc, from_page=page_num, to_page=page_num)
+            # Copy selected pages - handle copies in PDF itself to avoid separator pages
+            # Instead of using CUPS -n flag, duplicate pages in the PDF
+            # Order: All pages of copy 1, then all pages of copy 2, etc.
+            # Example: 2 copies of pages [1,2,3] = [page1, page2, page3, page1, page2, page3]
+            if self.copies < 1:
+                raise ValueError(f"Invalid copies value: {self.copies}. Must be at least 1.")
+            
+            for copy_num in range(self.copies):
+                for page_num in pages_0_indexed:
+                    print(f"Copy {copy_num + 1}/{self.copies}: Copying page {page_num + 1} (0-indexed: {page_num})")
+                    temp_doc.insert_pdf(original_doc, from_page=page_num, to_page=page_num)
+            
+            # Verify page count before saving
+            expected_pages = len(self.selected_pages) * self.copies
+            actual_pages = len(temp_doc)
+            print(f"Temp PDF page count: {actual_pages} (expected: {expected_pages})")
+            if actual_pages != expected_pages:
+                error_msg = f"Page count mismatch! Expected {expected_pages}, got {actual_pages}"
+                print(f"⚠ ERROR: {error_msg}")
+                temp_doc.close()
+                original_doc.close()
+                raise ValueError(error_msg)
             
             # Save to temporary file
             fd, self.temp_pdf_path = tempfile.mkstemp(suffix=".pdf", prefix="printjob-")
@@ -156,10 +176,26 @@ class PrinterThread(QThread):
             temp_doc.close()
             original_doc.close()
             
-            # Verify temp file was created
+            # Verify temp file was created and check page count
             if os.path.exists(self.temp_pdf_path):
                 file_size = os.path.getsize(self.temp_pdf_path)
                 print(f"Temp PDF created successfully: {file_size} bytes")
+                
+                # Double-check page count by opening the saved file
+                verify_doc = fitz.open(self.temp_pdf_path)
+                verify_page_count = len(verify_doc)
+                verify_doc.close()
+                print(f"Verified temp PDF has {verify_page_count} pages")
+                if verify_page_count != expected_pages:
+                    error_msg = f"Saved PDF has wrong page count! Expected {expected_pages}, got {verify_page_count}"
+                    print(f"⚠ ERROR: {error_msg}")
+                    # Clean up the bad file
+                    try:
+                        os.remove(self.temp_pdf_path)
+                    except:
+                        pass
+                    raise ValueError(error_msg)
+                print(f"✓ Temp PDF verified: {verify_page_count} pages, {self.copies} copies of {len(self.selected_pages)} selected pages")
             else:
                 raise Exception("Temp PDF file was not created")
             
@@ -350,9 +386,10 @@ class PrinterThread(QThread):
             "-o", "job-billing=none",  # Disable billing pages
         ]
         
-        # Add copies parameter (always add, even if 1, to be explicit)
-        # Use -n flag for number of copies
-        command.extend(["-n", str(self.copies)])
+        # NOTE: Copies are now handled in the PDF itself (pages duplicated)
+        # So we always print 1 copy of the temp PDF (which already has all copies)
+        # This prevents CUPS from adding separator pages between copies
+        command.extend(["-n", "1"])
         
         # Add file path at the end
         command.append(self.temp_pdf_path)
