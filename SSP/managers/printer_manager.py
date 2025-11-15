@@ -16,6 +16,8 @@ class PrinterManager(QObject):
         self.printer_name = config.printer_name
         self.print_thread = None
         self.check_printer_availability()
+        # Configure printer to disable separator pages
+        self._disable_separator_pages()
 
     def print_file(self, file_path, copies, color_mode, selected_pages): 
         # Prevent duplicate print jobs
@@ -47,6 +49,24 @@ class PrinterManager(QObject):
         self.print_thread.finished.connect(self.on_thread_finished)
         self.print_thread.start()
 
+    def _disable_separator_pages(self):
+        """Configure printer to disable separator pages permanently"""
+        try:
+            # Use lpoptions to set default printer options
+            # This sets the default for all print jobs to this printer
+            result = subprocess.run(
+                ['lpoptions', '-p', self.printer_name, '-o', 'job-sheets=none'],
+                capture_output=True,
+                text=True,
+                timeout=5
+            )
+            if result.returncode == 0:
+                print(f"Printer '{self.printer_name}' configured to disable separator pages")
+            else:
+                print(f"Warning: Could not configure separator pages: {result.stderr}")
+        except Exception as e:
+            print(f"Error configuring separator pages (non-critical): {e}")
+    
     def check_printer_availability(self):
         try:      
             # Check if CUPS daemon is running

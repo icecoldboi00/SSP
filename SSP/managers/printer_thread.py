@@ -346,6 +346,8 @@ class PrinterThread(QThread):
             "lp",
             "-d", self.printer_name,
             "-o", f"print-color-mode={mode_str}",
+            "-o", "job-sheets=none",  # Disable separator pages (start/end)
+            "-o", "job-billing=none",  # Disable billing pages
         ]
         
         # Add copies parameter (always add, even if 1, to be explicit)
