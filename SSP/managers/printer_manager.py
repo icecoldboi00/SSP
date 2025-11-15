@@ -50,20 +50,73 @@ class PrinterManager(QObject):
         self.print_thread.start()
 
     def _disable_separator_pages(self):
-        """Configure printer to disable separator pages permanently"""
+        """Configure printer to disable separator pages permanently using sudo"""
         try:
-            # Use lpoptions to set default printer options
-            # This sets the default for all print jobs to this printer
+            # First, check what separator page options are available
             result = subprocess.run(
-                ['lpoptions', '-p', self.printer_name, '-o', 'job-sheets=none'],
+                ['sudo', 'lpoptions', '-l', '-p', self.printer_name],
                 capture_output=True,
                 text=True,
                 timeout=5
             )
             if result.returncode == 0:
-                print(f"Printer '{self.printer_name}' configured to disable separator pages")
+                options_output = result.stdout.lower()
+                print(f"Available printer options: {options_output[:200]}...")
+                
+                # Try multiple separator page option names using sudo
+                separator_options = [
+                    'job-sheets=none',
+                    'JobSheets=none',
+                    'job-sheets=none,none',  # Some printers need both start and end
+                    'JobSheets=none,none',
+                ]
+                
+                for opt in separator_options:
+                    result = subprocess.run(
+                        ['sudo', 'lpoptions', '-p', self.printer_name, '-o', opt],
+                        capture_output=True,
+                        text=True,
+                        timeout=5
+                    )
+                    if result.returncode == 0:
+                        print(f"Successfully set separator page option: {opt}")
+                    else:
+                        print(f"Could not set option {opt}: {result.stderr}")
+                
+                # Also try setting billing pages to none
+                billing_options = [
+                    'job-billing=none',
+                    'JobBilling=none',
+                ]
+                for opt in billing_options:
+                    result = subprocess.run(
+                        ['sudo', 'lpoptions', '-p', self.printer_name, '-o', opt],
+                        capture_output=True,
+                        text=True,
+                        timeout=5
+                    )
+                    if result.returncode == 0:
+                        print(f"Successfully set billing page option: {opt}")
+                
+                # Also try using lpadmin with sudo (more direct method)
+                # This modifies the printer configuration directly
+                lpadmin_options = [
+                    'job-sheets=none',
+                    'job-sheets=none,none',
+                ]
+                for opt in lpadmin_options:
+                    result = subprocess.run(
+                        ['sudo', 'lpadmin', '-p', self.printer_name, '-o', opt],
+                        capture_output=True,
+                        text=True,
+                        timeout=5
+                    )
+                    if result.returncode == 0:
+                        print(f"Successfully set separator page via lpadmin: {opt}")
+                    else:
+                        print(f"Could not set via lpadmin {opt}: {result.stderr}")
             else:
-                print(f"Warning: Could not configure separator pages: {result.stderr}")
+                print(f"Warning: Could not query printer options: {result.stderr}")
         except Exception as e:
             print(f"Error configuring separator pages (non-critical): {e}")
     

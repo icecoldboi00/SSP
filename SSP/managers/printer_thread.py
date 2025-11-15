@@ -152,10 +152,25 @@ class PrinterThread(QThread):
             if self.copies < 1:
                 raise ValueError(f"Invalid copies value: {self.copies}. Must be at least 1.")
             
+            pages_added = 0
             for copy_num in range(self.copies):
                 for page_num in pages_0_indexed:
                     print(f"Copy {copy_num + 1}/{self.copies}: Copying page {page_num + 1} (0-indexed: {page_num})")
+                    # Check if page is blank before adding
+                    page = original_doc[page_num]
+                    # Get page text to check if it's blank
+                    page_text = page.get_text().strip()
+                    page_has_content = len(page_text) > 0 or page.get_pixmap().width > 0
+                    
+                    if not page_has_content:
+                        print(f"Warning: Page {page_num + 1} appears to be blank")
+                    
                     temp_doc.insert_pdf(original_doc, from_page=page_num, to_page=page_num)
+                    pages_added += 1
+                    
+                    # Verify page was actually added
+                    if len(temp_doc) != pages_added:
+                        raise ValueError(f"Failed to add page {page_num + 1} - page count mismatch")
             
             # Verify page count before saving
             expected_pages = len(self.selected_pages) * self.copies
@@ -382,9 +397,22 @@ class PrinterThread(QThread):
             "lp",
             "-d", self.printer_name,
             "-o", f"print-color-mode={mode_str}",
-            "-o", "job-sheets=none",  # Disable separator pages (start/end)
-            "-o", "job-billing=none",  # Disable billing pages
         ]
+        
+        # Try multiple ways to disable separator pages
+        # Some printers use different option names or formats
+        # Try both formats: "none" and "none,none" (for start and end)
+        separator_disable_options = [
+            "job-sheets=none,none",  # Disable both start and end separator pages
+            "job-sheets=none",       # Alternative format
+            "JobSheets=none,none",   # Capitalized version
+            "job-billing=none",      # Disable billing pages
+            "JobBilling=none",       # Capitalized billing
+            "separator=none",        # Generic separator option
+            "banner=none",           # Banner page option
+        ]
+        for opt in separator_disable_options:
+            command.extend(["-o", opt])
         
         # NOTE: Copies are now handled in the PDF itself (pages duplicated)
         # So we always print 1 copy of the temp PDF (which already has all copies)
@@ -396,6 +424,20 @@ class PrinterThread(QThread):
         
         print(f"Print command: {' '.join(command)}")
         print(f"Copies value: {self.copies} (type: {type(self.copies)})")
+        print(f"Separator page options included: {len(separator_disable_options)} options")
+        
+        # Verify PDF page count matches expected
+        try:
+            import fitz
+            pdf_doc = fitz.open(self.temp_pdf_path)
+            pdf_page_count = len(pdf_doc)
+            expected_pages = len(self.selected_pages) * self.copies
+            print(f"PDF verification: {pdf_page_count} pages in temp PDF (expected: {expected_pages})")
+            if pdf_page_count != expected_pages:
+                print(f"⚠ WARNING: PDF page count mismatch!")
+            pdf_doc.close()
+        except Exception as e:
+            print(f"Could not verify PDF page count: {e}")
         
         return command
 
