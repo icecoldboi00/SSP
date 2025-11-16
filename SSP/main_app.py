@@ -18,6 +18,7 @@ from managers.usb_file_manager import USBFileManager
 from managers.printer_manager import PrinterManager
 from managers.ink_analysis_threader import InkAnalysisThreadManager
 from managers.sms_manager import cleanup_sms
+from config import get_config
 
 
 class PrintingSystemApp(QMainWindow):
@@ -36,50 +37,36 @@ class PrintingSystemApp(QMainWindow):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("Printing System GUI")
-        
         self.setWindowFlags(Qt.FramelessWindowHint)
         self.setGeometry(100, 100, 1024, 600)
-        self.setMinimumSize(1024, 600) # 1280x720
+        self.setMinimumSize(1024, 600)
+        self.setStyleSheet("""
+            QMainWindow {
+                background-color: transparent;
+            }
+        """)
 
-
-        # Initialize stacked widget for screen management
         self.stacked_widget = QStackedWidget()
         self.setCentralWidget(self.stacked_widget)
 
-        # Initialize all screen controllers
+        self.ink_analysis_threader = InkAnalysisThreadManager()
+        self.ink_analysis_threader.start()
+        
+        self.printer_manager = PrinterManager()
+        self.ink_analysis_threader.analysis_completed.connect(self.printer_manager.cleanup_last_temp_pdf)
+        self.usb_file_manager = USBFileManager()
+        self.low_paper_alert_sent = False
+
         self.idle_screen = IdleController(self)
         self.usb_screen = USBController(self)
         self.file_browser_screen = FileBrowserController(self)
         self.printing_options_screen = PrintOptionsController(self)
         self.payment_screen = PaymentController(self)
         self.admin_screen = AdminController(self)
-        
-        # Initialize thread managers for background operations
-        self.ink_analysis_threader = InkAnalysisThreadManager()
-        self.ink_analysis_threader.start()
-        
-        # Connect thread managers for real-time data updates
-        self._connect_thread_managers()
-        
-        # Initialize printer manager (no dependencies)
-        self.printer_manager = PrinterManager()
-        
-        # Initialize USB file manager for session management
-        self.usb_file_manager = USBFileManager()
-        print("USB file manager initialized successfully")
-
-        
-        # Track low paper alert to prevent multiple SMS
-        self.low_paper_alert_sent = False
-        
-        # Initialize remaining screens that depend on other components
         self.data_viewer_screen = DataViewerController(self, self.admin_screen.db_manager)
-        print("Data viewer screen initialized successfully")
-
-            
         self.thank_you_screen = ThankYouController(self)
 
-        # Add all screens to stacked widget in order (see SCREEN_MAP)
+        # Must be in order of SCREEN_MAP
         self.stacked_widget.addWidget(self.idle_screen)
         self.stacked_widget.addWidget(self.usb_screen)
         self.stacked_widget.addWidget(self.file_browser_screen)
@@ -88,56 +75,28 @@ class PrintingSystemApp(QMainWindow):
         self.stacked_widget.addWidget(self.admin_screen)
         self.stacked_widget.addWidget(self.data_viewer_screen)
         self.stacked_widget.addWidget(self.thank_you_screen)
-        
-        # Show idle screen as initial screen
-        self.show_screen('idle')
-        
-        # Connect printer manager signals immediately after initialization
+
+        # Cross thread signals between main app and printer manager
         self.printer_manager.print_job_successful.connect(self.on_print_successful, Qt.QueuedConnection)
         self.printer_manager.print_job_failed.connect(self.on_print_failed, Qt.QueuedConnection)
-        self.printer_manager.print_job_waiting.connect(self.on_print_waiting, Qt.QueuedConnection)
-        
-        # Connect payment signals after screens are ready
+        self.printer_manager.print_job_waiting.connect(self.thank_you_screen.show_waiting_for_print, Qt.QueuedConnection)
         self.payment_screen.payment_completed.connect(self.on_payment_completed)
-        
-        # Signal connection established successfully
-        print("Signals established successfully")
 
-        # Apply application-wide styles
-        self.setStyleSheet("""
-            QMainWindow {
-                background-color: transparent;
-            }
-        """)
+        self.show_screen('idle')
     
-    def _connect_thread_managers(self):
-        # Connect ink analysis completion for database updates
-        self.ink_analysis_threader.analysis_completed.connect(self._on_ink_analysis_completed)
-
-    
-    def _on_ink_analysis_completed(self, result):
-        """Handle ink analysis completion - update CMYK levels and clean up temp PDF."""
-        try:
-            # Handle signal payload (dict from ink_analysis_threader)
-            if isinstance(result, dict) and result.get('database_updated', False) and 'cmyk_levels' in result:
-                print(f"CMYK levels updated: {result['cmyk_levels']}")
-                # Note: CMYK levels are already updated in database by ink_analysis_threader
-        finally:
-            # Always clean up temp PDF after analysis completes
-            self.printer_manager.cleanup_last_temp_pdf()
-
-    def check_paper_count_and_redirect(self, allow_admin_access=False):
+    # Paper count check and redirect if low
+    def check_paper_count_and_redirect(self):
         paper_count = self.admin_screen.get_paper_count()
-        if paper_count <= 1:
+        if paper_count <= 3: # Stop kiosk at 3 pages
             print(f"Low paper detected: {paper_count} pages remaining. Redirecting to error screen.")
             self.show_screen('thank_you')
-            # Show the no paper error on the thank you screen
             self.thank_you_screen.show_no_paper_error(paper_count)
-            return True
-        return False
+            return True # Redirect to error screen
+        return False # Continue normally
 
+    # Show screen method and calling on_leave and on_enter methods
     def show_screen(self, screen_name):
-        # Call on_leave lifecycle method for current screen
+        # Call on_leave method for current screen
         current_widget = self.stacked_widget.currentWidget()
         if hasattr(current_widget, 'on_leave'):
             current_widget.on_leave()
@@ -152,48 +111,27 @@ class PrintingSystemApp(QMainWindow):
         target_index = self.SCREEN_MAP[screen_name]
         self.stacked_widget.setCurrentIndex(target_index)
         
-        # Call on_enter lifecycle method for new screen
-        new_widget = self.stacked_widget.currentWidget()
-        if hasattr(new_widget, 'on_enter'):
-            try:
-                new_widget.on_enter()
-            except Exception as e:
-                print(f"ERROR: show_screen - new_widget.on_enter() failed with error: {e}")
-                import traceback
-                traceback.print_exc()
+        # Call on_enter method for new screen
+        next_widget = self.stacked_widget.currentWidget()
+        if hasattr(next_widget, 'on_enter'):
+            next_widget.on_enter()
+ 
 
     def on_payment_completed(self, payment_info):
-        # Store payment info for later use in transaction logging and inventory updates
         self.current_payment_info = payment_info
-        print(f"Stored payment info: {payment_info}")
         
-        # CRITICAL FIX: Update database immediately after payment completion
-        # This ensures database is updated even if printing fails
-        print(f"Updating database immediately")
-        self._update_database_after_payment(payment_info)
-        
-        # Navigate to thank you screen first (before checking printer)
-        print(f"Navigating to thank you screen...")
+        # Show thank you screen after payment
         self.show_screen('thank_you')
         
         # Verify file exists before printing
         file_path = payment_info['pdf_data']['path']
-        print(f"Verifying file before printing: {file_path}")
-        
-        # Use USB file manager to verify file is in current session
-        if hasattr(self, 'usb_file_manager') and self.usb_file_manager:
-            if not self.usb_file_manager.verify_file_in_session(file_path):
-                print(f"PDF file not found in current session: {file_path}")
-                self.thank_you_screen.show_printing_error(f"PDF file not found: {os.path.basename(file_path)}")
-                return
-        elif not os.path.exists(file_path):
-            print(f"PDF file not found: {file_path}")
+        if not self.usb_file_manager.verify_file_in_session(file_path):
+            print(f"PDF file not found in current session: {file_path}")
             self.thank_you_screen.show_printing_error(f"PDF file not found: {os.path.basename(file_path)}")
             return
         
         # Check printer availability before starting print job
         if not self.printer_manager.check_printer_availability():
-            print(f"Printer not available")
             self.thank_you_screen.show_printing_error("Printer is not available. Please check printer connection.")
             return
         
@@ -204,7 +142,7 @@ class PrintingSystemApp(QMainWindow):
             'copies': payment_info['copies'],
             'color_mode': payment_info['color_mode']
         }
-        print(f"Print job details stored")
+        print(f"Print job details stored!!!!!!!!")
         
         # Start print job
         try:
@@ -219,97 +157,58 @@ class PrintingSystemApp(QMainWindow):
             print(f"Error starting print job: {e}")
             self.thank_you_screen.show_printing_error(f"Failed to start print job: {str(e)}")
 
-    def _update_database_after_payment(self, payment_info):
-        try:
-            # 1. Log transaction immediately (using PaymentModel)
-            if hasattr(self, 'payment_screen') and self.payment_screen:
-                self.payment_screen.model.log_transaction(payment_info)
-            else:
-                print(f"No payment screen available for transaction logging")
-            
-            # 2. Update coin inventory (add received coins) (using PaymentModel)
-            if hasattr(self, 'payment_screen') and self.payment_screen:
-                self.payment_screen.model.update_coin_inventory_after_payment()
-            else:
-                print(f"No payment screen available for coin inventory update")
-            
-            # Note: Paper count is updated after successful printing, not after payment
-            # This ensures paper is only decremented if printing actually succeeds
-            
-            print(f"Database updated")
-            
-        except Exception as e:
-            print(f"Error updating database: {e}")
-            import traceback
-            traceback.print_exc()
-
-
-
-    def _cleanup_session_directory_after_print(self):
-        if hasattr(self, 'usb_file_manager') and self.usb_file_manager:
-            self.usb_file_manager.cleanup_session_directory()
-        else:
-            print(f"No USB file manager available for cleanup")
-
+ 
     def on_print_successful(self):
-        print("Print job successfully completed")
-        
-        # Update paper count after successful printing (before clearing print job)
+        # Update paper count before clearing print job info
         self._update_paper_count_after_print()
         
-        # Clean up session directory after successful printing
-        self._cleanup_session_directory_after_print()
+        # Clean up session directory
+        self.usb_file_manager.cleanup_session_directory()
         
-        # Trigger ink analysis for the printed job (before clearing print job info)
+        # Trigger ink analysis before clearing print job info
         self._trigger_ink_analysis()
         
-        # Clear the print job after successful completion to prevent re-printing
+        # Clear the print job to prevent re-printing
         self.current_print_job = None
         
-        # Note: thank_you screen's _on_print_success() handles the UI update automatically
-        # via the print_job_successful signal connection, so no need to call finish_printing() here
         current_screen = self.stacked_widget.currentWidget()
         
         if current_screen == self.idle_screen:
-            # Print completed while on idle screen - this is normal, no need to show thank you screen
             print("Print completed while on idle screen - no action needed")
         elif current_screen != self.thank_you_screen:
-            # Print job completed but we're on wrong screen - navigate to thank you screen
             print(f"Print completed on wrong screen, navigating to thank you screen")
             self.show_screen('thank_you')
 
     def _trigger_ink_analysis(self):
-        if not hasattr(self, 'current_print_job') or not self.current_print_job:
+        # Check if print job info exists
+        if not self.current_print_job:
             print("No print job info available for ink analysis")
             return
         
-        # Get the temp PDF path from printer manager
-        if not hasattr(self.printer_manager, 'last_temp_pdf_path') or not self.printer_manager.last_temp_pdf_path:
+        # Check if temp PDF path exists
+        temp_pdf_path = getattr(self.printer_manager, 'last_temp_pdf_path', None)
+        if not temp_pdf_path:
             print("No temp PDF available for ink analysis")
             return
         
-        temp_pdf_path = self.printer_manager.last_temp_pdf_path
-        
         try:
-            # Use temp PDF (already has only selected pages!) instead of original file
-            # This works even if USB drive is removed
-            # Note: Completion is handled via signal connection in _connect_thread_managers()
+            # Use temp PDF (already has only selected pages) instead of original file
+            # This works even if USB drive is removed sheesh
+            config = get_config()
             self.ink_analysis_threader.analyze_and_update(
                 pdf_path=temp_pdf_path,
-                selected_pages=None,  # All pages in temp PDF (already filtered)
+                selected_pages=None,  # All pages in temp PDF 
                 copies=self.current_print_job['copies'],
-                dpi=150,
-                color_mode=self.current_print_job['color_mode']
+                dpi=config.pdf_analysis_dpi
             )
         except Exception as e:
-            print(f"Error triggering ink analysis: {e}")
-            # Clean up temp PDF even if analysis fails
+            print(f"Error on ink analysis: {e}")
             self.printer_manager.cleanup_last_temp_pdf()
     
     def _update_paper_count_after_print(self):
-        """Update paper count after successful printing."""
-        if not hasattr(self, 'current_print_job') or not self.current_print_job:
-            print("No print job info available for paper count update")
+        # Check if print job info exists
+        if not self.current_print_job:
+            print("No print job info available for ink analysis")
             return
         
         try:
@@ -318,50 +217,30 @@ class PrintingSystemApp(QMainWindow):
             copies = self.current_print_job.get('copies', 1)
             total_pages = len(selected_pages) * copies
             
-            print(f"Updating paper count: -{total_pages} pages (pages: {len(selected_pages)}, copies: {copies})")
+            print(f"Decrementing paper count: -{total_pages} pages")
             
-            # Update paper count using AdminModel
-            if hasattr(self, 'admin_screen') and self.admin_screen:
-                # Get current paper count before update
-                current_count = self.admin_screen.get_paper_count()
+            success = self.admin_screen.model.decrement_paper_count(total_pages)
+            
+            if success:
+                updated_count = self.admin_screen.get_paper_count()
+                print(f"Paper count updated to: {updated_count}")
                 
-                # Decrement paper count (AdminModel handles the database update and low paper alerts)
-                success = self.admin_screen.model.decrement_paper_count(total_pages)
-                
-                if success:
-                    # Get updated count after decrement
-                    updated_count = self.admin_screen.get_paper_count()
-                    print(f"Paper count updated: {current_count} -> {updated_count}")
-                    
-                    # Check for low paper alert flag (application-level state management)
-                    if updated_count <= 10 and not self.low_paper_alert_sent:
-                        print(f"Low paper alert flag set: {updated_count} sheets remaining")
-                        self.low_paper_alert_sent = True
-                    elif updated_count > 10:
-                        # Reset flag if paper count goes back above threshold
-                        self.low_paper_alert_sent = False
-                else:
-                    print("Failed to update paper count")
+                if updated_count <= 10 and not self.low_paper_alert_sent:
+                    print(f"Low paper alert flag set: {updated_count} sheets remaining")
+                    self.low_paper_alert_sent = True
+                elif updated_count > 10:
+                    self.low_paper_alert_sent = False
             else:
-                print("No admin screen available for paper count update")
+                print("Failed to update paper count")
                 
         except Exception as e:
             print(f"Error updating paper count: {e}")
 
 
-    def on_print_waiting(self):
-        print("Waiting for print job to complete")
-        
-        if self.stacked_widget.currentWidget() == self.thank_you_screen:
-            self.thank_you_screen.show_waiting_for_print()
-        else:
-            print(f"Print waiting signal on wrong screen ({type(self.stacked_widget.currentWidget()).__name__})")
-
     def on_print_failed(self, error_message):
         print(f"Print job failed: {error_message}")
         
-        # Clean up session directory after print failure
-        self._cleanup_session_directory_after_print()
+        self.usb_file_manager.cleanup_session_directory()
         
         # Send SMS notification for all print failures
         try:
@@ -387,21 +266,17 @@ class PrintingSystemApp(QMainWindow):
         else:
             print(f"Print failed on wrong screen. Error: {error_message}")
 
+    # Clean up resources before closing window
     def cleanup(self):
         try:
-            print("Starting application cleanup")
-            
-            # Stop thread managers
-            if hasattr(self, 'ink_analysis_threader'):
-                print("Stopping ink analysis threader")
-                self.ink_analysis_threader.stop()
-            
-            # Stop USB monitoring thread
-            if hasattr(self, 'usb_screen') and hasattr(self.usb_screen, 'model'):
-                print("Stopping USB monitoring")
-                self.usb_screen.model.stop_usb_monitoring()
-            
-            # Clean up database connections before other cleanup
+            print("Starting cleanup")
+
+            self.ink_analysis_threader.stop()
+
+            self.usb_screen.model.stop_usb_monitoring()
+
+            cleanup_sms()
+
             try:
                 from utils.error_logger import cleanup_db_connections
                 print("Cleaning up database connections")
@@ -409,27 +284,17 @@ class PrintingSystemApp(QMainWindow):
             except Exception as db_cleanup_error:
                 print(f"Error cleaning up database connections: {db_cleanup_error}")
             
-            # Clean up SMS system
-            print("Cleaning up SMS system")
-            cleanup_sms()
-            
-            # Clean up persistent GPIO last
-            print("Cleaning up persistent GPIO")
-            # GPIO threads are cleaned up by individual screens
-            
-            print("Application cleanup completed")
-                
         except Exception as e:
             print(f"Error during cleanup: {e}")
 
-    def closeEvent(self, event):
+    # Cleanup when window is closed just for safety while testing
+    def closeEvent(self, event): 
         self.cleanup()
         event.accept()
 
 
 def main():
     try:
-        print("\nInitializing database...")
         init_db()
         print("Database initialization successful\n")
     

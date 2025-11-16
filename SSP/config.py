@@ -12,7 +12,6 @@ class Config:
     def _check_env_file_exists(self):
         if not os.path.exists(self.env_file):
             print(f"Configuration file '{self.env_file}' not found!")
-            print("Please create a .env file with your configuration settings.")
             sys.exit(1)
     
     def _load_env_file(self):

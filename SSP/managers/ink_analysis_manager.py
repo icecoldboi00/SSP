@@ -187,7 +187,7 @@ class InkAnalysisManager:
             'timestamp': datetime.now()
         }
     
-    def update_database_after_print(self, analysis_result, copies=1, color_mode="Color"):      
+    def update_database_after_print(self, analysis_result, copies=1):      
         if not self.db_manager:
             print("Warning: No database manager provided, cannot update ink levels")
             return False
@@ -239,7 +239,7 @@ class InkAnalysisManager:
             traceback.print_exc()
             return False
     
-    def analyze_and_update_after_print(self, pdf_path, selected_pages=None, copies=1, dpi=150, color_mode="Color"):
+    def analyze_and_update_after_print(self, pdf_path, selected_pages=None, copies=1, dpi=150):
         # Analyze the PDF
         analysis_result = self.analyze_pdf_ink_usage(pdf_path, selected_pages, dpi)
         
@@ -247,7 +247,7 @@ class InkAnalysisManager:
             return analysis_result
         
         # Update database
-        update_success = self.update_database_after_print(analysis_result, copies, color_mode)
+        update_success = self.update_database_after_print(analysis_result, copies)
         
         analysis_result['database_updated'] = update_success
         

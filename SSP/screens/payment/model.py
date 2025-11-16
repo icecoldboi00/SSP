@@ -517,26 +517,25 @@ class PaymentModel(QObject):
 
 
     def _navigate_to_thank_you(self):
-        try:
-            # Create payment_info with all necessary data including cash_received
-            if self.payment_data:
-                self.payment_info = {
-                    'pdf_data': self.payment_data.get('pdf_data', {}),
-                    'selected_pages': self.payment_data.get('selected_pages', []),
-                    'copies': self.payment_data.get('copies', 1),
-                    'color_mode': self.payment_data.get('color_mode', 'Color'),
-                    'total_cost': self.total_cost,
-                    'amount_received': self.amount_received,
-                    'cash_received': self.cash_received.copy(),  # Include coin data for database update
-                    'change_dispensed': getattr(self, 'change_dispensed', None)
-                }
-                self.payment_completed.emit(self.payment_info)
-            else:
-                print("No payment data available to create payment info")
+        # Create payment_info with all necessary data including cash_received data also passed to main
+        if self.payment_data:
+            self.payment_info = {
+                'pdf_data': self.payment_data.get('pdf_data', {}),
+                'selected_pages': self.payment_data.get('selected_pages', []),
+                'copies': self.payment_data.get('copies', 1),
+                'color_mode': self.payment_data.get('color_mode', 'Color'),
+                'total_cost': self.total_cost,
+                'amount_received': self.amount_received,
+                'cash_received': self.cash_received.copy(),  # Include coin data for database update
+                'change_dispensed': getattr(self, 'change_dispensed', None)
+            }
+            self.log_transaction(self.payment_info)
+            self.update_coin_inventory_after_payment()
+            print(f"Database updated")
+            self.payment_completed.emit(self.payment_info)
+        else:
+            print("No payment data available to create payment info")
 
-            self.main_app.show_screen('thank_you')
-        except Exception as e:
-            print(f"ERROR: Exception in _navigate_to_thank_you: {e}")
 
     def reset_payment_state(self):
         # Reset payment completing flag

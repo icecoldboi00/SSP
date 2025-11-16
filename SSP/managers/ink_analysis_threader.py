@@ -6,10 +6,9 @@ from database.db_manager import DatabaseManager
 
 
 class InkAnalysisOperation:
-    def __init__(self, operation_type, data, callback=None):
+    def __init__(self, operation_type, data):
         self.operation_type = operation_type
         self.data = data
-        self.callback = callback
         self.result = None
         self.error = None
 
@@ -54,10 +53,6 @@ class InkAnalysisThreadManager(QObject):
                 
                 operation.operation_type == "analyze_and_update"
                 self._handle_analyze_and_update(operation)
-
-                # Execute callback if provided
-                if operation.callback:
-                    operation.callback(operation)
                     
             except queue.Empty:
                 continue
@@ -70,19 +65,14 @@ class InkAnalysisThreadManager(QObject):
                     log_error("Ink Analysis Worker Error", str(e), "ink_analysis_threader")
                 except Exception as db_error:
                     print(f"Failed to log error to database: {db_error}")
-                
-                if operation and operation.callback:
-                    operation.error = str(e)
-                    operation.callback(operation)
 
-    def analyze_and_update(self, pdf_path, selected_pages=None, copies=1, dpi=150, color_mode="Color", callback=None):
+    def analyze_and_update(self, pdf_path, selected_pages=None, copies=1, dpi=150):
         operation = InkAnalysisOperation("analyze_and_update", {
             'pdf_path': pdf_path,
             'selected_pages': selected_pages,
             'copies': copies,
-            'dpi': dpi,
-            'color_mode': color_mode
-        }, callback)
+            'dpi': dpi
+        })
         self.operation_queue.put(operation)
         return operation
 
@@ -93,15 +83,13 @@ class InkAnalysisThreadManager(QObject):
             selected_pages = operation.data.get('selected_pages')
             copies = operation.data.get('copies', 1)
             dpi = operation.data.get('dpi', 150)
-            color_mode = operation.data.get('color_mode', 'Color')
             
             # Perform analysis and update database
             result = self.ink_analysis_manager.analyze_and_update_after_print(
                 pdf_path=pdf_path,
                 selected_pages=selected_pages,
                 copies=copies,
-                dpi=dpi,
-                color_mode=color_mode
+                dpi=dpi
             )
             
             operation.result = result
