@@ -1,5 +1,4 @@
 from PyQt5.QtWidgets import QWidget, QGridLayout, QDialog
-from PyQt5.QtCore import Qt
 from .model import IdleModel
 from .view import IdleScreenView
 from screens.dialogs.pin_dialog import PinDialogController as PinDialog

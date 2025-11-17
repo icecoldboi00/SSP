@@ -25,6 +25,7 @@ class AdminController(QWidget):
     def _connect_signals(self):
         self.view.back_clicked.connect(self._go_back)
         self.view.view_data_logs_clicked.connect(self._show_data_viewer)
+
         self.view.paper_decreased.connect(self.model.decrease_paper_count)
         self.view.paper_increased.connect(self.model.increase_paper_count)
         self.view.reset_paper_clicked.connect(self.model.reset_paper_count)
@@ -49,19 +50,9 @@ class AdminController(QWidget):
         self.model.load_cmyk_levels()
         print(f"Paper count: {self.model.db_manager.get_setting('paper_count', default=100)}")
     
-    def refresh_cmyk_levels(self): 
-        self.model.load_cmyk_levels()
-    
     def get_paper_count(self) -> int: # Used in main_app
         fresh_count = self.model.db_manager.get_setting('paper_count', default=100)
-        print(f"Paper count: Returning {fresh_count}")
         return fresh_count
-
-    def check_paper_availability(self, pages_to_print: int) -> bool:
-        return self.model.check_paper_availability(pages_to_print)
-
-    def update_paper_count(self, pages_to_print: int) -> bool:
-        return self.model.decrement_paper_count(pages_to_print)
 
     def _go_back(self):
         self.main_app.show_screen('idle')

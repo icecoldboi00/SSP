@@ -364,12 +364,10 @@ class AdminScreenView(QWidget):
 
 
     def update_paper_count_display(self, count: int, color: str):
-        """Updates the paper count label display."""
         self.paper_count_label.setText(str(count))
         self.paper_count_label.setStyleSheet(f"color: {color}; font-size: 22px; font-weight: bold;")
 
     def update_coin_count_display(self, coin_1_count: int, coin_5_count: int):
-        """Updates the coin count labels."""
         self.coin_1_label.setText(str(coin_1_count))
         self.coin_5_label.setText(str(coin_5_count))
         
