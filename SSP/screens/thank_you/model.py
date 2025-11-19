@@ -92,6 +92,8 @@ class ThankYouModel(QObject):
     
     def show_waiting_for_print(self):
         self.current_state = "waiting"
+        # Hide admin override button during normal printing
+        self.admin_override_hidden.emit()
         self.status_updated.emit(
             "Your document is being processed.",
             "Please remove your USB drive."

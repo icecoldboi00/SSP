@@ -40,8 +40,7 @@ class ThankYouScreenView(QWidget):
 
         # --- Admin Override Button (Hidden by default, shown for errors) ---
         self.admin_override_button = QPushButton("Admin Override")
-        self.admin_override_button.setMinimumHeight(50)
-        self.admin_override_button.setMaximumWidth(200)
+        self.admin_override_button.setMinimumHeight(45)
         self.admin_override_button.setStyleSheet(self.get_admin_button_style())
         self.admin_override_button.clicked.connect(self.admin_override_clicked.emit)
         self.admin_override_button.hide()  # Hidden by default
@@ -84,17 +83,7 @@ class ThankYouScreenView(QWidget):
         self.admin_override_button.hide()
     
     def get_admin_button_style(self):
-        return """
-            QPushButton { 
-                background-color: #8B0000; color: white; font-size: 16px;
-                font-weight: bold; border: 2px solid #A52A2A; border-radius: 6px; 
-                padding: 12px 24px;
-            }
-            QPushButton:hover { 
-                background-color: #A52A2A; 
-                border-color: #DC143C;
-            }
-            QPushButton:pressed { 
-                background-color: #DC143C; 
-            }
-        """
+        return (
+            "QPushButton { background-color: #8B0000; color: white; border: none; border-radius: 6px; font-size: 16px; font-weight: bold; padding: 12px 24px; } "
+            "QPushButton:hover { background-color: #A52A2A; }"
+        )
