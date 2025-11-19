@@ -41,7 +41,7 @@ class PaymentScreenView(QWidget):
         self.total_label = QLabel("Total Amount Due: P0.00")
         self.total_label.setAlignment(Qt.AlignCenter)
         self.total_label.setStyleSheet(
-            "QLabel { color: #36454F; font-size: 56px; font-weight: bold; padding: 12px; margin: 10px 0; min-height: 60px; "
+            "QLabel { color: #1e440a; font-size: 56px; font-weight: bold; padding: 12px; margin: 10px 0; min-height: 60px; "
             "background-color: transparent; border-radius: 5px; }"
         )
         main_layout.addWidget(self.total_label)
@@ -49,7 +49,7 @@ class PaymentScreenView(QWidget):
         # Suggested payment directly under Total Amount Due
         self.suggestion_label = QLabel("")
         self.suggestion_label.setAlignment(Qt.AlignCenter)
-        self.suggestion_label.setStyleSheet("QLabel { color: #1e440a; font-size: 32px; font-weight: bold; padding: 2px 0; }")
+        self.suggestion_label.setStyleSheet("QLabel { color: #36454F; font-size: 32px; font-weight: bold; padding: 2px 0; }")
         main_layout.addWidget(self.suggestion_label)
 
         # Payment status label

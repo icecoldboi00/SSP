@@ -152,7 +152,7 @@ class PaymentModel(QObject):
         # Enable payments using the new controller
         if self.gpio_controller and self.gpio_controller.initialized:
             if self.gpio_controller.enable_payments():
-                status_text = "Payment mode enabled - Insert coins or bills"
+                status_text = "Insert coins or bills"
             else:
                 status_text = "Hardware broken"
         else:
