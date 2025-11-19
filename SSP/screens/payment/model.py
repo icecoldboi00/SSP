@@ -152,14 +152,15 @@ class PaymentModel(QObject):
         # Enable payments using the new controller
         if self.gpio_controller and self.gpio_controller.initialized:
             if self.gpio_controller.enable_payments():
-                status_text = "Insert coins or bills"
+                status_text = ""
             else:
                 status_text = "Hardware broken"
         else:
             status_text = "Hardware broken"
 
         # Emit status update
-        self.payment_status_updated.emit(status_text)
+        if status_text:  # Only emit if there's an error message
+            self.payment_status_updated.emit(status_text)
         self.payment_mode_changed.emit(True)
 
     def disable_payment_mode(self):
@@ -181,7 +182,6 @@ class PaymentModel(QObject):
         
         self.amount_received_updated.emit(self.amount_received)
         self._update_payment_status()
-        self.payment_status_updated.emit(f"P{coin_value} coin received")
     
     def on_special_coin_inserted(self, coin_value):
         if not self.payment_ready:
@@ -193,7 +193,6 @@ class PaymentModel(QObject):
         # Emit signals to update UI
         self.amount_received_updated.emit(self.amount_received)
         self._update_payment_status()
-        self.payment_status_updated.emit(f"P{coin_value} special coin received")
         
     def on_bill_inserted(self, bill_value):
         if not self.payment_ready:
@@ -202,7 +201,6 @@ class PaymentModel(QObject):
         self.amount_received += bill_value
         self.amount_received_updated.emit(self.amount_received)
         self._update_payment_status()
-        self.payment_status_updated.emit(f"P{bill_value} bill received")
 
     def _update_payment_status(self): # Everytime a coin or bill is inserted this is called
         try:

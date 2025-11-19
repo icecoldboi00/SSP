@@ -67,6 +67,14 @@ class PaymentScreenView(QWidget):
         )
         main_layout.addWidget(self.amount_received_label)
 
+        # Insert coins or bills message
+        self.insert_message_label = QLabel("Insert coins or bills.")
+        self.insert_message_label.setAlignment(Qt.AlignCenter)
+        self.insert_message_label.setStyleSheet(
+            "QLabel { color: #36454F; font-size: 20px; font-weight: normal; padding: 5px; background-color: transparent; margin: 5px 0; }"
+        )
+        main_layout.addWidget(self.insert_message_label)
+
         # Change label
         self.change_label = QLabel("")
         self.change_label.setAlignment(Qt.AlignCenter)
