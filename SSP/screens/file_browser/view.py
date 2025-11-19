@@ -172,6 +172,7 @@ class PDFButton(QPushButton):
         if self.text_width > self.available_width and self.available_width > 0:
             self.scroll_position = 0
             self.is_paused = True
+            self.scroll_timer.stop()
             self.pause_timer.start(self.pause_duration)
         else:
             self.scroll_timer.stop()
