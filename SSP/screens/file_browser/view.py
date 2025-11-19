@@ -75,8 +75,7 @@ class PDFButton(QPushButton):
         self.pdf_data = pdf_data
         self.is_selected = False
         filename = pdf_data['filename']
-        self.full_text = filename
-        self.setText("")  # Clear default text, we'll paint it ourselves
+        self.setText(filename)
         self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
         self.setStyleSheet(self.get_normal_style())
         self.clicked.connect(self.on_click)
@@ -86,24 +85,6 @@ class PDFButton(QPushButton):
         self.drag_start_pos = None
         self.is_dragging = False
         self.drag_threshold = 5  # pixels to move before considering it a drag
-        
-        # Scrolling text properties
-        self.scroll_position = 0
-        self.scroll_timer = QTimer(self)
-        self.scroll_timer.timeout.connect(self.update_scroll)
-        self.scroll_speed = 2  # pixels per update
-        self.scroll_delay = 50  # milliseconds between updates
-        self.pause_duration = 2000  # milliseconds to pause at start/end
-        self.pause_timer = QTimer(self)
-        self.pause_timer.setSingleShot(True)
-        self.pause_timer.timeout.connect(self.start_scrolling)
-        self.is_paused = False
-        self.scroll_direction = -1  # -1 for right to left
-        self.text_width = 0
-        self.available_width = 0
-        
-        # Check if scrolling is needed and start if necessary
-        QTimer.singleShot(100, self.check_and_start_scroll)
 
     def get_normal_style(self):
         return """
