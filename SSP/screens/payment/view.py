@@ -52,14 +52,6 @@ class PaymentScreenView(QWidget):
         self.suggestion_label.setStyleSheet("QLabel { color: #36454F; font-size: 32px; font-weight: bold; padding: 2px 0; }")
         main_layout.addWidget(self.suggestion_label)
 
-        # Insert coins or bills message
-        self.insert_message_label = QLabel("Insert coins or bills.")
-        self.insert_message_label.setAlignment(Qt.AlignCenter)
-        self.insert_message_label.setStyleSheet(
-            "QLabel { color: #36454F; font-size: 20px; font-weight: normal; padding: 5px; background-color: transparent; margin: 5px 0; }"
-        )
-        main_layout.addWidget(self.insert_message_label)
-
         # Amount received label
         self.amount_received_label = QLabel("Amount Received: P0.00")
         self.amount_received_label.setAlignment(Qt.AlignCenter)
@@ -78,6 +70,14 @@ class PaymentScreenView(QWidget):
 
         # Add stretch to push buttons to the bottom
         main_layout.addStretch(2)
+
+        # Insert coins or bills message (at bottom)
+        self.insert_message_label = QLabel("Insert coins or bills.")
+        self.insert_message_label.setAlignment(Qt.AlignCenter)
+        self.insert_message_label.setStyleSheet(
+            "QLabel { color: #36454F; font-size: 20px; font-weight: normal; padding: 5px; background-color: transparent; margin: 10px 0; }"
+        )
+        main_layout.addWidget(self.insert_message_label)
 
         # Button layout
         button_layout = QHBoxLayout()
