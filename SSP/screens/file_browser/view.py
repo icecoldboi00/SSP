@@ -668,7 +668,7 @@ class FileBrowserView(QWidget):
                 background-color: #1e440a;
                 padding-left: 12px; padding-right: 12px;
             }}
-            QPushButton:checked, QPushButton:hover {{ background-color: #2a5d1a; }}
+            QPushButton:checked, QPushButton:hover {{ background-color: #4d80cc; }}
         """
 
         self.view_all_btn = QPushButton("All Pages View")

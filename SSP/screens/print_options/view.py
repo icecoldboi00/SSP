@@ -227,7 +227,7 @@ class PrintOptionsScreenView(QWidget):
                 background-color: #1e440a;
                 padding-left: 12px; padding-right: 12px;
             }
-            QPushButton:checked, QPushButton:hover { background-color: #2a5d1a; }
+            QPushButton:checked, QPushButton:hover { background-color: #4d80cc; }
         """
     
     def get_back_button_style(self):
