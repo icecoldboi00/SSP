@@ -199,7 +199,7 @@ class PDFButton(QPushButton):
             font.setBold(True)
         fm = QFontMetrics(font)
         avg_char_width = fm.averageCharWidth()
-        extra_scroll = max(avg_char_width * 2, 35)  # Scroll a bit further so last characters aren't clipped
+        extra_scroll = max(avg_char_width, 20)  # At least 20px or one average character width
         end_position = -(self.text_width - self.available_width + extra_scroll)
         
         # Move scroll position (right to left, so negative direction)
@@ -207,9 +207,6 @@ class PDFButton(QPushButton):
         
         # Check if we've scrolled past the end
         if self.scroll_position <= end_position:
-            # Clamp to end position so last characters are fully visible
-            self.scroll_position = end_position
-            self.update()
             # Pause at the end for 2 seconds, then reset
             self.scroll_timer.stop()
             self.is_paused = True
@@ -259,6 +256,9 @@ class PDFButton(QPushButton):
         # Calculate text position
         padding = 10
         
+        clip_rect = QRect(padding, 0, self.available_width + 8, self.height())
+        painter.setClipRect(clip_rect)
+
         if self.text_width <= self.available_width:
             # Text fits, just align left
             text_rect = QRect(padding, 0, self.width() - 2 * padding, self.height())
@@ -267,8 +267,6 @@ class PDFButton(QPushButton):
             # Text doesn't fit, draw scrolling text (right to left)
             text_x = padding + self.scroll_position
             text_rect = QRect(text_x, 0, self.text_width, self.height())
-            # Clip to button bounds to prevent text from showing outside
-            painter.setClipRect(QRect(padding, 0, self.available_width, self.height()))
             painter.drawText(text_rect, Qt.AlignLeft | Qt.AlignVCenter, self.full_text)
     
     def resizeEvent(self, event):
