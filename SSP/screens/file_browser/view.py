@@ -75,7 +75,8 @@ class PDFButton(QPushButton):
         self.pdf_data = pdf_data
         self.is_selected = False
         filename = pdf_data['filename']
-        self.full_text = filename
+        # Append spacing to help ensure final characters remain visible during scrolling
+        self.full_text = f"{filename}   "
         self.setText("")  # Clear default text, we'll paint it ourselves
         self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
         self.setStyleSheet(self.get_normal_style())
@@ -264,9 +265,8 @@ class PDFButton(QPushButton):
             # Text doesn't fit, draw scrolling text (right to left)
             text_x = padding + self.scroll_position
             text_rect = QRect(text_x, 0, self.text_width, self.height())
-            # Clip to button bounds (slightly extended) to prevent text from showing outside but keep last char visible
-            clip_rect = QRect(padding, 0, self.available_width + 6, self.height())
-            painter.setClipRect(clip_rect)
+            # Clip to button bounds to prevent text from showing outside
+            painter.setClipRect(QRect(padding, 0, self.available_width, self.height()))
             painter.drawText(text_rect, Qt.AlignLeft | Qt.AlignVCenter, self.full_text)
     
     def resizeEvent(self, event):
