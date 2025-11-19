@@ -207,6 +207,9 @@ class PDFButton(QPushButton):
         
         # Check if we've scrolled past the end
         if self.scroll_position <= end_position:
+            # Clamp to end position so last characters are fully visible
+            self.scroll_position = end_position
+            self.update()
             # Pause at the end for 2 seconds, then reset
             self.scroll_timer.stop()
             self.is_paused = True
