@@ -685,7 +685,14 @@ class FileBrowserView(QWidget):
 
         self.select_all_btn = QPushButton("Select All Pages")
         self.select_all_btn.setVisible(False)
-        self.select_all_btn.setStyleSheet(all_button_style)
+        self.select_all_btn.setStyleSheet(f"""
+            QPushButton {{
+                color: white; font-size: 12px; font-weight: bold;
+                border: none; border-radius: 4px; height: {button_height}px;
+                background-color: #1e440a; padding-left: 12px; padding-right: 12px;
+            }}
+            QPushButton:hover, QPushButton:checked {{ background-color: #2a5d1a; }}
+        """)
         self.select_all_btn.setFixedHeight(button_height)
         self.select_all_btn.clicked.connect(self.select_all_clicked.emit)
 
