@@ -67,21 +67,10 @@ class USBFileManager:
         usb_drives = []
         
         try:
-            usb_drives = self._get_linux_usb_drives()
-        except Exception as e:
-            print(f"Error detecting USB drives: {e}")
-        
-        print(f"Detected {len(usb_drives)} actual USB drives: {usb_drives}")
-        return usb_drives
-    
-    def _get_linux_usb_drives(self):
-        usb_drives = []
-        
-        try:
             partitions = psutil.disk_partitions()
             
             # Limit number of partitions to check to prevent system load
-            max_partitions = 10
+            max_partitions = 5
             checked_count = 0
             
             for partition in partitions:
@@ -115,8 +104,9 @@ class USBFileManager:
                         print(f"USB drive {partition.mountpoint} not accessible")
                         
         except Exception as e:
-            print(f"Error in Linux USB detection: {e}")
-            
+            print(f"Error detecting USB drives: {e}")
+        
+        print(f"Detected {len(usb_drives)} actual USB drives: {usb_drives}")
         return usb_drives
     
     

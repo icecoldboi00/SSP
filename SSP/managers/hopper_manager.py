@@ -3,10 +3,10 @@ import time
 from PyQt5.QtCore import QThread, pyqtSignal
 from database.db_manager import DatabaseManager
 
-COIN_DELAY = 1.0         # Delay after a successful dispense before next one
+COIN_DELAY = 1.5         # Delay after a successful dispense before next one
 DISPENSING_TIMEOUT = 10  # Maximum time to wait for a single coin
 MAX_RETRY_ATTEMPTS = 3   # Maximum attempts per coin before giving up 
-RETRY_DELAY = 0.5        # Delay between retry attempts
+RETRY_DELAY = 1.0        # Delay between retry attempts
 
 HOPPER_CONFIGS = {
     'A': {

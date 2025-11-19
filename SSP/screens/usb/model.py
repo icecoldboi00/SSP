@@ -42,7 +42,6 @@ class USBScreenModel(QObject):
         super().__init__()
         self.usb_manager = USBFileManager()
         self.monitoring_thread = None
-        self.returning_from_file_browser = False  # Flag to prevent auto-navigation loop
         
         self.STATUS_COLORS = {
             'monitoring': '#ff9900',  # Orange
@@ -138,22 +137,12 @@ class USBScreenModel(QObject):
     
     def on_usb_detected(self, drive_path):
         print(f"USB drive detected: {drive_path}")
-        
-        if self.returning_from_file_browser:
-            print("Returning from file browser")
-            self.status_changed.emit("USB drive detected.", 'success')
-            return
-        
         self.handle_usb_scan_result([drive_path])
     
     def on_usb_removed(self, drive_path):
         print(f"USB drive removed: {drive_path}")
         self.status_changed.emit("USB drive removed.", 'success')
         self.start_usb_monitoring()
-    
-    def set_returning_from_file_browser(self, returning=True):
-        self.returning_from_file_browser = returning
-        print(f"Set returning_from_file_browser: {returning}")
     
     def reset_usb_state(self):
         self.stop_usb_monitoring()
@@ -199,9 +188,6 @@ class USBScreenModel(QObject):
     def force_cleanup(self):
         try:
             self.stop_usb_monitoring()
-            
-            # Clear all state
-            self.returning_from_file_browser = False
             
             # Force cleanup USB manager
             if hasattr(self.usb_manager, 'force_safe_eject'):

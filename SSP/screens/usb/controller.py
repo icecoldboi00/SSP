@@ -1,12 +1,12 @@
-from PyQt5.QtWidgets import QWidget, QGridLayout, QMessageBox
+from PyQt5.QtWidgets import QWidget, QGridLayout
 from PyQt5.QtCore import QTimer
 
 from .model import USBScreenModel
 from .view import USBScreenView
 
 class USBController(QWidget):
-    def __init__(self, main_app, parent=None):
-        super().__init__(parent)
+    def __init__(self, main_app):
+        super().__init__()
         self.main_app = main_app
         
         self.model = USBScreenModel()
@@ -14,7 +14,7 @@ class USBController(QWidget):
         
         # 3 (on enter) or 5 (on click) min timeout back to idle 
         self.timeout_timer = QTimer()
-        self.timeout_timer.setSingleShot(True)
+        self.timeout_timer.setSingleShot(True) # Fire once only
         self.timeout_timer.timeout.connect(self._on_timeout)
         
         # 3 sec timeout for stuck operations 
@@ -44,7 +44,7 @@ class USBController(QWidget):
     
     
     def _handle_pdf_files_found(self, pdf_files):
-        self.main_app.file_browser_screen.load_pdf_files(pdf_files)
+        self.main_app.file_browser_screen.load_pdf_files(pdf_files) # Pass pdf file to  file browser screen
         self.main_app.show_screen('file_browser')
     
     def _go_back(self):
@@ -54,11 +54,9 @@ class USBController(QWidget):
         try:
             self.view.start_blinking()
             
-            # Reset the returning flag when entering normally
-            self.model.set_returning_from_file_browser(False)
-            
-            # Removes any remaining files from the previous session
+            # Removes any remaining files from the previous session. New session
             self.model.reset_usb_manager_state()
+            print("Cleaned up previous session")
             
             # Start timeout timer (3 minutes) - reduced for faster exit
             self.timeout_timer.start(180000)
@@ -70,10 +68,10 @@ class USBController(QWidget):
             
             # Start monitoring in background - no immediate heavy operations
             self.model.start_usb_monitoring()
-            
         except Exception as e:
             print(f"Error entering USB screen: {e}")
             self.main_app.show_screen('idle')
+
     
     def on_leave(self):
         try:
@@ -86,16 +84,10 @@ class USBController(QWidget):
             
             # Force cleanup of any remaining resources
             self.model.force_cleanup()
-            
         except Exception as e:
             print(f"Error leaving USB screen: {e}")
-            # Log error for debugging
-            try:
-                from utils.error_logger import log_error
-                log_error("USB Screen Leave Error", str(e), "usb_controller")
-            except Exception as log_error:
-                print(f"Failed to log error: {log_error}")
-    
+        
+
     def _on_timeout(self):
         # Safety check: Only navigate if we're still on this screen
         if self.main_app.stacked_widget.currentWidget() != self:
@@ -119,6 +111,3 @@ class USBController(QWidget):
         self.timeout_timer.stop()
         self.timeout_timer.start(300000)
         print("USB screen timeout reset")
-    
-    def reset_usb_state(self):
-        self.model.reset_usb_state()
