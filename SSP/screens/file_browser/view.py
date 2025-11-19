@@ -75,9 +75,7 @@ class PDFButton(QPushButton):
         self.pdf_data = pdf_data
         self.is_selected = False
         filename = pdf_data['filename']
-        size_mb = pdf_data.get('size', 0) / (1024 * 1024)
-        pages = pdf_data.get('pages', 1)
-        self.setText(f"{filename}\n({size_mb:.1f}MB, ~{pages} pages)")
+        self.setText(filename)
         self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
         self.setStyleSheet(self.get_normal_style())
         self.clicked.connect(self.on_click)
@@ -93,7 +91,7 @@ class PDFButton(QPushButton):
             QPushButton {
                 background-color: #1e440a; color: #fff; border: 1px solid #555;
                 border-radius: 8px; padding: 10px; text-align: left;
-                font-size: 13px; margin: 2px; height: 60px;
+                font-size: 18px; margin: 2px; height: 60px;
             }
             QPushButton:hover { background-color: #2a5d1a; border: 1px solid #36454F; }
         """
@@ -103,12 +101,12 @@ class PDFButton(QPushButton):
             QPushButton {
                 background-color: #4d80cc; color: #fff; border: 3px solid #6699ff;
                 border-radius: 8px; padding: 10px; text-align: left;
-                font-size: 13px; font-weight: bold; margin: 2px; height: 60px;
+                font-size: 18px; font-weight: bold; margin: 2px; height: 60px;
             }
             QPushButton:disabled {
                 background-color: #4d80cc; color: #fff; border: 3px solid #6699ff;
                 border-radius: 8px; padding: 10px; text-align: left;
-                font-size: 13px; font-weight: bold; margin: 2px; height: 60px;
+                font-size: 18px; font-weight: bold; margin: 2px; height: 60px;
                 opacity: 0.8;
             }
         """
