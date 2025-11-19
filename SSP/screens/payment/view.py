@@ -68,8 +68,8 @@ class PaymentScreenView(QWidget):
         )
         main_layout.addWidget(self.change_label)
 
-        # Add stretch to push buttons to the bottom
-        main_layout.addStretch(2)
+        # Add stretch before insert message
+        main_layout.addStretch(1)
 
         # Insert coins or bills message (at bottom)
         self.insert_message_label = QLabel("Insert coins or bills.")
@@ -78,6 +78,9 @@ class PaymentScreenView(QWidget):
             "QLabel { color: #36454F; font-size: 20px; font-weight: normal; padding: 5px; background-color: transparent; margin: 10px 0; }"
         )
         main_layout.addWidget(self.insert_message_label)
+
+        # Add stretch to push buttons to the bottom
+        main_layout.addStretch(1)
 
         # Button layout
         button_layout = QHBoxLayout()
