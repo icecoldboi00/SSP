@@ -10,11 +10,11 @@ RETRY_DELAY = 1.0        # Delay between retry attempts
 
 HOPPER_CONFIGS = {
     'A': {
-        'signal_pin': 10,  # Coin pulse input for 1 Peso
+        'signal_pin': 9,  # Coin pulse input for 1 Peso
         'enable_pin': 24   # Hopper enable control 
     },
     'B': {
-        'signal_pin': 26,   # Coin pulse input for 5 Peso
+        'signal_pin': 19,   # Coin pulse input for 5 Peso
         'enable_pin': 25   # Hopper enable control 
     }
 }
