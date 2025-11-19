@@ -365,17 +365,21 @@ class PDFPageWidget(QFrame):
                 min-height: 26px;
             }
             QCheckBox::indicator { 
-                width: 20px; 
-                height: 20px; 
+                width: 22px; 
+                height: 22px; 
                 border-radius: 4px;
-            }
-            QCheckBox::indicator:checked { 
-                background-color: #4CAF50; 
-                border: 2px solid #4CAF50; 
+                border: 2px solid #ccc;
+                background-color: #fff;
             }
             QCheckBox::indicator:unchecked { 
-                background-color: white; 
+                image: none;
                 border: 2px solid #ccc; 
+                background-color: #fff;
+            }
+            QCheckBox::indicator:checked { 
+                border: 2px solid #4CAF50; 
+                background-color: #fff; 
+                image: url(:/qt-project.org/styles/commonstyle/images/checkboxon.png);
             }
         """)
         self.checkbox.clicked.connect(self.on_checkbox_clicked)
