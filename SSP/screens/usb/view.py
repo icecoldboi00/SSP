@@ -40,13 +40,13 @@ class USBScreenView(QWidget):
         # --- UI Elements ---
         title = QLabel("INSERT USB FLASHDRIVE")
         title.setAlignment(Qt.AlignCenter)
-        title.setStyleSheet("color: #36454F; font-size: 38px; font-weight: bold;")
+        title.setStyleSheet("color: #36454F; font-size: 56px; font-weight: bold;")
         title.setWordWrap(True)
 
         instruction = QLabel("The system will automatically detect your storage device.")
         instruction.setAlignment(Qt.AlignCenter)
         instruction.setWordWrap(False)
-        instruction.setStyleSheet("color: #36454F; font-size: 22px; line-height: 1.4; padding: 10px;")
+        instruction.setStyleSheet("color: #36454F; font-size: 32px; line-height: 1.4; padding: 10px;")
         instruction.setMaximumWidth(1200)
 
         self.status_indicator = QLabel("Initializing...")
@@ -59,7 +59,7 @@ class USBScreenView(QWidget):
         self.back_button.setStyleSheet(self.get_back_button_style())
         
         # --- Layout Assembly ---
-        fg_layout.addStretch(2)
+        fg_layout.addStretch(4)
         fg_layout.addWidget(title, 0, Qt.AlignCenter)
         fg_layout.addSpacing(15)
         fg_layout.addWidget(instruction, 1, Qt.AlignCenter)
