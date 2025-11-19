@@ -367,19 +367,6 @@ class PDFPageWidget(QFrame):
             QCheckBox::indicator { 
                 width: 22px; 
                 height: 22px; 
-                border-radius: 4px;
-                border: 2px solid #ccc;
-                background-color: #fff;
-            }
-            QCheckBox::indicator:unchecked { 
-                image: none;
-                border: 2px solid #ccc; 
-                background-color: #fff;
-            }
-            QCheckBox::indicator:checked { 
-                border: 2px solid #4CAF50; 
-                background-color: #fff; 
-                image: url(:/qt-project.org/styles/commonstyle/images/checkboxon.png);
             }
         """)
         self.checkbox.clicked.connect(self.on_checkbox_clicked)
