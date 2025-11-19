@@ -96,7 +96,7 @@ class PDFButton(QPushButton):
         self.pause_duration = 2000  # milliseconds to pause at start/end
         self.pause_timer = QTimer(self)
         self.pause_timer.setSingleShot(True)
-        self.pause_timer.timeout.connect(self.start_scrolling)
+        self.pause_timer.timeout.connect(self.on_pause_timeout)
         self.is_paused = False
         self.text_width = 0
         self.available_width = 0
@@ -211,15 +211,24 @@ class PDFButton(QPushButton):
             self.scroll_timer.stop()
             self.is_paused = True
             self.pause_timer.start(self.pause_duration)
-            # After pause, reset to start
-            QTimer.singleShot(self.pause_duration, self.reset_scroll)
         else:
             self.update()  # Trigger repaint
     
+    def on_pause_timeout(self):
+        """Handle pause timer timeout - either reset or start scrolling"""
+        if self.scroll_position != 0:
+            # We're at the end, reset to start
+            self.reset_scroll()
+        else:
+            # We're at the start, begin scrolling
+            self.start_scrolling()
+    
     def reset_scroll(self):
-        """Reset scroll position to start"""
+        """Reset scroll position to start and wait 2 seconds before scrolling again"""
         self.scroll_position = 0
+        self.update()  # Update to show text at start position
         self.is_paused = True
+        # Wait 2 seconds before starting to scroll again
         self.pause_timer.start(self.pause_duration)
     
     def paintEvent(self, event):
