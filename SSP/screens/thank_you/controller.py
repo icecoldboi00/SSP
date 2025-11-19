@@ -4,8 +4,8 @@ from .view import ThankYouScreenView
 from screens.dialogs.pin_dialog import PinDialogController as PinDialog
 
 class ThankYouController(QWidget):
-    def __init__(self, main_app, parent=None):
-        super().__init__(parent)
+    def __init__(self, main_app):
+        super().__init__()
         self.main_app = main_app
         
         self.model = ThankYouModel()
@@ -35,6 +35,8 @@ class ThankYouController(QWidget):
         self.main_app.show_screen('idle')
     
     def on_enter(self):
+        # Ensure admin override button is hidden when entering screen
+        self.view.hide_admin_override_button()
         self.model.on_enter(self.main_app)
     
     def on_leave(self):
