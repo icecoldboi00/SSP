@@ -52,12 +52,13 @@ class PaymentScreenView(QWidget):
         self.suggestion_label.setStyleSheet("QLabel { color: #36454F; font-size: 32px; font-weight: bold; padding: 2px 0; }")
         main_layout.addWidget(self.suggestion_label)
 
-        # Payment status label
-        self.payment_status_label = QLabel("Click 'Enable Payment' to begin")
-        self.payment_status_label.setStyleSheet(
-            "font-size: 14px; color: #36454F; font-weight: bold; background-color: transparent; padding: 5px; border-radius: 3px;"
+        # Insert coins or bills message
+        self.insert_message_label = QLabel("Insert coins or bills.")
+        self.insert_message_label.setAlignment(Qt.AlignCenter)
+        self.insert_message_label.setStyleSheet(
+            "QLabel { color: #36454F; font-size: 20px; font-weight: normal; padding: 5px; background-color: transparent; margin: 5px 0; }"
         )
-        main_layout.addWidget(self.payment_status_label)
+        main_layout.addWidget(self.insert_message_label)
 
         # Amount received label
         self.amount_received_label = QLabel("Amount Received: P0.00")
@@ -66,14 +67,6 @@ class PaymentScreenView(QWidget):
             "QLabel { color: #36454F; font-size: 24px; font-weight: bold; padding: 10px; background-color: transparent; border: none; margin: 5px 0; border-radius: 5px; }"
         )
         main_layout.addWidget(self.amount_received_label)
-
-        # Insert coins or bills message
-        self.insert_message_label = QLabel("Insert coins or bills.")
-        self.insert_message_label.setAlignment(Qt.AlignCenter)
-        self.insert_message_label.setStyleSheet(
-            "QLabel { color: #36454F; font-size: 20px; font-weight: normal; padding: 5px; background-color: transparent; margin: 5px 0; }"
-        )
-        main_layout.addWidget(self.insert_message_label)
 
         # Change label
         self.change_label = QLabel("")
@@ -133,7 +126,8 @@ class PaymentScreenView(QWidget):
         self.summary_label.setText("<br>".join(summary_lines))
     
     def update_payment_status(self, status_text):
-        self.payment_status_label.setText(status_text)
+        # Payment status label removed - method kept for backward compatibility
+        pass
     
     def update_amount_received(self, amount):
         self.amount_received_label.setText(f"Amount Received: P{amount:.2f}")
