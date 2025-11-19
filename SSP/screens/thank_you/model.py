@@ -30,7 +30,7 @@ class ThankYouModel(QObject):
         try:
             if hasattr(self, 'main_app') and self.main_app and hasattr(self.main_app, 'usb_screen') and self.main_app.usb_screen:
                 usb_manager = self.main_app.usb_screen.model.usb_manager
-                if hasattr(usb_manager, 'current_usb_drive') and usb_manager.current_usb_drive:
+                if usb_manager and usb_manager.current_usb_drive:
                     drive_path = usb_manager.current_usb_drive
                     # Use the existing auto-eject functionality
                     usb_manager._auto_eject_usb_drive(drive_path)

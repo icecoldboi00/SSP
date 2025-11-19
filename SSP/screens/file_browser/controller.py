@@ -82,20 +82,19 @@ class FileBrowserController(QWidget):
 
         usb_manager = self.main_app.usb_screen.model.usb_manager
 
+        if not usb_manager:
+            QMessageBox.critical(self, "USB Error", "USB manager is not available. Please try again.")
+            return
+
         copied_file = None
-        if usb_manager and hasattr(usb_manager, 'verify_file_in_session'):
-            current_path = self.view.selected_pdf.get('path') if isinstance(self.view.selected_pdf, dict) else None
-            if current_path and usb_manager.verify_file_in_session(current_path):
-                print(f"File already in session directory")
-                copied_file = dict(self.view.selected_pdf)
+        current_path = self.view.selected_pdf.get('path') if isinstance(self.view.selected_pdf, dict) else None
+        if current_path and usb_manager.verify_file_in_session(current_path):
+            print(f"File already in session directory")
+            copied_file = dict(self.view.selected_pdf)
 
         if not copied_file:
             print(f"Copying file: {self.view.selected_pdf['filename']}")
-            if usb_manager and hasattr(usb_manager, 'copy_selected_file'):
-                copied_file = usb_manager.copy_selected_file(self.view.selected_pdf)
-            else:
-                QMessageBox.critical(self, "USB Error", "USB manager is not available. Please try again.")
-                return
+            copied_file = usb_manager.copy_selected_file(self.view.selected_pdf)
 
         if not copied_file:
             QMessageBox.critical(self, "File Copy Error", "Failed to copy the selected PDF file.")
@@ -106,10 +105,9 @@ class FileBrowserController(QWidget):
             QMessageBox.critical(self, "File Not Found", "The copied PDF file could not be found. Please try again.")
             return
 
-        if usb_manager and hasattr(usb_manager, 'verify_file_in_session'):
-            if not usb_manager.verify_file_in_session(file_path):
-                QMessageBox.critical(self, "Invalid File", "The copied PDF is not available in the current session.")
-                return
+        if not usb_manager.verify_file_in_session(file_path):
+            QMessageBox.critical(self, "Invalid File", "The copied PDF is not available in the current session.")
+            return
 
         print(f"Calling set_pdf_data using: {copied_file['filename']} and pages: {selected_pages_list}")
         options_screen = self.main_app.printing_options_screen

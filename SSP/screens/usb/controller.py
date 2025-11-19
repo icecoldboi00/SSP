@@ -100,12 +100,10 @@ class USBController(QWidget):
     def _on_operation_timeout(self):
         print("USB operation timeout")
         # Only stop if operations are actually stuck, not just taking time
-        if hasattr(self.model, 'usb_manager') and self.model.usb_manager:
-            if self.model.usb_manager.operation_in_progress:
-                print("Operations appear stuck, stopping them")
-                self.model.stop_all_operations()
-            else:
-                print("Ok!")
+        if self.model.usb_manager and self.model.usb_manager.operation_in_progress:
+            self.model.stop_all_operations()
+        else:
+            print("Ok!")
     
     def _reset_timeout(self):
         self.timeout_timer.stop()

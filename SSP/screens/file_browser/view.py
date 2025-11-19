@@ -867,7 +867,6 @@ class FileBrowserView(QWidget):
                 'filename': pdf_info['filename'], 
                 'type': 'pdf', 
                 'pages': pdf_info.get('pages', 1), 
-                'size': pdf_info['size'], 
                 'path': pdf_info['path']
             })
         self.file_header.setText(f"PDF Files ({len(self.pdf_files_data)} files)")

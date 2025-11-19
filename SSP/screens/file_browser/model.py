@@ -31,14 +31,13 @@ class FileBrowserModel(QObject):
         self.selected_pdf = pdf_data
         self.pdf_selected.emit(pdf_data)
 
-        if hasattr(self.usb_manager, 'mark_file_in_use'):
-            path = pdf_data.get('path')
-            if path:
-                self.usb_manager.mark_file_in_use(path)
-                self._locked_path = path
+        path = pdf_data.get('path')
+        if path:
+            self.usb_manager.mark_file_in_use(path)
+            self._locked_path = path
 
     def cleanup(self):
-        if hasattr(self.usb_manager, 'mark_file_complete') and self._locked_path:
+        if self._locked_path:
             try:
                 self.usb_manager.mark_file_complete(self._locked_path)
             finally:

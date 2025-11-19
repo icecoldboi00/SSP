@@ -4,6 +4,7 @@ import psutil
 import tempfile
 import platform
 import threading
+import fitz
 from datetime import datetime
 
 class USBFileManager:
@@ -13,56 +14,23 @@ class USBFileManager:
         temp_base_dir = os.path.join(tempfile.gettempdir(), "PrintingSystem")
         self.destination_dir = os.path.join(temp_base_dir, f"Session_{self.session_id}")
         
-        os.makedirs(self.destination_dir, exist_ok=True)
+        os.makedirs(self.destination_dir, exist_ok=True) # Create the session directory
         print(f"Temp directory created for session {self.session_id}: {self.destination_dir}")
 
         self.supported_extensions = ['.pdf']
         self.last_known_drives = set()
         
         # Disk safety tracking
-        self.current_usb_drive = None
+        self.current_usb_drive = None # One drive only at a time
         self.files_in_use = set()  # Track files currently being processed
-        self.operation_in_progress = False
+        self.operation_in_progress = False 
         self._should_stop = False  # Flag to stop operations
     
-    def _safe_pdf_page_count(self, file_path, timeout=5):
-        result = [1]  # Default fallback
-        
-        def get_page_count():
-            try:
-                import fitz  # PyMuPDF
-                doc = None
-                try:
-                    doc = fitz.open(file_path)
-                    result[0] = len(doc)
-                except Exception as pdf_error:
-                    print(f"PDF error for {os.path.basename(file_path)}: {pdf_error}")
-                    result[0] = 1
-                finally:
-                    if doc:
-                        try:
-                            doc.close()
-                        except:
-                            pass
-            except ImportError:
-                print(f"PyMuPDF not available for {os.path.basename(file_path)}")
-                result[0] = 1
-            except Exception as e:
-                print(f"Unexpected error processing {os.path.basename(file_path)}: {e}")
-                result[0] = 1
-        
-        # Run in thread with timeout
-        thread = threading.Thread(target=get_page_count)
-        thread.daemon = True
-        thread.start()
-        thread.join(timeout)
-        
-        if thread.is_alive():
-            print(f"PDF processing timeout for {os.path.basename(file_path)}, using default page count")
-            result[0] = 1
-        
-        return result[0]
+    # ========================================================================================================================
+    # USB SCREEN FUNCTIONS
+    # ========================================================================================================================
     
+    # Logic for getting usb drives used in usb monitoring
     def get_usb_drives(self):
         usb_drives = []
         
@@ -109,7 +77,7 @@ class USBFileManager:
         print(f"Detected {len(usb_drives)} actual USB drives: {usb_drives}")
         return usb_drives
     
-    
+    # Check for new and removed drives used in usb monitoring
     def check_for_new_drives(self):
         current_drives = set(self.get_usb_drives())
         new_drives = current_drives - self.last_known_drives
@@ -119,46 +87,39 @@ class USBFileManager:
         
         return list(new_drives), list(removed_drives)
     
-    def scan_pdf_files(self, source_dir):
-        print(f"\nStarting PDF scan for {source_dir}")
+    # Used to scan called in usb model
+    def scan_pdf_files(self, drive_path):
         scanned_files = []
 
         # Reset stop flag for new operation
         self._should_stop = False
-        print("Reset stop flag for new USB operation")
 
         try:
             # Only create a new session directory if we don't have one or if it's a different USB drive
-            if not self.destination_dir or not os.path.exists(self.destination_dir) or self.current_usb_drive != source_dir:
-                print(f"Creating new session directory for USB drive: {source_dir}")
+            if not self.destination_dir or not os.path.exists(self.destination_dir) or self.current_usb_drive != drive_path:
+                print(f"Creating new session directory for USB drive: {drive_path}")
                 self._create_new_session()
             else:
                 print(f"Reusing existing session directory: {self.destination_dir}")
             
             # Set current drive and mark operation as in progress
-            self.set_current_drive(source_dir)
-            self.set_operation_in_progress(True)
-            
-            print(f"Light scanning PDF files from {source_dir}")
-            
+            self.current_usb_drive = drive_path
+            print(f"Set current USB drive: {drive_path}")
+            self.operation_in_progress = True
+                       
             # Limit directory traversal to prevent system load
             max_directories = 5
             directory_count = 0
             
-            for root, _, files in os.walk(source_dir):
+            for root, _, files in os.walk(drive_path):
                 if directory_count >= max_directories:
                     print(f"Reached directory limit ({max_directories}), stopping scan")
                     break
                 
                 directory_count += 1
                 
-                # Check stop flag during directory traversal
-                if self._should_stop:
-                    print("Stop requested during file scanning")
-                    break
-                
                 # Limit number of files per directory
-                max_files_per_dir = 20
+                max_files_per_dir = 30
                 file_count = 0
                 
                 for filename in files:
@@ -182,8 +143,7 @@ class USBFileManager:
                         
                         try:
                             # Get file info without copying
-                            file_size = source_size
-                            print(f"Found {filename} ({file_size/1024:.1f} KB)")
+                            print(f"Found {filename} ({source_size/1024:.1f} KB)")
                             
                             # Safe PDF page count with timeout (read directly from USB)
                             page_count = self._safe_pdf_page_count(source_path, timeout=3)
@@ -192,8 +152,7 @@ class USBFileManager:
                             # Store file info without copying
                             scanned_files.append({
                                 'filename': filename,
-                                'path': source_path,  # Keep original USB path
-                                'size': file_size,
+                                'path': source_path,  # Original USB path
                                 'pages': page_count,
                                 'type': '.pdf'
                             })
@@ -203,23 +162,45 @@ class USBFileManager:
                             continue
                             
             # Mark operation as complete
-            self.set_operation_in_progress(False)
+            self.operation_in_progress = False
             
-            # After all files are processed
-            if scanned_files:
-                print(f"Successfully scanned {len(scanned_files)} PDF files:")
-                for f in scanned_files:
-                    print(f"    Found {f['filename']} ({f['size']/1024:.1f} KB, {f['pages']} pages)")
-            else:
-                print("No PDF files found")
-                
-            return scanned_files
+            return scanned_files # Return list of dictionaries 
 
         except Exception as e:
             print(f"Error in scan_pdf_files: {str(e)}")
             # Ensure operation is marked as complete even on error
-            self.set_operation_in_progress(False)
+            self.operation_in_progress = False
             return []
+
+    # Called in usb timeout
+    def stop_all_operations(self):
+        try:
+            self._should_stop = True
+            self.operation_in_progress = False
+            print("USB file operations stopped")
+        except Exception as e:
+            print(f"Error stopping USB operations: {e}")
+
+    # Called on leaving usb screen but doesn't remove session directory (cleaned later in ty)
+    def cleanup_all_resources(self):
+        try:  
+            # Clear all tracking data
+            self.files_in_use.clear()
+            self.operation_in_progress = False
+            self.current_usb_drive = None
+            self.last_known_drives.clear()
+            
+            # Clean up all temporary directories (old sessions only)
+            self.cleanup_all_temp_folders()
+               
+            print("Cleanup of all resources completed, session directory saved")
+            
+        except Exception as e:
+            print(f"Error during cleanup: {e}")
+
+    # ========================================================================================================================
+    # FILE BROWSER SCREEN FUNCTIONS
+    # ========================================================================================================================
     
     def copy_selected_file(self, file_info):
         try:
@@ -271,215 +252,7 @@ class USBFileManager:
         except Exception as e:
             print(f"Error copying selected file: {e}")
             return None
-    
-    def stop_all_operations(self):
-        try:
-            print("Stopping USB file operations...")
-            self._should_stop = True
-            self.operation_in_progress = False
-            print("USB file operations stopped")
-        except Exception as e:
-            print(f"Error stopping USB operations: {e}")
-        
-    def cleanup_temp_files(self):
-        try:
-            if os.path.exists(self.destination_dir):
-                print(f"Cleaning up temporary files in {self.destination_dir}")
-                
-                # Remove all files in the directory
-                for filename in os.listdir(self.destination_dir):
-                    file_path = os.path.join(self.destination_dir, filename)
-                    try:
-                        if os.path.isfile(file_path):
-                            os.remove(file_path)
-                            print(f"Deleted: {filename}")
-                        elif os.path.isdir(file_path):
-                            shutil.rmtree(file_path)
-                            print(f"Deleted directory: {filename}")
-                    except Exception as e:
-                        print(f"Error deleting {filename}: {e}")
-                
-                print("Temporary files cleanup completed")
-            else:
-                print("Temporary directory does not exist")
-                
-        except Exception as e:
-            print(f"Error during cleanup: {e}")
-    
-    def cleanup_all_temp_folders(self):
-        try:
-            # FIX: Use the correct base directory
-            temp_base_dir = os.path.join(tempfile.gettempdir(), "PrintingSystem")
-            if os.path.exists(temp_base_dir):
-                print(f"Cleaning up old session folders in {temp_base_dir}")
-            
-                current_session_folder = f"Session_{self.session_id}"
-                cleaned_count = 0
-            
-                for folder_name in os.listdir(temp_base_dir):
-                    if folder_name.startswith("Session_") and folder_name != current_session_folder:
-                        folder_path = os.path.join(temp_base_dir, folder_name)
-                        try:
-                            if os.path.isdir(folder_path):
-                                shutil.rmtree(folder_path)
-                                print(f"Deleted old session folder: {folder_name}")
-                                cleaned_count += 1
-                        except Exception as e:
-                            print(f"Error deleting old session folder {folder_name}: {e}")
-                
-                print(f"Cleaned up {cleaned_count} old session folders")
-                        
-        except Exception as e:
-            print(f"Error cleaning up old session folders: {e}")
-            # Log error for debugging
-            try:
-                from utils.error_logger import log_error
-                log_error("USB Temp Folder Cleanup Error", str(e), "usb_file_manager")
-            except Exception as log_error:
-                print(f"Failed to log error: {log_error}")
-    
-    def get_temp_folder_info(self):
-        try:
-            if os.path.exists(self.destination_dir):
-                files = os.listdir(self.destination_dir)
-                total_size = 0
-                for filename in files:
-                    file_path = os.path.join(self.destination_dir, filename)
-                    if os.path.isfile(file_path):
-                        total_size += os.path.getsize(file_path)
-                
-                return {
-                    'folder_path': self.destination_dir,
-                    'file_count': len(files),
-                    'total_size': total_size,
-                    'session_id': self.session_id # This will now work
-                }
-            else:
-                return None
-        except Exception as e:
-            print(f"Error getting temp folder info: {e}")
-            return None
-    
 
-    
-    def set_current_drive(self, drive_path):
-        self.current_usb_drive = drive_path
-        print(f"Set current USB drive: {drive_path}")
-    
-    def is_drive_safe_to_remove(self):
-        if not self.current_usb_drive:
-            return True, "No USB drive currently in use"
-        
-        if self.operation_in_progress:
-            return False, "File operations are currently in progress"
-        
-        if self.files_in_use:
-            return False, f"Files are currently being processed: {list(self.files_in_use)}"
-        
-        # Check if drive is still accessible
-        try:
-            if not os.path.exists(self.current_usb_drive):
-                return False, "USB drive is no longer accessible"
-            
-            # Try to access the drive
-            os.listdir(self.current_usb_drive)
-            return True, "USB drive is safe to remove"
-        except Exception as e:
-            return False, f"USB drive access error: {e}"
-    
-    def mark_file_in_use(self, file_path):
-        self.files_in_use.add(file_path)
-        print(f"Marked file as in use: {file_path}")
-    
-    def mark_file_complete(self, file_path):
-        self.files_in_use.discard(file_path)
-        print(f"Marked file as complete: {file_path}")
-    
-    def set_operation_in_progress(self, in_progress):
-        self.operation_in_progress = in_progress
-        status = "started" if in_progress else "completed"
-        print(f"File operation {status}")
-    
-    def get_safety_warning(self):
-        if not self.current_usb_drive:
-            return None
-        
-        is_safe, message = self.is_drive_safe_to_remove()
-        if is_safe:
-            return None
-        
-        return f"DO NOT REMOVE USB DRIVE: {message}"
-    
-    def force_safe_eject(self):
-        print("Force safe ejection requested")
-        self.files_in_use.clear()
-        self.operation_in_progress = False
-        self.current_usb_drive = None
-        print("USB drive marked as safe to remove")
-    
-    def force_cleanup_all_resources(self):
-        try:
-            print("Force cleaning up all USB file manager resources...")
-            
-            # Clear all tracking data
-            self.files_in_use.clear()
-            self.operation_in_progress = False
-            self.current_usb_drive = None
-            self.last_known_drives.clear()
-            
-            # Clean up all temporary directories (old sessions only)
-            self.cleanup_all_temp_folders()
-            
-            # DO NOT delete current session directory - files are still needed by file browser
-            # The current session directory will be cleaned up when the print job is complete
-            print(f"Preserving current session directory: {self.destination_dir}")
-            
-            print("Force cleanup of all resources completed")
-            
-        except Exception as e:
-            print(f"Error during force cleanup: {e}")
-            # Log error for debugging
-            try:
-                from utils.error_logger import log_error
-                log_error("USB Force Cleanup All Resources Error", str(e), "usb_file_manager")
-            except Exception as log_error:
-                print(f"Failed to log error: {log_error}")
-    
-    def _create_new_session(self):
-        # Generate new session ID with current timestamp
-        self.session_id = datetime.now().strftime('%Y%m%d_%H%M%S')
-        temp_base_dir = os.path.join(tempfile.gettempdir(), "PrintingSystem")
-        self.destination_dir = os.path.join(temp_base_dir, f"Session_{self.session_id}")
-        
-        # Create the new directory
-        os.makedirs(self.destination_dir, exist_ok=True)
-        print(f"New session directory created: {self.destination_dir}")
-        
-        # Clear any previous session data
-        self.files_in_use.clear()
-        self.operation_in_progress = False
-        self.current_usb_drive = None
-    
-    def get_current_session_directory(self):
-        return self.destination_dir
-    
-    def get_current_session_id(self):
-        return self.session_id
-    
-    def cleanup_session_directory(self):
-        try:
-            session_dir = self.get_current_session_directory()
-            if session_dir and os.path.exists(session_dir):
-                shutil.rmtree(session_dir)
-                print(f"Session directory cleaned up: {session_dir}")
-                return True
-            else:
-                print(f"No session directory to clean up")
-                return False
-        except Exception as e:
-            print(f"Error cleaning up session directory: {e}")
-            return False
-    
     def verify_file_in_session(self, file_path):
         if not file_path:
             return False
@@ -497,6 +270,18 @@ class USBFileManager:
         
         print(f"File verified in session directory: {file_path}")
         return True
+
+    def mark_file_in_use(self, file_path):
+        self.files_in_use.add(file_path)
+        print(f"Marked file as in use: {file_path}")
+    
+    def mark_file_complete(self, file_path):
+        self.files_in_use.discard(file_path)
+        print(f"Marked file as complete: {file_path}")
+
+    # ========================================================================================================================
+    # THANK YOU SCREEN FUNCTIONS
+    # ========================================================================================================================
     
     def _auto_eject_usb_drive(self, usb_path):
         try:
@@ -537,3 +322,123 @@ class USBFileManager:
             self.files_in_use.clear()
             self.operation_in_progress = False
             self.current_usb_drive = None
+
+    # ========================================================================================================================
+    # SHARED FUNCTIONS (Used by multiple screens)
+    # ========================================================================================================================
+    
+    def cleanup_all_temp_folders(self):
+        try:
+            # FIX: Use the correct base directory
+            temp_base_dir = os.path.join(tempfile.gettempdir(), "PrintingSystem")
+            if os.path.exists(temp_base_dir):
+                print(f"Cleaning up old session folders in {temp_base_dir}")
+            
+                current_session_folder = f"Session_{self.session_id}"
+                cleaned_count = 0
+            
+                for folder_name in os.listdir(temp_base_dir):
+                    if folder_name.startswith("Session_") and folder_name != current_session_folder:
+                        folder_path = os.path.join(temp_base_dir, folder_name)
+                        try:
+                            if os.path.isdir(folder_path):
+                                shutil.rmtree(folder_path)
+                                print(f"Deleted old session folder: {folder_name}")
+                                cleaned_count += 1
+                        except Exception as e:
+                            print(f"Error deleting old session folder {folder_name}: {e}")
+                
+                print(f"Cleaned up {cleaned_count} old session folders")
+                        
+        except Exception as e:
+            print(f"Error cleaning up old session folders: {e}")
+            # Log error for debugging
+            try:
+                from utils.error_logger import log_error
+                log_error("USB Temp Folder Cleanup Error", str(e), "usb_file_manager")
+            except Exception as log_error:
+                print(f"Failed to log error: {log_error}")
+
+    def cleanup_session_directory(self):
+        try:
+            session_dir = self.destination_dir
+            if session_dir and os.path.exists(session_dir):
+                shutil.rmtree(session_dir)
+                print(f"Session directory cleaned up: {session_dir}")
+                return True
+            else:
+                print(f"No session directory to clean up")
+                return False
+        except Exception as e:
+            print(f"Error cleaning up session directory: {e}")
+            return False
+
+    def is_drive_safe_to_remove(self):
+        if not self.current_usb_drive:
+            return True, "No USB drive currently in use"
+        
+        if self.operation_in_progress:
+            return False, "File operations are currently in progress"
+        
+        if self.files_in_use:
+            return False, f"Files are currently being processed: {list(self.files_in_use)}"
+        
+        # Check if drive is still accessible
+        try:
+            if not os.path.exists(self.current_usb_drive):
+                return False, "USB drive is no longer accessible"
+            
+            # Try to access the drive
+            os.listdir(self.current_usb_drive)
+            return True, "USB drive is safe to remove"
+        except Exception as e:
+            return False, f"USB drive access error: {e}"
+
+    # ========================================================================================================================
+    # INTERNAL/HELPER FUNCTIONS
+    # ========================================================================================================================
+    
+    def _safe_pdf_page_count(self, file_path, timeout=5):
+        def _open_and_count():
+            try:
+                with fitz.open(file_path) as doc:
+                    return len(doc)
+            except Exception as pdf_error:
+                print(f"PDF error for {os.path.basename(file_path)}: {pdf_error}")
+                return 1
+
+        result = [1]  # Default fallback
+
+        def worker():
+            try:
+                result[0] = _open_and_count()
+            except Exception as e:
+                print(f"Unexpected error processing {os.path.basename(file_path)}: {e}")
+                result[0] = 1
+        
+        # Run in thread with timeout
+        thread = threading.Thread(target=worker)
+        thread.daemon = True
+        thread.start()
+        thread.join(timeout)
+        
+        if thread.is_alive():
+            print(f"PDF processing timeout for {os.path.basename(file_path)}, using default page count")
+            result[0] = 1
+        
+        return result[0]
+
+    def _create_new_session(self):
+        # Generate new session ID with current timestamp
+        self.session_id = datetime.now().strftime('%Y%m%d_%H%M%S')
+        temp_base_dir = os.path.join(tempfile.gettempdir(), "PrintingSystem")
+        self.destination_dir = os.path.join(temp_base_dir, f"Session_{self.session_id}")
+        
+        # Create the new directory
+        os.makedirs(self.destination_dir, exist_ok=True)
+        print(f"New session directory created: {self.destination_dir}")
+        
+        # Clear any previous session data
+        self.files_in_use.clear()
+        self.operation_in_progress = False
+        self.current_usb_drive = None
