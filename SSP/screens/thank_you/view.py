@@ -32,11 +32,11 @@ class ThankYouScreenView(QWidget):
         self.status_label = QLabel("Thank you for printing with us")
         self.status_label.setAlignment(Qt.AlignCenter)
         self.status_label.setWordWrap(True)
-        self.status_label.setStyleSheet("color: #36454F; font-size: 42px; font-weight: bold;")
+        self.status_label.setStyleSheet("color: #36454F; font-size: 56px; font-weight: bold;")
 
         self.subtitle_label = QLabel("You may now remove your USB")
         self.subtitle_label.setAlignment(Qt.AlignCenter)
-        self.subtitle_label.setStyleSheet("color: #36454F; font-size: 24px;")
+        self.subtitle_label.setStyleSheet("color: #36454F; font-size: 32px;")
 
         # --- Admin Override Button (Hidden by default, shown for errors) ---
         self.admin_override_button = QPushButton("Admin Override")

@@ -352,10 +352,10 @@ class ThankYouModel(QObject):
     
     def get_status_style(self, state):
         styles = {
-            "printing": "color: #36454F; font-size: 42px; font-weight: bold;",
-            "waiting": "color: #ffc107; font-size: 42px; font-weight: bold;",
-            "completed": "color: #28a745; font-size: 42px; font-weight: bold;",
-            "error": "color: #dc3545; font-size: 42px; font-weight: bold;"
+            "printing": "color: #36454F; font-size: 56px; font-weight: bold;",
+            "waiting": "color: #ffc107; font-size: 56px; font-weight: bold;",
+            "completed": "color: #28a745; font-size: 56px; font-weight: bold;",
+            "error": "color: #dc3545; font-size: 56px; font-weight: bold;"
         }
         return styles.get(state, styles["printing"])
 
