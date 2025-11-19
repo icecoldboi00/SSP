@@ -354,16 +354,6 @@ class PDFPageWidget(QFrame):
         layout.setContentsMargins(8, 8, 8, 8)
         layout.setSpacing(6)
 
-        indicator_row = QHBoxLayout()
-        indicator_row.setContentsMargins(0, 0, 0, 0)
-        indicator_row.setSpacing(0)
-        indicator_row.addStretch()
-        self.selection_indicator = QLabel("")
-        self.selection_indicator.setFixedSize(30, 30)
-        self.selection_indicator.setAlignment(Qt.AlignCenter)
-        indicator_row.addWidget(self.selection_indicator, 0, Qt.AlignRight)
-        layout.addLayout(indicator_row)
-
         self.checkbox = QCheckBox(f"Page {self.page_num}")
         self.checkbox.setChecked(checked)
         self.checkbox.setStyleSheet("""
@@ -397,7 +387,6 @@ class PDFPageWidget(QFrame):
         self.preview_label.setText(f"Loading\nPage {self.page_num}...")
         layout.addWidget(self.checkbox, 0)
         layout.addWidget(self.preview_label, 1)
-        self.update_selection_indicator(checked)
         self.setMouseTracking(True)
         
     def mousePressEvent(self, event):
@@ -406,30 +395,6 @@ class PDFPageWidget(QFrame):
         
     def on_checkbox_clicked(self, checked):
         self.page_checkbox_clicked.emit(self.page_num, checked)
-        self.update_selection_indicator(checked)
-
-    def update_selection_indicator(self, checked):
-        if checked:
-            self.selection_indicator.setText("✓")
-            self.selection_indicator.setStyleSheet("""
-                QLabel {
-                    border: 2px solid #4CAF50;
-                    border-radius: 6px;
-                    background-color: #e6f4ea;
-                    color: #2e7d32;
-                    font-size: 18px;
-                    font-weight: bold;
-                }
-            """)
-        else:
-            self.selection_indicator.setText("")
-            self.selection_indicator.setStyleSheet("""
-                QLabel {
-                    border: 2px solid #d1d5db;
-                    border-radius: 6px;
-                    background-color: #ffffff;
-                }
-            """)
         
     def set_preview_image(self, pixmap):
         # Store original pixmap and scale to fit current label size
