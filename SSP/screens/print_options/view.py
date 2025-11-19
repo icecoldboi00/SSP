@@ -233,10 +233,11 @@ class PrintOptionsScreenView(QWidget):
     def get_back_button_style(self):
         return """
             QPushButton {
-                color: white; font-size: 32px; font-weight: bold;
+                color: white; font-size: 12px; font-weight: bold;
                 border: none; border-radius: 4px; height: 40px;
                 background-color: #ff0000;
                 padding-left: 12px; padding-right: 12px;
+                min-width: 260px;
             }
             QPushButton:hover { background-color: #ffb84d; }
         """
@@ -244,7 +245,7 @@ class PrintOptionsScreenView(QWidget):
     def get_continue_button_style(self):
         return """
             QPushButton {
-                color: white; font-size: 32px; font-weight: bold;
+                color: white; font-size: 12px; font-weight: bold;
                 border: none; border-radius: 4px !important; height: 40px;
                 background-color: #1e440a;
                 padding-left: 12px; padding-right: 12px;
