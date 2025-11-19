@@ -353,6 +353,17 @@ class PDFPageWidget(QFrame):
         layout = QVBoxLayout(self)
         layout.setContentsMargins(8, 8, 8, 8)
         layout.setSpacing(6)
+
+        indicator_row = QHBoxLayout()
+        indicator_row.setContentsMargins(0, 0, 0, 0)
+        indicator_row.setSpacing(0)
+        indicator_row.addStretch()
+        self.selection_indicator = QLabel("")
+        self.selection_indicator.setFixedSize(30, 30)
+        self.selection_indicator.setAlignment(Qt.AlignCenter)
+        indicator_row.addWidget(self.selection_indicator, 0, Qt.AlignRight)
+        layout.addLayout(indicator_row)
+
         self.checkbox = QCheckBox(f"Page {self.page_num}")
         self.checkbox.setChecked(checked)
         self.checkbox.setStyleSheet("""
@@ -386,18 +397,39 @@ class PDFPageWidget(QFrame):
         self.preview_label.setText(f"Loading\nPage {self.page_num}...")
         layout.addWidget(self.checkbox, 0)
         layout.addWidget(self.preview_label, 1)
+        self.update_selection_indicator(checked)
         self.setMouseTracking(True)
         
     def mousePressEvent(self, event):
-        if not self.checkbox.geometry().contains(event.pos()): 
-            self.page_selected.emit(self.page_num)
+        # No longer navigate to single page view when clicking the preview area
+        super().mousePressEvent(event)
         
     def on_checkbox_clicked(self, checked):
         self.page_checkbox_clicked.emit(self.page_num, checked)
-        if checked: 
-            self.setStyleSheet("QFrame { background-color: white; border: 3px solid #4CAF50; border-radius: 8px; margin: 4px; }")
-        else: 
-            self.setStyleSheet("QFrame { background-color: #f5f5f5; border: 2px solid #ccc; border-radius: 8px; margin: 4px; }")
+        self.update_selection_indicator(checked)
+
+    def update_selection_indicator(self, checked):
+        if checked:
+            self.selection_indicator.setText("✓")
+            self.selection_indicator.setStyleSheet("""
+                QLabel {
+                    border: 2px solid #4CAF50;
+                    border-radius: 6px;
+                    background-color: #e6f4ea;
+                    color: #2e7d32;
+                    font-size: 18px;
+                    font-weight: bold;
+                }
+            """)
+        else:
+            self.selection_indicator.setText("")
+            self.selection_indicator.setStyleSheet("""
+                QLabel {
+                    border: 2px solid #d1d5db;
+                    border-radius: 6px;
+                    background-color: #ffffff;
+                }
+            """)
         
     def set_preview_image(self, pixmap):
         # Store original pixmap and scale to fit current label size
@@ -715,6 +747,7 @@ class FileBrowserView(QWidget):
         header_row.addWidget(self.preview_header, 1, Qt.AlignLeft)
         header_row.addWidget(self.view_all_btn)
         header_row.addWidget(self.view_single_btn)
+        header_row.addSpacing(20)
         header_row.addWidget(self.select_all_btn)
         header_row.addWidget(self.deselect_all_btn)
         
@@ -776,7 +809,13 @@ class FileBrowserView(QWidget):
         self.back_to_idle_btn.setFixedHeight(button_height)
         self.back_to_idle_btn.clicked.connect(self.back_to_idle_clicked.emit)
         self.continue_btn = QPushButton("Set Print Options →")
-        self.continue_btn.setStyleSheet(all_button_style)
+        continue_button_style = all_button_style + """
+            QPushButton:disabled {
+                background-color: #3e423a;
+                color: #555;
+            }
+        """
+        self.continue_btn.setStyleSheet(continue_button_style)
         self.continue_btn.setFixedHeight(button_height)
         self.continue_btn.clicked.connect(self.continue_button_clicked.emit)
         self.continue_btn.setVisible(False)
@@ -947,7 +986,6 @@ class FileBrowserView(QWidget):
         
         for i, page_num in enumerate(pages_to_show):
             page_widget = PDFPageWidget(page_num, checked=self.selected_pages.get(page_num, True))
-            page_widget.page_selected.connect(self.page_widget_clicked.emit)
             page_widget.page_checkbox_clicked.connect(self.page_checkbox_clicked.emit)
             self.page_widgets.append(page_widget)
             self.page_widget_map[page_num] = page_widget
