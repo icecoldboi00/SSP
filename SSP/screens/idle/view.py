@@ -41,12 +41,12 @@ class IdleScreenView(QWidget):
 
         self.touch_to_start_label = QLabel("TOUCH SCREEN TO START")
         self.touch_to_start_label.setAlignment(Qt.AlignCenter)
-        self.touch_to_start_label.setStyleSheet("color: #36454F; font-size: 52px; font-weight: bold; padding: 20px;")
+        self.touch_to_start_label.setStyleSheet("color: #36454F; font-size: 56px; font-weight: bold; padding: 20px;")
         
 
         self.bottom_info = QLabel("Supported Format: PDF Files Only")
         self.bottom_info.setAlignment(Qt.AlignCenter)
-        self.bottom_info.setStyleSheet("color: #36454F; font-size: 16px;")
+        self.bottom_info.setStyleSheet("color: #36454F; font-size: 32px;")
 
         frame_layout.addStretch(2) 
         frame_layout.addWidget(self.touch_to_start_label)
