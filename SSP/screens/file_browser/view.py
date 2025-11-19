@@ -3,8 +3,8 @@ from PyQt5.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QLabel, QScrollArea,
     QFrame, QGridLayout, QCheckBox, QSizePolicy, QStackedLayout
 )
-from PyQt5.QtCore import Qt, pyqtSignal, QThread, QPoint
-from PyQt5.QtGui import QPixmap, QImage, QTouchEvent
+from PyQt5.QtCore import Qt, pyqtSignal, QThread, QPoint, QEvent
+from PyQt5.QtGui import QPixmap, QImage, QTouchEvent, QMouseEvent
 from .pdf_preview_widget import PDFPreviewWidget
 import fitz  # PyMuPDF
 
@@ -83,6 +83,10 @@ class PDFButton(QPushButton):
         self.clicked.connect(self.on_click)
         self.setMinimumWidth(280)
         self.setFixedHeight(60)
+        # Track drag state for scroll area compatibility
+        self.drag_start_pos = None
+        self.is_dragging = False
+        self.drag_threshold = 5  # pixels to move before considering it a drag
 
     def get_normal_style(self):
         return """
@@ -123,6 +127,70 @@ class PDFButton(QPushButton):
         else: 
             self.setStyleSheet(self.get_normal_style())
             self.setEnabled(True)   # Re-enable button when not selected
+    
+    def mousePressEvent(self, event):
+        if event.button() == Qt.LeftButton:
+            self.drag_start_pos = event.globalPos()
+            self.is_dragging = False
+        # Always call super to maintain button behavior
+        super().mousePressEvent(event)
+    
+    def mouseMoveEvent(self, event):
+        if self.drag_start_pos is not None and event.buttons() == Qt.LeftButton:
+            # Check if we've moved enough to consider it a drag
+            delta = (event.globalPos() - self.drag_start_pos).manhattanLength()
+            if delta > self.drag_threshold:
+                self.is_dragging = True
+                # Forward the drag event to the parent scroll area
+                parent_scroll = self._find_parent_scroll_area()
+                if parent_scroll:
+                    # First, send a press event if scroll area isn't already dragging
+                    if not parent_scroll.dragging:
+                        scroll_pos = parent_scroll.mapFromGlobal(self.drag_start_pos)
+                        press_event = QMouseEvent(
+                            QEvent.MouseButtonPress, scroll_pos, self.drag_start_pos,
+                            Qt.LeftButton, Qt.LeftButton, event.modifiers()
+                        )
+                        parent_scroll.mousePressEvent(press_event)
+                    
+                    # Now forward the move event
+                    scroll_pos = parent_scroll.mapFromGlobal(event.globalPos())
+                    scroll_event = QMouseEvent(
+                        event.type(), scroll_pos, event.globalPos(),
+                        event.button(), event.buttons(), event.modifiers()
+                    )
+                    parent_scroll.mouseMoveEvent(scroll_event)
+                    return
+        super().mouseMoveEvent(event)
+    
+    def mouseReleaseEvent(self, event):
+        if event.button() == Qt.LeftButton:
+            # Forward release to parent scroll area if we were dragging
+            if self.is_dragging:
+                parent_scroll = self._find_parent_scroll_area()
+                if parent_scroll:
+                    scroll_pos = parent_scroll.mapFromGlobal(event.globalPos())
+                    scroll_event = QMouseEvent(
+                        event.type(), scroll_pos, event.globalPos(),
+                        event.button(), event.buttons(), event.modifiers()
+                    )
+                    parent_scroll.mouseReleaseEvent(scroll_event)
+                event.ignore()
+            else:
+                super().mouseReleaseEvent(event)
+            self.drag_start_pos = None
+            self.is_dragging = False
+        else:
+            super().mouseReleaseEvent(event)
+    
+    def _find_parent_scroll_area(self):
+        """Find the parent DragScrollArea widget"""
+        parent = self.parent()
+        while parent:
+            if isinstance(parent, DragScrollArea):
+                return parent
+            parent = parent.parent()
+        return None
 
 class PDFPageWidget(QFrame):
     page_selected = pyqtSignal(int)
