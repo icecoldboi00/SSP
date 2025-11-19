@@ -17,6 +17,8 @@ class DragScrollArea(QScrollArea):
         self.dragging = False
         self.last_drag_position = QPoint()
         self.setMouseTracking(True)
+        # Enable touch events for touch screen scrolling
+        self.setAttribute(Qt.WA_AcceptTouchEvents, True)
     
     def mousePressEvent(self, event):
         if event.button() == Qt.LeftButton:
@@ -349,13 +351,15 @@ class FileBrowserView(QWidget):
         self.file_up_btn.hide()  # Hide since we're using scroll bar
         file_container_layout.addWidget(self.file_up_btn)
         
-        # Scroll area for file list
-        file_scroll = QScrollArea()
+        # Scroll area for file list (using DragScrollArea for drag and wheel scrolling)
+        file_scroll = DragScrollArea()
         file_scroll.setWidgetResizable(True)
         file_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         file_scroll.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
         # Keep viewport margin default so content width is unchanged
         file_scroll.setViewportMargins(0, 0, 0, 0)
+        # Enable wheel scrolling
+        file_scroll.setFocusPolicy(Qt.WheelFocus)
         file_scroll.setStyleSheet("""
             QScrollArea { 
                 border: none; 
