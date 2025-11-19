@@ -236,7 +236,7 @@ class PaymentModel(QObject):
         amt = self.best_payment_suggestion.get('amount', self.total_cost)
         chg = self.best_payment_suggestion.get('change', 0)
         if chg == 0:
-            return f"Max payment we can receive: P{amt:.2f} (exact)"
+            return "Please pay in EXACT AMOUNT. No available change."
         return f"Max payment we can receive: P{amt:.2f} (available P{chg:.2f})"
 
     def _auto_complete_payment(self):
