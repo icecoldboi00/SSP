@@ -47,7 +47,7 @@ class PrintOptionsScreenView(QWidget):
         copies_row = QHBoxLayout()
         copies_row.setAlignment(Qt.AlignHCenter | Qt.AlignVCenter)
         copies_label = QLabel("Number of Copies:")
-        copies_label.setStyleSheet("color: #36454F; font-size: 18px; font-weight: bold; background-color: transparent;")
+        copies_label.setStyleSheet("color: #36454F; font-size: 32px; font-weight: bold; background-color: transparent;")
         copies_row.addWidget(copies_label)
 
         self.copies_minus_btn = QPushButton("−")
@@ -74,7 +74,7 @@ class PrintOptionsScreenView(QWidget):
         color_row = QHBoxLayout()
         color_row.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
         color_label = QLabel("Color Mode:")
-        color_label.setStyleSheet("color: #36454F; font-size: 18px; font-weight: bold; background-color: transparent;")
+        color_label.setStyleSheet("color: #36454F; font-size: 32px; font-weight: bold; background-color: transparent;")
         color_row.addWidget(color_label)
         color_row.addStretch(1)
 
@@ -103,12 +103,12 @@ class PrintOptionsScreenView(QWidget):
         # ---- Cost and Details ----
         self.cost_label = QLabel("Calculating cost...")
         self.cost_label.setAlignment(Qt.AlignCenter)
-        self.cost_label.setStyleSheet("color: #33cc33; font-size: 24px; font-weight: bold; margin: 0px 0 0 0;")
+        self.cost_label.setStyleSheet("color: #33cc33; font-size: 56px; font-weight: bold; margin: 0px 0 0 0;")
         layout.addWidget(self.cost_label, 0, Qt.AlignHCenter)
 
         self.analysis_details_label = QLabel("Analysis details will appear here.")
         self.analysis_details_label.setAlignment(Qt.AlignCenter)
-        self.analysis_details_label.setStyleSheet("color: #36454F; font-size: 14px; margin-top: 5px;")
+        self.analysis_details_label.setStyleSheet("color: #36454F; font-size: 32px; margin-top: 5px;")
         layout.addWidget(self.analysis_details_label, 0, Qt.AlignHCenter)
 
         layout.addStretch(2)
@@ -173,9 +173,9 @@ class PrintOptionsScreenView(QWidget):
         
         # Update the display with warning
         self.cost_label.setText(warning_text)
-        self.cost_label.setStyleSheet("color: #dc3545; font-size: 24px; font-weight: bold; margin: 0px 0 0 0;")
+        self.cost_label.setStyleSheet("color: #dc3545; font-size: 56px; font-weight: bold; margin: 0px 0 0 0;")
         self.analysis_details_label.setText(details_text)
-        self.analysis_details_label.setStyleSheet("color: #dc3545; font-size: 14px; margin-top: 5px; font-weight: bold;")
+        self.analysis_details_label.setStyleSheet("color: #dc3545; font-size: 32px; margin-top: 5px; font-weight: bold;")
         
         # Disable the continue button
         self.continue_btn.setEnabled(False)
@@ -197,14 +197,14 @@ class PrintOptionsScreenView(QWidget):
         self.continue_btn.setStyleSheet(self.get_continue_button_style())
         
         # Reset the cost label style
-        self.cost_label.setStyleSheet("color: #33cc33; font-size: 24px; font-weight: bold; margin: 0px 0 0 0;")
-        self.analysis_details_label.setStyleSheet("color: #36454F; font-size: 14px; margin-top: 5px;")
+        self.cost_label.setStyleSheet("color: #33cc33; font-size: 56px; font-weight: bold; margin: 0px 0 0 0;")
+        self.analysis_details_label.setStyleSheet("color: #36454F; font-size: 32px; margin-top: 5px;")
     
     def get_copies_button_style(self):
         return """
             QPushButton {
                 background-color: #1e440a; color: #fff; border: none; border-radius: 4px;
-                font-size: 22px; width: 44px; height: 44px; min-width: 44px; max-width: 44px; min-height: 44px; max-height: 44px;
+                font-size: 32px; width: 44px; height: 44px; min-width: 44px; max-width: 44px; min-height: 44px; max-height: 44px;
                 padding: 0; font-weight: bold;
             }
             QPushButton:pressed, QPushButton:checked, QPushButton:hover { background-color: #2a5d1a; }
@@ -213,7 +213,7 @@ class PrintOptionsScreenView(QWidget):
     def get_copies_label_style(self):
         return """
             QLabel { 
-                background-color: transparent; color: #36454F; font-size: 22px; 
+                background-color: transparent; color: #36454F; font-size: 32px; 
                 min-width: 40px; max-width: 40px; border-radius: 3px; padding: 1px 4px; 
                 border: none; font-weight: bold; qproperty-alignment: AlignCenter; 
             }
@@ -222,7 +222,7 @@ class PrintOptionsScreenView(QWidget):
     def get_color_button_style(self):
         return """
             QPushButton {
-                color: white; font-size: 16px; font-weight: bold;
+                color: white; font-size: 32px; font-weight: bold;
                 border: none; border-radius: 4px !important; height: 44px; min-width: 130px;
                 background-color: #1e440a;
                 padding-left: 12px; padding-right: 12px;
@@ -233,7 +233,7 @@ class PrintOptionsScreenView(QWidget):
     def get_back_button_style(self):
         return """
             QPushButton {
-                color: white; font-size: 12px; font-weight: bold;
+                color: white; font-size: 32px; font-weight: bold;
                 border: none; border-radius: 4px; height: 40px;
                 background-color: #ff0000;
                 padding-left: 12px; padding-right: 12px;
@@ -244,7 +244,7 @@ class PrintOptionsScreenView(QWidget):
     def get_continue_button_style(self):
         return """
             QPushButton {
-                color: white; font-size: 12px; font-weight: bold;
+                color: white; font-size: 32px; font-weight: bold;
                 border: none; border-radius: 4px !important; height: 40px;
                 background-color: #1e440a;
                 padding-left: 12px; padding-right: 12px;
