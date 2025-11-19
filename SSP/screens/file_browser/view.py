@@ -191,12 +191,23 @@ class PDFButton(QPushButton):
             self.scroll_timer.stop()
             return
         
+        # Calculate the end position - scroll further to show the last character fully
+        # Add extra scroll distance (approximately one character width or 20px, whichever is larger)
+        font = self.font()
+        font.setPointSize(18)
+        if self.is_selected:
+            font.setBold(True)
+        fm = QFontMetrics(font)
+        avg_char_width = fm.averageCharWidth()
+        extra_scroll = max(avg_char_width, 20)  # At least 20px or one average character width
+        end_position = -(self.text_width - self.available_width + extra_scroll)
+        
         # Move scroll position (right to left, so negative direction)
         self.scroll_position -= self.scroll_speed
         
         # Check if we've scrolled past the end
-        if self.scroll_position <= -(self.text_width - self.available_width):
-            # Pause at the end, then reset
+        if self.scroll_position <= end_position:
+            # Pause at the end for 2 seconds, then reset
             self.scroll_timer.stop()
             self.is_paused = True
             self.pause_timer.start(self.pause_duration)
