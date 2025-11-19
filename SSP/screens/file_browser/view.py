@@ -75,7 +75,8 @@ class PDFButton(QPushButton):
         self.pdf_data = pdf_data
         self.is_selected = False
         filename = pdf_data['filename']
-        self.setText(filename)
+        self.full_text = filename
+        self.setText("")  # Clear default text, we'll paint it ourselves
         self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
         self.setStyleSheet(self.get_normal_style())
         self.clicked.connect(self.on_click)
@@ -85,6 +86,23 @@ class PDFButton(QPushButton):
         self.drag_start_pos = None
         self.is_dragging = False
         self.drag_threshold = 5  # pixels to move before considering it a drag
+        
+        # Scrolling text properties
+        self.scroll_position = 0
+        self.scroll_timer = QTimer(self)
+        self.scroll_timer.timeout.connect(self.update_scroll)
+        self.scroll_speed = 2  # pixels per update
+        self.scroll_delay = 50  # milliseconds between updates
+        self.pause_duration = 2000  # milliseconds to pause at start/end
+        self.pause_timer = QTimer(self)
+        self.pause_timer.setSingleShot(True)
+        self.pause_timer.timeout.connect(self.start_scrolling)
+        self.is_paused = False
+        self.text_width = 0
+        self.available_width = 0
+        
+        # Check if scrolling is needed after widget is shown
+        QTimer.singleShot(100, self.check_and_start_scroll)
 
     def get_normal_style(self):
         return """
@@ -125,6 +143,115 @@ class PDFButton(QPushButton):
         else: 
             self.setStyleSheet(self.get_normal_style())
             self.setEnabled(True)   # Re-enable button when not selected
+        # Recalculate scrolling when selection changes (affects font boldness)
+        QTimer.singleShot(50, self.check_and_start_scroll)
+    
+    def check_and_start_scroll(self):
+        """Check if text is too long and start scrolling if needed"""
+        if not self.full_text:
+            return
+        
+        # Wait for button to have a valid width
+        if self.width() <= 0:
+            QTimer.singleShot(100, self.check_and_start_scroll)
+            return
+        
+        # Calculate text width and available width
+        font = self.font()
+        font.setPointSize(18)
+        if self.is_selected:
+            font.setBold(True)
+        fm = QFontMetrics(font)
+        self.text_width = fm.boundingRect(self.full_text).width()
+        
+        # Available width is button width minus padding (20px total: 10px each side)
+        self.available_width = max(0, self.width() - 20)
+        
+        # Start scrolling if text is wider than available space
+        if self.text_width > self.available_width and self.available_width > 0:
+            self.scroll_position = 0
+            self.is_paused = True
+            self.pause_timer.start(self.pause_duration)
+        else:
+            self.scroll_timer.stop()
+            self.pause_timer.stop()
+            self.scroll_position = 0
+            self.update()  # Update to show static text
+    
+    def start_scrolling(self):
+        """Start the scrolling animation"""
+        if self.text_width <= self.available_width:
+            return
+        self.is_paused = False
+        self.scroll_timer.start(self.scroll_delay)
+    
+    def update_scroll(self):
+        """Update scroll position"""
+        if self.text_width <= self.available_width:
+            self.scroll_timer.stop()
+            return
+        
+        # Move scroll position (right to left, so negative direction)
+        self.scroll_position -= self.scroll_speed
+        
+        # Check if we've scrolled past the end
+        if self.scroll_position <= -(self.text_width - self.available_width):
+            # Pause at the end, then reset
+            self.scroll_timer.stop()
+            self.is_paused = True
+            self.pause_timer.start(self.pause_duration)
+            # After pause, reset to start
+            QTimer.singleShot(self.pause_duration, self.reset_scroll)
+        else:
+            self.update()  # Trigger repaint
+    
+    def reset_scroll(self):
+        """Reset scroll position to start"""
+        self.scroll_position = 0
+        self.is_paused = True
+        self.pause_timer.start(self.pause_duration)
+    
+    def paintEvent(self, event):
+        """Override paintEvent to draw scrolling text"""
+        # First, paint the button background using the default style
+        super().paintEvent(event)
+        
+        if not self.full_text:
+            return
+        
+        # Set up painter
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.Antialiasing)
+        
+        # Get font
+        font = self.font()
+        font.setPointSize(18)
+        if self.is_selected:
+            font.setBold(True)
+        painter.setFont(font)
+        
+        # Set text color (white)
+        painter.setPen(Qt.white)
+        
+        # Calculate text position
+        padding = 10
+        
+        if self.text_width <= self.available_width:
+            # Text fits, just align left
+            text_rect = QRect(padding, 0, self.width() - 2 * padding, self.height())
+            painter.drawText(text_rect, Qt.AlignLeft | Qt.AlignVCenter, self.full_text)
+        else:
+            # Text doesn't fit, draw scrolling text (right to left)
+            text_x = padding + self.scroll_position
+            text_rect = QRect(text_x, 0, self.text_width, self.height())
+            # Clip to button bounds to prevent text from showing outside
+            painter.setClipRect(QRect(padding, 0, self.available_width, self.height()))
+            painter.drawText(text_rect, Qt.AlignLeft | Qt.AlignVCenter, self.full_text)
+    
+    def resizeEvent(self, event):
+        """Handle resize to recalculate scrolling"""
+        super().resizeEvent(event)
+        QTimer.singleShot(50, self.check_and_start_scroll)
     
     def mousePressEvent(self, event):
         if event.button() == Qt.LeftButton:
