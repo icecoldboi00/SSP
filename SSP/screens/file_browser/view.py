@@ -256,9 +256,6 @@ class PDFButton(QPushButton):
         # Calculate text position
         padding = 10
         
-        clip_rect = QRect(padding, 0, self.available_width + 8, self.height())
-        painter.setClipRect(clip_rect)
-
         if self.text_width <= self.available_width:
             # Text fits, just align left
             text_rect = QRect(padding, 0, self.width() - 2 * padding, self.height())
@@ -267,6 +264,9 @@ class PDFButton(QPushButton):
             # Text doesn't fit, draw scrolling text (right to left)
             text_x = padding + self.scroll_position
             text_rect = QRect(text_x, 0, self.text_width, self.height())
+            # Clip to button bounds (slightly extended) to prevent text from showing outside but keep last char visible
+            clip_rect = QRect(padding, 0, self.available_width + 6, self.height())
+            painter.setClipRect(clip_rect)
             painter.drawText(text_rect, Qt.AlignLeft | Qt.AlignVCenter, self.full_text)
     
     def resizeEvent(self, event):
