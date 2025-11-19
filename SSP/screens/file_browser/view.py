@@ -199,7 +199,7 @@ class PDFButton(QPushButton):
             font.setBold(True)
         fm = QFontMetrics(font)
         avg_char_width = fm.averageCharWidth()
-        extra_scroll = max(avg_char_width, 20)  # At least 20px or one average character width
+        extra_scroll = max(avg_char_width * 2, 35)  # Scroll a bit further so last characters aren't clipped
         end_position = -(self.text_width - self.available_width + extra_scroll)
         
         # Move scroll position (right to left, so negative direction)
