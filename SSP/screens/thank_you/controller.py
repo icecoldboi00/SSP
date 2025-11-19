@@ -40,6 +40,8 @@ class ThankYouController(QWidget):
         self.model.on_enter(self.main_app)
     
     def on_leave(self):
+        # Ensure admin override button is hidden when leaving screen
+        self.view.hide_admin_override_button()
         self.model.on_leave()
     
     def show_waiting_for_print(self):

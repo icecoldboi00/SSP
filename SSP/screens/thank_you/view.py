@@ -87,7 +87,8 @@ class ThankYouScreenView(QWidget):
         return """
             QPushButton { 
                 background-color: #8B0000; color: white; font-size: 16px;
-                font-weight: bold; border: 2px solid #A52A2A; border-radius: 8px; 
+                font-weight: bold; border: 2px solid #A52A2A; border-radius: 6px; 
+                padding: 12px 24px;
             }
             QPushButton:hover { 
                 background-color: #A52A2A; 
