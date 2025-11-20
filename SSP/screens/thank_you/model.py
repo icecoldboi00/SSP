@@ -25,6 +25,7 @@ class ThankYouModel(QObject):
         self.print_job_started = False
         self.print_job_finished = False
         self.error_type = None
+        self._suppress_error = False
         
     def _unmount_usb_drive(self):
         try:
@@ -100,6 +101,12 @@ class ThankYouModel(QObject):
         )
     
     def show_printing_error(self, message: str):
+        if self._suppress_error:
+            return
+
+        self._suppress_error = True
+        QTimer.singleShot(400, lambda: setattr(self, '_suppress_error', False))
+
         self.current_state = "error"
         
         # Stop any existing safety timeout since we're now in error state
@@ -121,7 +128,7 @@ class ThankYouModel(QObject):
         
         self.status_updated.emit(
             "ERROR OCCURRED",
-            f"Error: {clean_message}\nPlease contact an administrator."
+            f"Error: {clean_message}\nPlease contact an administrator.\nFor incomplete transactions please contact phone number +63 976 291 2863"
         )
         
         # SMS notification is sent by main_app.on_print_failed() not here bro
@@ -145,12 +152,12 @@ class ThankYouModel(QObject):
         if paper_count == 0:
             self.status_updated.emit(
                 "NO PAPER AVAILABLE",
-                "The printer is out of paper. Please contact an administrator."
+                "The printer is out of paper. Please contact an administrator.\nFor incomplete transactions please contact phone number +63 976 291 2863"
             )
         else:  # paper_count == 1
             self.status_updated.emit(
                 "LOW PAPER WARNING",
-                "Only 1 page remaining. Please contact an administrator."
+                "Only 1 page remaining. Please contact an administrator.\nFor incomplete transactions please contact phone number +63 976 291 2863"
             )
         
         # Show admin override button
@@ -166,7 +173,7 @@ class ThankYouModel(QObject):
         
         self.status_updated.emit(
             "PAPER JAM DETECTED",
-            "Paper jam detected. Please contact an administrator."
+            "Paper jam detected. Please contact an administrator.\nFor incomplete transactions please contact phone number +63 976 291 2863"
         )
         
         # Show admin override button
@@ -205,7 +212,7 @@ class ThankYouModel(QObject):
         )
 
         # Start 5-second redirect timer
-        self.redirect_timer.start(5000)
+        self.redirect_timer.start(3000)
     
     def _cleanup_temp_files(self):
         try:
