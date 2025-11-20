@@ -128,7 +128,7 @@ class ThankYouModel(QObject):
         
         self.status_updated.emit(
             "ERROR OCCURRED",
-            f"Error: {clean_message}\nPlease contact an administrator.\nFor incomplete transactions please contact phone number +63 976 291 2863"
+            f"Error: {clean_message}\nPlease contact an administrator.\nFor incomplete transactions please contact phone number\n+63 976 291 2863"
         )
         
         # SMS notification is sent by main_app.on_print_failed() not here bro
@@ -152,12 +152,12 @@ class ThankYouModel(QObject):
         if paper_count == 0:
             self.status_updated.emit(
                 "NO PAPER AVAILABLE",
-                "The printer is out of paper. Please contact an administrator.\nFor incomplete transactions please contact phone number +63 976 291 2863"
+                "The printer is out of paper. Please contact an administrator.\nFor incomplete transactions please contact phone number\n+63 976 291 2863"
             )
         else:  # paper_count == 1
             self.status_updated.emit(
                 "LOW PAPER WARNING",
-                "Only 1 page remaining. Please contact an administrator.\nFor incomplete transactions please contact phone number +63 976 291 2863"
+                "Only 1 page remaining. Please contact an administrator.\nFor incomplete transactions please contact phone number\n+63 976 291 2863"
             )
         
         # Show admin override button
@@ -173,7 +173,7 @@ class ThankYouModel(QObject):
         
         self.status_updated.emit(
             "PAPER JAM DETECTED",
-            "Paper jam detected. Please contact an administrator.\nFor incomplete transactions please contact phone number +63 976 291 2863"
+            "Paper jam detected. Please contact an administrator.\nFor incomplete transactions please contact phone number\n+63 976 291 2863"
         )
         
         # Show admin override button
