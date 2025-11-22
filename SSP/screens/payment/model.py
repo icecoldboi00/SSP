@@ -5,55 +5,6 @@ from managers.payment_algorithm_manager import PaymentAlgorithmManager
 from database.db_manager import DatabaseManager
 from managers.payment_handler import get_payment_handler, cleanup_payment_handler
 
-# Controller for the payment handler
-class PaymentGPIOController(QObject):
-    coin_inserted = pyqtSignal(int)
-    special_coin_inserted = pyqtSignal(int)  # Old 5 peso
-    bill_inserted = pyqtSignal(int)
-    payment_status = pyqtSignal(str)
-    
-    def __init__(self):
-        super().__init__()
-        self.payment_handler = None
-        self.initialized = False
-    
-    def initialize(self):
-        try:
-            cleanup_payment_handler()
-            
-            # Listens from payment handler signals and emits to this controller
-            self.payment_handler = get_payment_handler()
-            if self.payment_handler:
-                self.payment_handler.coin_inserted.connect(self.coin_inserted.emit)
-                self.payment_handler.special_coin_inserted.connect(self.special_coin_inserted.emit)
-                self.payment_handler.bill_inserted.connect(self.bill_inserted.emit)
-                self.payment_handler.payment_status.connect(self.payment_status.emit)
-                
-                self.initialized = True
-                print("PaymentController: Initialized")
-                return True
-            else:
-                return False
-        except Exception as e:
-            print(f"Failed {e}")
-            return False
-    
-    def enable_payments(self):
-        if self.payment_handler and self.initialized:
-            return self.payment_handler.enable_payments()
-        return False
-    
-    def disable_payments(self):
-        if self.payment_handler and self.initialized:
-            return self.payment_handler.disable_payments()
-        return False
-    
-    def cleanup(self):
-        if self.payment_handler:
-            self.payment_handler.cleanup()
-            self.payment_handler = None
-        self.initialized = False
-
 
 class PaymentModel(QObject):
     payment_data_updated = pyqtSignal(dict)  # payment_data
@@ -69,6 +20,7 @@ class PaymentModel(QObject):
         super().__init__()
         self.db_manager = DatabaseManager()
         self.payment_algorithm = PaymentAlgorithmManager(self.db_manager) #Same db_manager instance
+        self.change_dispenser = ChangeDispenser()
         self.main_app = main_app
         self.total_cost = 0
         self.amount_received = 0
@@ -76,9 +28,8 @@ class PaymentModel(QObject):
         self.cash_received = {}
         self.payment_processing = False
         self.payment_ready = False
-        self.gpio_controller = None
+        self.payment_handler = None
         self.dispense_thread = None
-        self.change_dispenser = ChangeDispenser()
         self.best_payment_suggestion = None  # {'amount', 'change', 'reason'}
 
     def set_payment_data(self, payment_data):
@@ -108,40 +59,34 @@ class PaymentModel(QObject):
 
 
         # Prepare summary data for UI
-        analysis = payment_data.get('analysis', {})
-        pricing_info = analysis.get('pricing', {})
-        b_count = pricing_info.get('black_pages_count', 0)
-        c_count = pricing_info.get('color_pages_count', 0)
         doc_name = os.path.basename(payment_data['pdf_data']['path'])
 
         summary_data = {
             'total_cost': self.total_cost,
             'document_name': doc_name,
             'copies': payment_data['copies'],
-            'color_mode': payment_data['color_mode'],
-            'black_pages': b_count,
-            'color_pages': c_count
+            'color_mode': payment_data['color_mode']
         }
 
         self.payment_data_updated.emit(summary_data)
         self.payment_status_updated.emit("Click 'Enable Payment' to begin")
 
     def setup_gpio(self):
-        self.gpio_controller = PaymentGPIOController()
+        cleanup_payment_handler()
         
-        if self.gpio_controller.initialize():
-            
-            # Listens from PaymentGPIOController signals and emits to this model
-            self.gpio_controller.coin_inserted.connect(self.on_coin_inserted)
-            self.gpio_controller.special_coin_inserted.connect(self.on_special_coin_inserted)
-            self.gpio_controller.bill_inserted.connect(self.on_bill_inserted)
-            self.gpio_controller.payment_status.connect(self.payment_status_updated.emit)
+        self.payment_handler = get_payment_handler()
+        if self.payment_handler:
+            # Connect signals directly from PaymentHandler
+            self.payment_handler.coin_inserted.connect(self.on_coin_inserted)
+            self.payment_handler.special_coin_inserted.connect(self.on_special_coin_inserted)
+            self.payment_handler.bill_inserted.connect(self.on_bill_inserted)
+            self.payment_handler.payment_status.connect(self.payment_status_updated.emit)
             
             # Set initial payment status
             self.payment_status_updated.emit("Payment system ready - Coin and bill acceptors disabled")
         else:
             print(" broken")
-            self.gpio_controller = None
+            self.payment_handler = None
 
     def enable_payment_mode(self):
         if self.total_cost <= 0:
@@ -149,9 +94,9 @@ class PaymentModel(QObject):
 
         self.payment_ready = True
 
-        # Enable payments using the new controller
-        if self.gpio_controller and self.gpio_controller.initialized:
-            if self.gpio_controller.enable_payments():
+        # Enable payments using PaymentHandler directly
+        if self.payment_handler:
+            if self.payment_handler.enable_payments():
                 status_text = ""
             else:
                 status_text = "Hardware broken"
@@ -166,8 +111,8 @@ class PaymentModel(QObject):
     def disable_payment_mode(self):
         self.payment_ready = False
         
-        if self.gpio_controller and self.gpio_controller.initialized:
-            self.gpio_controller.disable_payments()
+        if self.payment_handler:
+            self.payment_handler.disable_payments()
 
         status_text = "Payment mode disabled"
         self.payment_status_updated.emit(status_text)
@@ -616,10 +561,10 @@ class PaymentModel(QObject):
         # Disable payment mode and coin acceptor
         self.disable_payment_mode()
 
-        # Stop and cleanup GPIO controller
-        if self.gpio_controller:
-            self.gpio_controller.cleanup()
-            self.gpio_controller = None
+        # Stop and cleanup payment handler
+        if self.payment_handler:
+            self.payment_handler.cleanup()
+            self.payment_handler = None
         
         # Clean up global payment handler to in case
         cleanup_payment_handler()

@@ -33,8 +33,8 @@ class ThankYouModel(QObject):
                 usb_manager = self.main_app.usb_screen.model.usb_manager
                 if usb_manager and usb_manager.current_usb_drive:
                     drive_path = usb_manager.current_usb_drive
-                    # Use the existing auto-eject functionality
-                    usb_manager._auto_eject_usb_drive(drive_path)
+                    # Auto-eject disabled
+                    # usb_manager._auto_eject_usb_drive(drive_path)
                 else:
                     print(f"No USB drive to unmount")
             else:

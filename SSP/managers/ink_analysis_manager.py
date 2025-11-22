@@ -1,6 +1,78 @@
 import fitz
 import numpy as np
 from datetime import datetime
+from PyQt5.QtCore import QThread, pyqtSignal
+from database.db_manager import DatabaseManager
+
+
+class InkAnalysisThread(QThread):
+    analysis_completed = pyqtSignal(dict)
+    database_updated = pyqtSignal(bool)
+    
+    def __init__(self, pdf_path, selected_pages=None, copies=1, dpi=150):
+        super().__init__()
+        self.pdf_path = pdf_path
+        self.selected_pages = selected_pages
+        self.copies = copies
+        self.dpi = dpi
+        
+        # Create managers in this thread (in run method)
+        self.db_manager = None
+        self.ink_analysis_manager = None
+    
+    def run(self):
+        try:
+            # Create managers in this thread
+            self.db_manager = DatabaseManager()
+            self.ink_analysis_manager = InkAnalysisManager(self.db_manager)
+            
+            # Perform analysis and update database
+            result = self.ink_analysis_manager.analyze_and_update_after_print(
+                pdf_path=self.pdf_path,
+                selected_pages=self.selected_pages,
+                copies=self.copies,
+                dpi=self.dpi
+            )
+            
+            # Safety check: ensure result is valid
+            if not result or not isinstance(result, dict):
+                print("Warning: Invalid result from ink analysis")
+                self.database_updated.emit(False)
+                return
+            
+            # Emit results
+            self.analysis_completed.emit(result)
+            
+            # Emit database update status and updated CMYK levels
+            if result.get('database_updated', False):
+                self.database_updated.emit(True)
+                
+                # Get and emit updated CMYK levels
+                updated_levels = self.db_manager.get_cmyk_ink_levels()
+                if updated_levels:
+                    self.analysis_completed.emit({
+                        'success': True,
+                        'database_updated': True,
+                        'cmyk_levels': updated_levels
+                    })
+            else:
+                self.database_updated.emit(False)
+                
+        except Exception as e:
+            print(f"Error in ink analysis: {e}")
+            self.database_updated.emit(False)
+            
+            # Log error to database
+            try:
+                from utils.error_logger import log_error
+                log_error("Ink Analysis Error", str(e), "ink_analysis_manager")
+            except Exception as db_error:
+                print(f"Failed to log error to database: {db_error}")
+        finally:
+            # Cleanup database connection
+            if self.db_manager:
+                self.db_manager.close()
+
 
 class InkAnalysisManager:
     # Standard coverage percentage for a single channel (C, M, Y, or K) on a "standard page".
@@ -246,8 +318,21 @@ class InkAnalysisManager:
         if not analysis_result.get('success', False):
             return analysis_result
         
+        # Determine if copies are already duplicated in the temp PDF
+        # Single page + multiple copies: temp PDF has 1 page, CUPS handles copies → multiply by copies
+        # Multi-page: temp PDF has pages × copies → don't multiply (already included)
+        analyzed_pages = analysis_result.get('analyzed_pages', 0)
+        if analyzed_pages == 1 and copies > 1:
+            # Single page with multiple copies: temp PDF has 1 page, need to multiply
+            copies_factor = copies
+            print(f"Single page with {copies} copies: multiplying ink usage by {copies}")
+        else:
+            # Multi-page or single copy: temp PDF already has all copies, don't multiply
+            copies_factor = 1
+            print(f"Temp PDF has {analyzed_pages} pages: copies already included, not multiplying")
+        
         # Update database
-        update_success = self.update_database_after_print(analysis_result, copies)
+        update_success = self.update_database_after_print(analysis_result, copies_factor)
         
         analysis_result['database_updated'] = update_success
         

@@ -42,7 +42,7 @@ class USBController(QWidget):
         color_hex = self.model.get_status_color(style_key)
         self.view.update_status_indicator(text, style_key, color_hex)
     
-    
+    # Pass list[dict] to file browser screen
     def _handle_pdf_files_found(self, pdf_files):
         self.main_app.file_browser_screen.load_pdf_files(pdf_files) # Pass pdf file to  file browser screen
         self.main_app.show_screen('file_browser')

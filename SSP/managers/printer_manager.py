@@ -3,6 +3,7 @@ import subprocess
 from PyQt5.QtCore import QObject, pyqtSignal
 from config import get_config
 from managers.printer_thread import PrinterThread
+from managers.ink_analysis_manager import InkAnalysisThread
 
 
 class PrinterManager(QObject):
@@ -15,6 +16,7 @@ class PrinterManager(QObject):
         config = get_config()
         self.printer_name = config.printer_name
         self.print_thread = None
+        self.ink_analysis_thread = None
         self.check_printer_availability()
         # Configure printer to disable separator pages
         self._disable_separator_pages()
@@ -50,7 +52,6 @@ class PrinterManager(QObject):
         self.print_thread.start()
 
     def _disable_separator_pages(self):
-        """Configure printer to disable separator pages permanently using sudo"""
         try:
             # First, check what separator page options are available
             result = subprocess.run(
@@ -235,3 +236,39 @@ class PrinterManager(QObject):
     
     def on_thread_finished(self):
         self.print_thread = None
+    
+    def trigger_ink_analysis(self, copies):
+        # Check if temp PDF path exists
+        temp_pdf_path = getattr(self, 'last_temp_pdf_path', None)
+        if not temp_pdf_path:
+            print("No temp PDF available for ink analysis")
+            return
+        
+        try:         
+            config = get_config()
+            
+            # Create and start new thread
+            self.ink_analysis_thread = InkAnalysisThread(
+                pdf_path=temp_pdf_path,
+                selected_pages=None,  # All pages in temp PDF 
+                copies=copies,
+                dpi=config.pdf_analysis_dpi
+            )
+            
+            # Connect signals
+            self.ink_analysis_thread.analysis_completed.connect(self.cleanup_last_temp_pdf)
+            
+            # Start the thread
+            self.ink_analysis_thread.start()
+            
+        except Exception as e:
+            print(f"Error triggering ink analysis: {e}")
+            self.cleanup_last_temp_pdf()
+    
+    def cleanup(self):
+        """Clean up printer manager resources"""
+        # Stop ink analysis thread if running
+        if self.ink_analysis_thread and self.ink_analysis_thread.isRunning():
+            self.ink_analysis_thread.terminate()
+            self.ink_analysis_thread.wait(1000)
+            self.ink_analysis_thread = None

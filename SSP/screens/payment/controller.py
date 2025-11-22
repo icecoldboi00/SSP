@@ -74,7 +74,6 @@ class PaymentController(QWidget):
     def _on_timeout(self):
         # Safety check: Only navigate if we're still on this screen
         if self.main_app.stacked_widget.currentWidget() != self:
-            print("Payment timeout fired but we're not on this screen anymore - ignoring")
             return
         
         self.on_leave()

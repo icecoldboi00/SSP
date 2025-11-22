@@ -108,13 +108,9 @@ class PaymentScreenView(QWidget):
         image_filename = "payment_dialog_background.png"
         abs_path = os.path.join(assets_dir, image_filename)
 
-        if os.path.exists(abs_path):
-            pixmap = QPixmap(abs_path)
-            self.background_label.setPixmap(pixmap)
-            self.background_label.setScaledContents(True)
-        else:
-            print("WARNING: Payment dialog background not found at:", abs_path)
-            self.background_label.setStyleSheet("background-color: #1f1f38;")
+        pixmap = QPixmap(abs_path)
+        self.background_label.setPixmap(pixmap)
+        self.background_label.setScaledContents(True)
     
     def update_payment_data(self, summary_data):
         self.total_label.setText(f"Total Amount Due: P{summary_data['total_cost']:.2f}")
@@ -123,8 +119,7 @@ class PaymentScreenView(QWidget):
             f"<b>Print Job Summary:</b>",
             f"• Document: {summary_data['document_name']}",
             f"• Copies: {summary_data['copies']}",
-            f"• Color Mode: {summary_data['color_mode']}",
-            f"• Breakdown: {summary_data['black_pages']} B&W pages, {summary_data['color_pages']} Color pages"
+            f"• Color Mode: {summary_data['color_mode']}"
         ]
         self.summary_label.setText("<br>".join(summary_lines))
     

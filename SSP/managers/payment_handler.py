@@ -2,15 +2,7 @@ import time
 import threading
 from typing import Dict
 from PyQt5.QtCore import QObject, pyqtSignal
-
-# Check for pigpio availability
-try:
-    import pigpio
-    PIGPIO_AVAILABLE = True
-    print("SUCCESS: pigpio library found. Payment handler is ENABLED.")
-except ImportError:
-    PIGPIO_AVAILABLE = False
-    print("WARNING: pigpio library not found. Payment handler will be SIMULATED.")
+import pigpio
 
 
 class PaymentHandler(QObject):
@@ -23,7 +15,6 @@ class PaymentHandler(QObject):
     def __init__(self):
         super().__init__()
         self.pi = None
-        self.gpio_available = PIGPIO_AVAILABLE
         
         # Pin configuration (exact from coinbill.py + GPIO 22 for coin inhibit)
         self.COIN_PIN = 12          # Coin pulse input pin
@@ -65,10 +56,6 @@ class PaymentHandler(QObject):
         self.stop_processing = False
     
     def initialize(self) -> bool:
-        if not self.gpio_available:
-            print("PaymentHandler: GPIO not available - running in simulation mode")
-            return False
-        
         try:
             # Initialize pigpio (exact from coinbill.py)
             self.pi = pigpio.pi()
@@ -271,8 +258,8 @@ class PaymentHandler(QObject):
             return 0
     
     def enable_payments(self):
-        if not self.gpio_available or not self.pi:
-            print("Cannot enable payments - GPIO not available")
+        if not self.pi:
+            print("Cannot enable payments - GPIO not initialized")
             return False
         
         try:
@@ -301,8 +288,8 @@ class PaymentHandler(QObject):
             return False
     
     def disable_payments(self):
-        if not self.gpio_available or not self.pi:
-            print("Cannot disable payments - GPIO not available")
+        if not self.pi:
+            print("Cannot disable payments - GPIO not initialized")
             return False
         
         try:
@@ -327,7 +314,7 @@ class PaymentHandler(QObject):
             return False
     
     def disable_all_acceptors(self):
-        if self.gpio_available and self.pi:
+        if self.pi:
             try:
                 self.pi.write(self.COIN_INHIBIT_PIN, 0)  # Disable coin acceptor (active low)
                 self.pi.write(self.BILL_INHIBIT_PIN, 1)  # Disable bill acceptor
@@ -340,27 +327,12 @@ class PaymentHandler(QObject):
     
     def get_status(self) -> Dict:
         return {
-            'gpio_available': self.gpio_available,
             'connected': self.pi.connected if self.pi else False,
             'coin_enabled': self.coin_enabled,
             'bill_enabled': self.bill_enabled,
             'accepting_payments': self.accepting_payments,
             'processing_thread_active': self.processing_thread and self.processing_thread.is_alive()
         }
-    
-    def test_coin_detection(self, value: int = 1):
-        if self.accepting_payments:
-            print(f"Testing coin detection - {value} peso")
-            self.coin_inserted.emit(value)
-        else:
-            print("Cannot test - payments not enabled")
-    
-    def test_bill_detection(self, value: int = 20):
-        if self.accepting_payments:
-            print(f"Testing bill detection - {value} peso")
-            self.bill_inserted.emit(value)
-        else:
-            print("Cannot test - payments not enabled")
     
     def cleanup(self):
         try:
@@ -370,7 +342,7 @@ class PaymentHandler(QObject):
             if hasattr(self, 'processing_thread') and self.processing_thread and getattr(self.processing_thread, 'is_alive', lambda : False)():
                 self.processing_thread.join(timeout=1.0)
             # Disable all acceptors first
-            if self.gpio_available and getattr(self, 'pi', None):
+            if getattr(self, 'pi', None):
                 try:
                     self.disable_all_acceptors()
                 except Exception as e:
@@ -407,9 +379,6 @@ class PaymentHandler(QObject):
             print("Cleanup complete")
         except Exception as e:
             print(f"Cleanup error - {e}")
-        finally:
-            # Ensure we're in a clean state
-            self.gpio_available = False
     
     def __del__(self):
         self.cleanup()

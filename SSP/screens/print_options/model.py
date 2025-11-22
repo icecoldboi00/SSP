@@ -5,6 +5,27 @@ import os
 from PyQt5.QtCore import QObject, pyqtSignal, QThread
 from config import get_config
 
+class AnalysisThread(QThread):
+    analysis_complete = pyqtSignal(dict)
+
+    def __init__(self, analyzer, pdf_path, selected_pages, user_wants_color):
+        super().__init__()
+        self.analyzer = analyzer # PDFColorAnalyzer instance
+        self.pdf_path = pdf_path # str
+        self.selected_pages = selected_pages # list[int]
+        self.user_wants_color = user_wants_color # bool
+        self._is_running = True
+
+    def run(self):
+        if not self._is_running: 
+            return
+        results = self.analyzer.analyze_pdf_pages(self.pdf_path, self.selected_pages, self.user_wants_color)
+        if self._is_running:
+            self.analysis_complete.emit(results)
+    
+    def stop(self):
+        self._is_running = False
+
 class PDFColorAnalyzer:
     def __init__(self, black_price: float = None, color_price: float = None):
         # Set pricing from .env file
@@ -30,7 +51,7 @@ class PDFColorAnalyzer:
         color_diff = (channel_max - channel_min).astype(np.uint8)
         # Check if difference is within tolerance range for each pixel
         colored_pixel_count = np.count_nonzero(color_diff > color_tolerance)
-        # Return 0 if colored and 1 if not 
+        # Return True if page is black/white (few colored pixels), False if page has color
         return colored_pixel_count < pixel_count_threshold
 
     def analyze_pdf_pages(self, pdf_path: str, pages_to_check: List[int], user_wants_color: bool, dpi: int = None) -> Dict:
@@ -51,6 +72,7 @@ class PDFColorAnalyzer:
             
             # Arrayed PDF pages
             page = pdf_document[page_num_0_based]
+            # Increase resolution of the page to the dpi 300x72= 4.17 (page scales by 4.17)
             mat = fitz.Matrix(dpi/72, dpi/72)
             # Make the page into 1D array [R, G, B, R, G,...]
             pix = page.get_pixmap(matrix=mat, alpha=False, colorspace=fitz.csRGB)
@@ -77,26 +99,6 @@ class PDFColorAnalyzer:
         pdf_document.close()
         return results
 
-class AnalysisThread(QThread):
-    analysis_complete = pyqtSignal(dict)
-
-    def __init__(self, analyzer, pdf_path, selected_pages, user_wants_color):
-        super().__init__()
-        self.analyzer = analyzer
-        self.pdf_path = pdf_path
-        self.selected_pages = selected_pages
-        self.user_wants_color = user_wants_color
-        self._is_running = True
-
-    def run(self):
-        if not self._is_running: 
-            return
-        results = self.analyzer.analyze_pdf_pages(self.pdf_path, self.selected_pages, self.user_wants_color)
-        if self._is_running:
-            self.analysis_complete.emit(results)
-    
-    def stop(self):
-        self._is_running = False
 
 class PrintOptionsModel(QObject):
     cost_updated = pyqtSignal(str, str)  # Emits cost text and details text
@@ -125,8 +127,7 @@ class PrintOptionsModel(QObject):
         self._copies = 1
         config = get_config()
         self._color_mode = config.default_color_mode
-        print(f"Checking for color...")
-        self.trigger_analysis()
+        self.trigger_analysis() # Call this to get pricing not check if has color
     
     def set_color_mode(self, mode):
         self._color_mode = mode
@@ -150,10 +151,6 @@ class PrintOptionsModel(QObject):
         return self._copies
     
     def trigger_analysis(self):
-        print(f"Selected_pdf: {self.selected_pdf}")
-        print(f"Selected_pages: {self.selected_pages}")
-        print(f"Color_mode: {self._color_mode}")
-        
         if not self.selected_pdf: 
             print(f"No selected PDF, returning")
             return
@@ -163,11 +160,13 @@ class PrintOptionsModel(QObject):
             self.analysis_thread.wait()
 
         self.analysis_results = None
-        user_wants_color = (self._color_mode == "Color")
-        print(f"user_wants_color: {user_wants_color}")
+        if self._color_mode == "Color":
+            user_wants_color = True
+        else:
+            user_wants_color = False
 
         if user_wants_color:
-            print(f"Starting color analysis thread")
+            print(f"Starting analysis thread")
             self.analysis_started.emit()
             
             pdf_path = self.selected_pdf['path']
@@ -182,10 +181,8 @@ class PrintOptionsModel(QObject):
             self.analysis_thread.start()
         else:
             # For black and white, calculate directly
-            print(f"Calculating black and white cost directly")
             num_pages = len(self.selected_pages)
             base_cost = num_pages * self.analyzer.black_price
-            print(f"num_pages: {num_pages}, base_cost: {base_cost}")
             
             bw_results = {
                 'pricing': {
@@ -205,7 +202,7 @@ class PrintOptionsModel(QObject):
             return
         
         self.analysis_results = results
-        self.analysis_completed.emit(results)
+        self.analysis_completed.emit(results) # Enable button the check paper availability
         self.update_cost_display()
     
     def update_cost_display(self):
@@ -239,8 +236,7 @@ class PrintOptionsModel(QObject):
             'selected_pages': self.selected_pages,
             'copies': self._copies,
             'color_mode': self._color_mode,
-            'total_cost': total_cost,
-            'analysis': self.analysis_results
+            'total_cost': total_cost
         }
     
     def stop_analysis(self):

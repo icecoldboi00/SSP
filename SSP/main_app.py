@@ -16,7 +16,6 @@ from screens.thank_you import ThankYouController
 from database.models import init_db
 from managers.usb_file_manager import USBFileManager
 from managers.printer_manager import PrinterManager
-from managers.ink_analysis_threader import InkAnalysisThreadManager
 from managers.sms_manager import cleanup_sms
 from config import get_config
 
@@ -49,11 +48,7 @@ class PrintingSystemApp(QMainWindow):
         self.stacked_widget = QStackedWidget()
         self.setCentralWidget(self.stacked_widget)
 
-        self.ink_analysis_threader = InkAnalysisThreadManager()
-        self.ink_analysis_threader.start()
-        
         self.printer_manager = PrinterManager()
-        self.ink_analysis_threader.analysis_completed.connect(self.printer_manager.cleanup_last_temp_pdf)
         self.usb_file_manager = USBFileManager()
         self.low_paper_alert_sent = False
 
@@ -166,7 +161,8 @@ class PrintingSystemApp(QMainWindow):
         self.usb_file_manager.cleanup_session_directory()
         
         # Trigger ink analysis before clearing print job info
-        self._trigger_ink_analysis()
+        if self.current_print_job:
+            self.printer_manager.trigger_ink_analysis(self.current_print_job['copies'])
         
         # Clear the print job to prevent re-printing
         self.current_print_job = None
@@ -179,32 +175,6 @@ class PrintingSystemApp(QMainWindow):
             print(f"Print completed on wrong screen, navigating to thank you screen")
             self.show_screen('thank_you')
 
-    def _trigger_ink_analysis(self):
-        # Check if print job info exists
-        if not self.current_print_job:
-            print("No print job info available for ink analysis")
-            return
-        
-        # Check if temp PDF path exists
-        temp_pdf_path = getattr(self.printer_manager, 'last_temp_pdf_path', None)
-        if not temp_pdf_path:
-            print("No temp PDF available for ink analysis")
-            return
-        
-        try:
-            # Use temp PDF (already has only selected pages) instead of original file
-            # This works even if USB drive is removed sheesh
-            config = get_config()
-            self.ink_analysis_threader.analyze_and_update(
-                pdf_path=temp_pdf_path,
-                selected_pages=None,  # All pages in temp PDF 
-                copies=self.current_print_job['copies'],
-                dpi=config.pdf_analysis_dpi
-            )
-        except Exception as e:
-            print(f"Error on ink analysis: {e}")
-            self.printer_manager.cleanup_last_temp_pdf()
-    
     def _update_paper_count_after_print(self):
         # Check if print job info exists
         if not self.current_print_job:
@@ -271,7 +241,8 @@ class PrintingSystemApp(QMainWindow):
         try:
             print("Starting cleanup")
 
-            self.ink_analysis_threader.stop()
+            # Clean up printer manager (includes ink analysis thread)
+            self.printer_manager.cleanup()
 
             self.usb_screen.model.stop_usb_monitoring()
 

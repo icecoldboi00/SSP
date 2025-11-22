@@ -859,9 +859,10 @@ class FileBrowserView(QWidget):
         self.next_grid_page_btn.hide()
 
     def load_pdf_files(self, pdf_files):
-        print(f"Loading {len(pdf_files)} PDF files into view")
+        print(f"Loading PDF files into view")
         self.pdf_files_data = []
         self.pdf_page_selections = {}
+
         for pdf_info in pdf_files: 
             self.pdf_files_data.append({
                 'filename': pdf_info['filename'], 
@@ -869,8 +870,11 @@ class FileBrowserView(QWidget):
                 'pages': pdf_info.get('pages', 1), 
                 'path': pdf_info['path']
             })
+
         self.file_header.setText(f"PDF Files ({len(self.pdf_files_data)} files)")
+        # Remove existing buttons and re-add new ones
         self.clear_file_list()
+
         self.pdf_buttons = []
         for pdf_data in self.pdf_files_data:
             pdf_btn = PDFButton(pdf_data)

@@ -95,7 +95,7 @@ class USBFileManager:
         self._should_stop = False
 
         try:
-            # Only create a new session directory if we don't have one or if it's a different USB drive
+            # Only create a new session directory if we don't have one or if it's a different USB drive, since data is saved in session when back is clicked
             if not self.destination_dir or not os.path.exists(self.destination_dir) or self.current_usb_drive != drive_path:
                 print(f"Creating new session directory for USB drive: {drive_path}")
                 self._create_new_session()
@@ -226,7 +226,6 @@ class USBFileManager:
 
             # If destination is the same as source, skip copying
             if os.path.abspath(dest_path) == os.path.abspath(source_path):
-                print(f"Source and destination are the same, skipping copy: {filename}")
                 return result_info
 
             # Ensure destination directory exists
@@ -280,51 +279,7 @@ class USBFileManager:
         print(f"Marked file as complete: {file_path}")
 
     # ========================================================================================================================
-    # THANK YOU SCREEN FUNCTIONS
-    # ========================================================================================================================
-    
-    def _auto_eject_usb_drive(self, usb_path):
-        try:
-            print(f"Auto-ejecting USB drive: {usb_path}")
-            
-            # Clear all safety tracking
-            self.files_in_use.clear()
-            self.operation_in_progress = False
-            self.current_usb_drive = None
-            
-            # Try to unmount the drive (Linux only)
-            if platform.system() == "Linux":
-                try:
-                    import subprocess
-                    # Find the device path for the mount point
-                    result = subprocess.run(['findmnt', '-n', '-o', 'SOURCE', usb_path], 
-                                          capture_output=True, text=True, timeout=5)
-                    if result.returncode == 0:
-                        device = result.stdout.strip()
-                        print(f"Unmounting device: {device}")
-                        # Use sudo to ensure unmount works
-                        unmount_result = subprocess.run(['sudo', 'umount', usb_path], 
-                                                       capture_output=True, text=True, timeout=10)
-                        if unmount_result.returncode == 0:
-                            print(f"USB drive unmounted successfully")
-                        else:
-                            print(f"Failed to unmount USB drive: {unmount_result.stderr}")
-                    else:
-                        print("Could not find device for unmounting")
-                except Exception as e:
-                    print(f"Could not unmount USB drive: {e}")
-            
-            print("USB drive is now safe to remove at any time")
-            
-        except Exception as e:
-            print(f"Error during auto-eject: {e}")
-            # Still clear the safety tracking even if unmount fails
-            self.files_in_use.clear()
-            self.operation_in_progress = False
-            self.current_usb_drive = None
-
-    # ========================================================================================================================
-    # SHARED FUNCTIONS (Used by multiple screens)
+    # SHARED FUNCTIONS USB Screen & Thank you ; main_app.py
     # ========================================================================================================================
     
     def cleanup_all_temp_folders(self):
@@ -359,6 +314,7 @@ class USBFileManager:
             except Exception as log_error:
                 print(f"Failed to log error: {log_error}")
 
+    # Must be done last, called in main app
     def cleanup_session_directory(self):
         try:
             session_dir = self.destination_dir
@@ -373,26 +329,6 @@ class USBFileManager:
             print(f"Error cleaning up session directory: {e}")
             return False
 
-    def is_drive_safe_to_remove(self):
-        if not self.current_usb_drive:
-            return True, "No USB drive currently in use"
-        
-        if self.operation_in_progress:
-            return False, "File operations are currently in progress"
-        
-        if self.files_in_use:
-            return False, f"Files are currently being processed: {list(self.files_in_use)}"
-        
-        # Check if drive is still accessible
-        try:
-            if not os.path.exists(self.current_usb_drive):
-                return False, "USB drive is no longer accessible"
-            
-            # Try to access the drive
-            os.listdir(self.current_usb_drive)
-            return True, "USB drive is safe to remove"
-        except Exception as e:
-            return False, f"USB drive access error: {e}"
 
     # ========================================================================================================================
     # INTERNAL/HELPER FUNCTIONS
@@ -442,3 +378,50 @@ class USBFileManager:
         self.files_in_use.clear()
         self.operation_in_progress = False
         self.current_usb_drive = None
+
+
+
+    # ========================================================================================================================
+    # THANK YOU SCREEN FUNCTIONS
+    # ========================================================================================================================
+    
+    # def _auto_eject_usb_drive(self, usb_path):
+    #     try:
+    #         print(f"Auto-ejecting USB drive: {usb_path}")
+    #         
+    #         # Clear all safety tracking
+    #         self.files_in_use.clear()
+    #         self.operation_in_progress = False
+    #         self.current_usb_drive = None
+    #         
+    #         # Try to unmount the drive (Linux only)
+    #         if platform.system() == "Linux":
+    #             try:
+    #                 import subprocess
+    #                 # Find the device path for the mount point
+    #                 result = subprocess.run(['findmnt', '-n', '-o', 'SOURCE', usb_path], 
+    #                                       capture_output=True, text=True, timeout=5)
+    #                 if result.returncode == 0:
+    #                     device = result.stdout.strip()
+    #                     print(f"Unmounting device: {device}")
+    #                     # Use sudo to ensure unmount works
+    #                     unmount_result = subprocess.run(['sudo', 'umount', usb_path], 
+    #                                                    capture_output=True, text=True, timeout=10)
+    #                     if unmount_result.returncode == 0:
+    #                         print(f"USB drive unmounted successfully")
+    #                     else:
+    #                         print(f"Failed to unmount USB drive: {unmount_result.stderr}")
+    #                 else:
+    #                     print("Could not find device for unmounting")
+    #             except Exception as e:
+    #                 print(f"Could not unmount USB drive: {e}")
+    #         
+    #         print("USB drive is now safe to remove at any time")
+    #         
+    #     except Exception as e:
+    #         print(f"Error during auto-eject: {e}")
+    #         # Still clear the safety tracking even if unmount fails
+    #         self.files_in_use.clear()
+    #         self.operation_in_progress = False
+    #         self.current_usb_drive = None
+

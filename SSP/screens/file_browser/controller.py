@@ -22,6 +22,7 @@ class FileBrowserController(QWidget):
         self.setLayout(self.view.main_layout)
 
         self._connect_signals()
+        # x = 0
         self._load_pdf_files()
 
     def _connect_signals(self):
@@ -69,10 +70,6 @@ class FileBrowserController(QWidget):
     def _continue_to_payment(self):
         print(f"PDF: {self.view.selected_pdf}")
 
-        if not self.view.selected_pdf:
-            QMessageBox.warning(self, "No PDF Selected", "Please select a PDF file.")
-            return
-
         selected_pages_list = [page for page, selected in self.view.selected_pages.items() if selected]
         print(f"Selected pages list: {selected_pages_list}")
 
@@ -81,10 +78,6 @@ class FileBrowserController(QWidget):
             return
 
         usb_manager = self.main_app.usb_screen.model.usb_manager
-
-        if not usb_manager:
-            QMessageBox.critical(self, "USB Error", "USB manager is not available. Please try again.")
-            return
 
         copied_file = None
         current_path = self.view.selected_pdf.get('path') if isinstance(self.view.selected_pdf, dict) else None
@@ -111,7 +104,7 @@ class FileBrowserController(QWidget):
 
         print(f"Calling set_pdf_data using: {copied_file['filename']} and pages: {selected_pages_list}")
         options_screen = self.main_app.printing_options_screen
-        options_screen.set_pdf_data(copied_file, selected_pages_list)
+        options_screen.set_pdf_data(copied_file, selected_pages_list) # dict and list[int]
         self.main_app.show_screen('printing_options')
 
     def _show_error(self, error_message):

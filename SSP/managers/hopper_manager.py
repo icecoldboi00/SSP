@@ -264,7 +264,7 @@ class ChangeDispenser:
 
         # Check connection before starting
         if not self.check_connection():
-            error_msg = "Pigpio not available. Cannot dispense change."
+            error_msg = "Pigpio connection not available. Cannot dispense change."
             print(error_msg)
             if status_callback:
                 status_callback(error_msg)
