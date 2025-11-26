@@ -137,7 +137,7 @@ class PrintingSystemApp(QMainWindow):
             'copies': payment_info['copies'],
             'color_mode': payment_info['color_mode']
         }
-        print(f"Print job details stored!!!!!!!!")
+        print(f"Print job details stored")
         
         # Start print job
         try:

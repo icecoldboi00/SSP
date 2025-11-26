@@ -18,8 +18,6 @@ class PrinterManager(QObject):
         self.print_thread = None
         self.ink_analysis_thread = None
         self.check_printer_availability()
-        # Configure printer to disable separator pages
-        self._disable_separator_pages()
 
     def print_file(self, file_path, copies, color_mode, selected_pages): 
         # Prevent duplicate print jobs
@@ -51,75 +49,6 @@ class PrinterManager(QObject):
         self.print_thread.finished.connect(self.on_thread_finished)
         self.print_thread.start()
 
-    def _disable_separator_pages(self):
-        try:
-            # First, check what separator page options are available
-            result = subprocess.run(
-                ['sudo', 'lpoptions', '-l', '-p', self.printer_name],
-                capture_output=True,
-                text=True,
-                timeout=5
-            )
-            if result.returncode == 0:
-                options_output = result.stdout.lower()
-                print(f"Available printer options: {options_output[:200]}...")
-                
-                # Try multiple separator page option names using sudo
-                separator_options = [
-                    'job-sheets=none',
-                    'JobSheets=none',
-                    'job-sheets=none,none',  # Some printers need both start and end
-                    'JobSheets=none,none',
-                ]
-                
-                for opt in separator_options:
-                    result = subprocess.run(
-                        ['sudo', 'lpoptions', '-p', self.printer_name, '-o', opt],
-                        capture_output=True,
-                        text=True,
-                        timeout=5
-                    )
-                    if result.returncode == 0:
-                        print(f"Successfully set separator page option: {opt}")
-                    else:
-                        print(f"Could not set option {opt}: {result.stderr}")
-                
-                # Also try setting billing pages to none
-                billing_options = [
-                    'job-billing=none',
-                    'JobBilling=none',
-                ]
-                for opt in billing_options:
-                    result = subprocess.run(
-                        ['sudo', 'lpoptions', '-p', self.printer_name, '-o', opt],
-                        capture_output=True,
-                        text=True,
-                        timeout=5
-                    )
-                    if result.returncode == 0:
-                        print(f"Successfully set billing page option: {opt}")
-                
-                # Also try using lpadmin with sudo (more direct method)
-                # This modifies the printer configuration directly
-                lpadmin_options = [
-                    'job-sheets=none',
-                    'job-sheets=none,none',
-                ]
-                for opt in lpadmin_options:
-                    result = subprocess.run(
-                        ['sudo', 'lpadmin', '-p', self.printer_name, '-o', opt],
-                        capture_output=True,
-                        text=True,
-                        timeout=5
-                    )
-                    if result.returncode == 0:
-                        print(f"Successfully set separator page via lpadmin: {opt}")
-                    else:
-                        print(f"Could not set via lpadmin {opt}: {result.stderr}")
-            else:
-                print(f"Warning: Could not query printer options: {result.stderr}")
-        except Exception as e:
-            print(f"Error configuring separator pages (non-critical): {e}")
     
     def check_printer_availability(self):
         try:      
@@ -161,62 +90,6 @@ class PrinterManager(QObject):
         except Exception as e:
             print(f"Error checking printer availability: {e}")
             return False
-
-    def check_printer_status(self):
-        try:
-            result = subprocess.run(['lpstat', '-p', self.printer_name], 
-                                  capture_output=True, text=True)
-            
-            if result.returncode != 0:
-                return {
-                    'status': 'error',
-                    'message': f"Printer '{self.printer_name}' not found or not responding",
-                    'details': result.stderr.strip()
-                }
-            
-            output = result.stdout.lower()
-            
-            if 'jam' in output or 'paper jam' in output:
-                return {
-                    'status': 'paper_jam',
-                    'message': 'Paper jam detected',
-                    'details': 'Please clear the paper jam and try again'
-                }
-            elif 'offline' in output or 'stopped' in output:
-                return {
-                    'status': 'offline',
-                    'message': 'Printer is offline or stopped',
-                    'details': 'Please check printer connection and power'
-                }
-            elif 'error' in output:
-                return {
-                    'status': 'error',
-                    'message': 'Printer error detected',
-                    'details': output
-                }
-            elif 'idle' in output or 'ready' in output:
-                return {
-                    'status': 'ready',
-                    'message': 'Printer is ready',
-                    'details': 'Printer is available for printing'
-                }
-            else:
-                return {
-                    'status': 'unknown',
-                    'message': 'Unknown printer status',
-                    'details': output
-                }
-                
-        except Exception as e:
-            return {
-                'status': 'error',
-                'message': f"Error checking printer status: {e}",
-                'details': str(e)
-            }
-
-    def check_for_paper_jam(self):
-        status = self.check_printer_status()
-        return status['status'] == 'paper_jam'
 
     def _on_print_success(self, temp_pdf_path):
         # Store temp PDF path so main app can clean it up after ink analysis
@@ -266,7 +139,6 @@ class PrinterManager(QObject):
             self.cleanup_last_temp_pdf()
     
     def cleanup(self):
-        """Clean up printer manager resources"""
         # Stop ink analysis thread if running
         if self.ink_analysis_thread and self.ink_analysis_thread.isRunning():
             self.ink_analysis_thread.terminate()

@@ -123,10 +123,6 @@ class PaymentScreenView(QWidget):
         ]
         self.summary_label.setText("<br>".join(summary_lines))
     
-    def update_payment_status(self, status_text):
-        # Payment status label removed - method kept for backward compatibility
-        pass
-    
     def update_amount_received(self, amount):
         self.amount_received_label.setText(f"Amount Received: P{amount:.2f}")
     
@@ -145,6 +141,17 @@ class PaymentScreenView(QWidget):
     
     def set_buttons_enabled(self, back_enabled):
         self.back_btn.setEnabled(back_enabled)
+    
+    def set_back_button_to_cancel(self):
+        self.back_btn.setText("Cancel")
+        self.back_btn.setStyleSheet(
+            "QPushButton { background-color: #dc3545; color: white; border: none; border-radius: 6px; font-size: 16px; font-weight: bold; padding: 12px 24px; } "
+            "QPushButton:hover { background-color: #c82333; }"
+        )
+    
+    def set_back_button_to_normal(self):
+        self.back_btn.setText("<- Back to Options")
+        self.back_btn.setStyleSheet(self.get_back_button_style())
     
     def get_back_button_style(self):
         return (

@@ -27,21 +27,6 @@ class ThankYouModel(QObject):
         self.error_type = None
         self._suppress_error = False
         
-    def _unmount_usb_drive(self):
-        try:
-            if hasattr(self, 'main_app') and self.main_app and hasattr(self.main_app, 'usb_screen') and self.main_app.usb_screen:
-                usb_manager = self.main_app.usb_screen.model.usb_manager
-                if usb_manager and usb_manager.current_usb_drive:
-                    drive_path = usb_manager.current_usb_drive
-                    # Auto-eject disabled
-                    # usb_manager._auto_eject_usb_drive(drive_path)
-                else:
-                    print(f"No USB drive to unmount")
-            else:
-                print(f"Can't unmount")
-        except Exception as e:
-            print(f"Error unmounting USB: {e}")
-    
     def _on_timer_timeout(self):
         self.redirect_to_idle.emit()
         
@@ -57,9 +42,6 @@ class ThankYouModel(QObject):
         if not hasattr(main_app, 'current_print_job') or not main_app.current_print_job:
             print(f"No valid print job available")
             return
-        
-        # Unmount USB drive
-        self._unmount_usb_drive()
         
         # Set initial state
         self.current_state = "waiting"

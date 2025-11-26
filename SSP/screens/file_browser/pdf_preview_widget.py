@@ -42,19 +42,6 @@ class PDFPreviewWidget(QWidget):
                 }
             """)
 
-    def mousePressEvent(self, event):
-        # Disable panning: do nothing special on mouse press
-        self.setCursor(Qt.ArrowCursor)
-
-    def mouseMoveEvent(self, event):
-        # Disable panning: ignore drag and keep cursor default
-        self.setCursor(Qt.ArrowCursor)
-
-    def mouseReleaseEvent(self, event):
-        if event.button() == Qt.LeftButton:
-            self._is_panning = False
-            self.setCursor(Qt.ArrowCursor)
-
     def paintEvent(self, event):
         painter = QPainter(self)
         painter.setRenderHint(QPainter.Antialiasing)
@@ -84,7 +71,6 @@ class PDFPreviewWidget(QWidget):
         painter.drawPixmap(x, y, scaled_size.width(), scaled_size.height(), self._pixmap)
 
     def sizeHint(self):
-        """Returns the preferred size of the widget."""
         if self._pixmap:
             return self._pixmap.size()
         # Encourage tall previews so items fill the preview container height

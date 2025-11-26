@@ -74,12 +74,6 @@ class PrinterThread(QThread):
             # Main app will clean up temp PDF after ink analysis completes
             self.print_success.emit(self.temp_pdf_path)
 
-        except subprocess.TimeoutExpired:
-            self._handle_print_error("Printing command timed out.")
-        except FileNotFoundError:
-            self._handle_print_error("The 'lp' command was not found. Is CUPS installed?")
-        except subprocess.CalledProcessError as e:
-            self._handle_print_error(f"CUPS Error: {e.stderr.strip()}")
         except Exception as e:
             self._handle_print_error(f"An unexpected error occurred: {str(e)}")
         finally:
@@ -247,7 +241,6 @@ class PrinterThread(QThread):
         completion_time = None
         media_empty_sms_sent = False
         
-        print(f"Starting print completion monitoring (timeout: {max_wait_time}s, pages: {estimated_pages}, min_print_time: {min_print_time}s)")
         time.sleep(initial_startup_delay)
         elapsed_time += initial_startup_delay
         
@@ -378,7 +371,6 @@ class PrinterThread(QThread):
         return False
     
     def _check_cups_job_status(self, job_id):
-        """Check if CUPS job is still in the queue"""
         try:
             # Check if job is still in CUPS queue
             result = subprocess.run(['lpstat', '-o'], capture_output=True, text=True, timeout=5)
@@ -393,7 +385,6 @@ class PrinterThread(QThread):
             return False
         except Exception as e:
             print(f"Error checking CUPS job status: {e}")
-            # On error, assume job might still be active to be safe
             return True
 
     def build_print_command(self):
@@ -405,69 +396,25 @@ class PrinterThread(QThread):
             "-o", f"print-color-mode={mode_str}",
         ]
         
-        # Calculate total pages to print
-        total_pages = len(self.selected_pages) * self.copies
         is_single_page_multiple_copies = len(self.selected_pages) == 1 and self.copies > 1
         
-        # Try multiple ways to disable separator pages
-        # Some printers use different option names or formats
-        # Try both formats: "none" and "none,none" (for start and end)
-        separator_disable_options = [
-            "job-sheets=none,none",  # Disable both start and end separator pages
-            "job-sheets=none",       # Alternative format
-            "JobSheets=none,none",   # Capitalized version
-            "job-billing=none",      # Disable billing pages
-            "JobBilling=none",       # Capitalized billing
-            "separator=none",        # Generic separator option
-            "banner=none",           # Banner page option
-        ]
-        for opt in separator_disable_options:
-            command.extend(["-o", opt])
+        # Try to disable separator pages
+        command.extend(["-o", "job-sheets=none"])
         
-        # For 10+ pages, add options to prevent job splitting or page breaks
-        # Some printers add separator pages when jobs are split into batches
-        if total_pages >= 10:
-            print(f"Large job detected ({total_pages} pages) - adding options to prevent job splitting")
-            # Options to prevent job splitting or page breaks
-            anti_split_options = [
-                "page-ranges=1-999999",  # Explicitly set page range to prevent splitting
-                "number-up=1",           # Ensure single page per sheet
-                "sides=one-sided",      # Force one-sided printing
-            ]
-            for opt in anti_split_options:
-                command.extend(["-o", opt])
-        
-        # Handle copies:
-        # - Single page with multiple copies: use CUPS -n flag (same as multi-page behavior)
+        # - Single page with multiple copies: use CUPS -n flag 
         # - Multi-page documents: pages are already duplicated in PDF, so use -n 1
         if is_single_page_multiple_copies:
-            # Use CUPS -n flag for single-page documents with multiple copies
             command.extend(["-n", str(self.copies)])
-            print(f"Using CUPS -n {self.copies} for single-page document with multiple copies")
         else:
-            # Multi-page: copies are handled in PDF itself, so always print 1 copy
             command.extend(["-n", "1"])
-            print(f"Using CUPS -n 1 (copies handled in PDF)")
+
         
         # Add file path at the end
         command.append(self.temp_pdf_path)
         
         print(f"Print command: {' '.join(command)}")
         print(f"Copies value: {self.copies} (type: {type(self.copies)})")
-        print(f"Separator page options included: {len(separator_disable_options)} options")
-        
-        # Verify PDF page count matches expected
-        try:
-            import fitz
-            pdf_doc = fitz.open(self.temp_pdf_path)
-            pdf_page_count = len(pdf_doc)
-            expected_pages = len(self.selected_pages) * self.copies
-            print(f"PDF verification: {pdf_page_count} pages in temp PDF (expected: {expected_pages})")
-            if pdf_page_count != expected_pages:
-                print(f"⚠ WARNING: PDF page count mismatch!")
-            pdf_doc.close()
-        except Exception as e:
-            print(f"Could not verify PDF page count: {e}")
+        print("Separator page option applied: job-sheets=none")
         
         return command
 

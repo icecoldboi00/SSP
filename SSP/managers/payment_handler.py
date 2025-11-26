@@ -1,6 +1,5 @@
 import time
 import threading
-from typing import Dict
 from PyQt5.QtCore import QObject, pyqtSignal
 import pigpio
 
@@ -10,7 +9,6 @@ class PaymentHandler(QObject):
     special_coin_inserted = pyqtSignal(int)  # special coin_value (cannot be given as change)
     bill_inserted = pyqtSignal(int)  # bill_value
     payment_status = pyqtSignal(str)  # status_message
-    acceptor_state_changed = pyqtSignal(bool)  # enabled/disabled
     
     def __init__(self):
         super().__init__()
@@ -34,7 +32,7 @@ class PaymentHandler(QObject):
         # Timing constants (exact from coinbill.py)
         self.COIN_TIMEOUT = 0.3     # Time to wait for coin completion
         self.PULSE_TIMEOUT = 0.5    # Time to wait for bill completion
-        self.DEBOUNCE_TIME = 0.1    # Minimum time between pulses
+        self.DEBOUNCE_TIME = 0.1    # Ignore pulses after this time
         
         # Noise filtering (to handle electrical noise from high current devices)
         # Based on observed data: valid pulses are 10-70ms, noise is < 9ms
@@ -45,9 +43,9 @@ class PaymentHandler(QObject):
         # Payment state
         self.coin_enabled = False
         self.bill_enabled = False
-        self.accepting_payments = False
+        self.accepting_payments = False # Ignore pulses when payments are disabled
         
-        # Callbacks
+        # Hardware interrupts 
         self.coin_callback = None
         self.bill_callback = None
         
@@ -57,7 +55,6 @@ class PaymentHandler(QObject):
     
     def initialize(self) -> bool:
         try:
-            # Initialize pigpio (exact from coinbill.py)
             self.pi = pigpio.pi()
             if not self.pi.connected:
                 print("Failed to connect to pigpio daemon")
@@ -83,20 +80,17 @@ class PaymentHandler(QObject):
     
     def _setup_gpio_pins(self):
         try:
-            # Coin acceptor setup (exact from coinbill.py)
+            # Coin acceptor setup 
             self.pi.set_mode(self.COIN_PIN, pigpio.INPUT)
             self.pi.set_pull_up_down(self.COIN_PIN, pigpio.PUD_UP)
+            self.pi.set_mode(self.COIN_INHIBIT_PIN, pigpio.OUTPUT)
             # Use EITHER_EDGE to measure pulse width for noise filtering
             self.coin_callback = self.pi.callback(self.COIN_PIN, pigpio.EITHER_EDGE, self._coin_pulse_detected)
             
-            # Bill acceptor setup (exact from coinbill.py)
+            # Bill acceptor setup 
             self.pi.set_mode(self.BILL_PIN, pigpio.INPUT)
             self.pi.set_pull_up_down(self.BILL_PIN, pigpio.PUD_UP)
-            self.pi.set_mode(self.BILL_INHIBIT_PIN, pigpio.OUTPUT)
-            
-            # Coin acceptor inhibit pin (new addition)
-            self.pi.set_mode(self.COIN_INHIBIT_PIN, pigpio.OUTPUT)
-            
+            self.pi.set_mode(self.BILL_INHIBIT_PIN, pigpio.OUTPUT)       
             # Use EITHER_EDGE to measure pulse width for noise filtering
             self.bill_callback = self.pi.callback(self.BILL_PIN, pigpio.EITHER_EDGE, self._bill_pulse_detected)
             
@@ -126,13 +120,11 @@ class PaymentHandler(QObject):
             
             # Filter out noise spikes (pulses too short to be valid)
             if pulse_width_sec < self.MIN_PULSE_WIDTH:
-                print(f"Coin pulse filtered as noise (width: {pulse_width_sec*1000:.2f}ms < {self.MIN_PULSE_WIDTH*1000:.2f}ms)")
                 self.coin_pulse_start_tick = None
                 return
             
             # Filter out stuck signals (pulses too long to be valid)
             if pulse_width_sec > self.MAX_PULSE_WIDTH:
-                print(f"Coin pulse filtered as stuck signal (width: {pulse_width_sec*1000:.2f}ms > {self.MAX_PULSE_WIDTH*1000:.2f}ms)")
                 self.coin_pulse_start_tick = None
                 return
             
@@ -194,33 +186,32 @@ class PaymentHandler(QObject):
             try:
                 now = time.time()
                 
-                # Process coin pulses (exact from coinbill.py)
+                # Process coin pulses 
                 if self.coin_pulse_count > 0 and (now - self.coin_last_pulse_time > self.COIN_TIMEOUT):
-                    print(f"Processing coin with {self.coin_pulse_count} pulses")
                     value, is_special = self._get_coin_value(self.coin_pulse_count)
-                    if value > 0:
+                    if value > 0: # 0 unknown coin
                         if is_special:
-                            print(f"Processing special coin - {value} peso (cannot be given as change)")
+                            print(f"Special coin - {value} peso")
                             self.special_coin_inserted.emit(value)
                         else:
-                            print(f"Processing regular coin - {value} peso")
+                            print(f"Regular coin - {value} peso")
                             self.coin_inserted.emit(value)
                     else:
                         print(f"Coin with {self.coin_pulse_count} pulses not recognized as valid coin")
                     self.coin_pulse_count = 0
                 
-                # Process bill pulses (exact from coinbill.py)
+                # Process bill pulses
                 if self.bill_pulse_count > 0 and (now - self.bill_last_pulse_time > self.PULSE_TIMEOUT):
                     print(f"Processing bill with {self.bill_pulse_count} pulses")
                     value = self._get_bill_value(self.bill_pulse_count)
-                    if value > 0:
+                    if value > 0: # 0 unknown bill
                         print(f"Processing bill - {value} peso")
                         self.bill_inserted.emit(value)
                     else:
                         print(f"Bill with {self.bill_pulse_count} pulses not recognized as valid bill")
                     self.bill_pulse_count = 0
                 
-                time.sleep(0.05)  # Exact from coinbill.py
+                time.sleep(0.05) 
                 
             except Exception as e:
                 print(f"Error in processing loop - {e}")
@@ -279,7 +270,6 @@ class PaymentHandler(QObject):
             
             print("Payment acceptors enabled")
             self.payment_status.emit("Payment acceptors enabled - Insert coins or bills")
-            self.acceptor_state_changed.emit(True)
             
             return True
             
@@ -305,7 +295,6 @@ class PaymentHandler(QObject):
             
             print("Payment acceptors disabled")
             self.payment_status.emit("Payment acceptors disabled")
-            self.acceptor_state_changed.emit(False)
             
             return True
             
@@ -324,15 +313,7 @@ class PaymentHandler(QObject):
                 print("All acceptors disabled")
             except Exception as e:
                 print(f"Error disabling acceptors - {e}")
-    
-    def get_status(self) -> Dict:
-        return {
-            'connected': self.pi.connected if self.pi else False,
-            'coin_enabled': self.coin_enabled,
-            'bill_enabled': self.bill_enabled,
-            'accepting_payments': self.accepting_payments,
-            'processing_thread_active': self.processing_thread and self.processing_thread.is_alive()
-        }
+
     
     def cleanup(self):
         try:
@@ -387,12 +368,12 @@ class PaymentHandler(QObject):
 # Global payment handler instance
 _payment_handler_instance = None
 
+# Start listening for pulses
 def get_payment_handler() -> PaymentHandler:
     global _payment_handler_instance
     
-    # Always create a fresh instance to ensure we have the latest code
+    # Always create a fresh instance 
     if _payment_handler_instance is not None:
-        print("Cleaning up existing instance before creating new one")
         try:
             _payment_handler_instance.cleanup()
         except Exception as e:
@@ -403,11 +384,12 @@ def get_payment_handler() -> PaymentHandler:
     # Create new instance
     _payment_handler_instance = PaymentHandler()
     if not _payment_handler_instance.initialize():
-        print("Initialization failed, cleaning up")
-        _payment_handler_instance.cleanup()
-        _payment_handler_instance = None
+        try:
+            _payment_handler_instance.cleanup()
+        finally:
+            _payment_handler_instance = None
         return None
-    
+
     return _payment_handler_instance
 
 def cleanup_payment_handler():

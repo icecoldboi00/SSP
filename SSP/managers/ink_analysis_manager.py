@@ -36,7 +36,7 @@ class InkAnalysisThread(QThread):
             
             # Safety check: ensure result is valid
             if not result or not isinstance(result, dict):
-                print("Warning: Invalid result from ink analysis")
+                print("Invalid result from ink analysis")
                 self.database_updated.emit(False)
                 return
             
@@ -290,9 +290,6 @@ class InkAnalysisManager:
             new_magenta = max(0, current_levels['magenta'] - deducted_magenta)
             new_yellow = max(0, current_levels['yellow'] - deducted_yellow)
             new_black = max(0, current_levels['black'] - deducted_black)
-            
-            # Print deducted amounts
-            print(f"Ink Deducted - C: {deducted_cyan:.2f}%, M: {deducted_magenta:.2f}%, Y: {deducted_yellow:.2f}%, K: {deducted_black:.2f}%")
             
             # Update database
             success = self.db_manager.update_cmyk_ink_levels(

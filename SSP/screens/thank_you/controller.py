@@ -31,7 +31,6 @@ class ThankYouController(QWidget):
         self.view.update_status(status_text, subtitle_text, status_style)
     
     def _go_to_idle(self):
-        print("Timer: Navigating to idle screen...")
         self.main_app.show_screen('idle')
     
     def on_enter(self):

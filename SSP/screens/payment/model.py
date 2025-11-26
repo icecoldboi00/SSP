@@ -12,7 +12,7 @@ class PaymentModel(QObject):
     suggestion_updated = pyqtSignal(str)      # inline best payment suggestion
     amount_received_updated = pyqtSignal(float)  # amount_received
     change_updated = pyqtSignal(float, str)  # change_amount, change_text
-    payment_completed = pyqtSignal(dict)  # payment_info
+    payment_completed = pyqtSignal(dict)  # payment_info passed to main
     go_back_requested = pyqtSignal()  # request to go back
     payment_mode_changed = pyqtSignal(bool)  # payment mode enabled/disabled
 
@@ -22,12 +22,14 @@ class PaymentModel(QObject):
         self.payment_algorithm = PaymentAlgorithmManager(self.db_manager) #Same db_manager instance
         self.change_dispenser = ChangeDispenser()
         self.main_app = main_app
+
         self.total_cost = 0
         self.amount_received = 0
         self.payment_data = None
         self.cash_received = {}
-        self.payment_processing = False
         self.payment_ready = False
+        self._payment_completing = False  # Prevent duplicate payment completions
+
         self.payment_handler = None
         self.dispense_thread = None
         self.best_payment_suggestion = None  # {'amount', 'change', 'reason'}
@@ -69,11 +71,11 @@ class PaymentModel(QObject):
         }
 
         self.payment_data_updated.emit(summary_data)
-        self.payment_status_updated.emit("Click 'Enable Payment' to begin")
 
     def setup_gpio(self):
         cleanup_payment_handler()
         
+        # Create instance and start listening for pulses
         self.payment_handler = get_payment_handler()
         if self.payment_handler:
             # Connect signals directly from PaymentHandler
@@ -150,8 +152,7 @@ class PaymentModel(QObject):
     def _update_payment_status(self): # Everytime a coin or bill is inserted this is called
         try:
             # Prevent multiple automatic completions
-            if hasattr(self, '_payment_completing') and self._payment_completing:
-                print("Payment towards completion...")
+            if self._payment_completing:
                 return
 
             if self.amount_received >= self.total_cost and self.total_cost > 0:
@@ -159,7 +160,7 @@ class PaymentModel(QObject):
                 change_text = f"Payment Complete. Change: P{change:.2f}" if change > 0 else "Payment Complete"
                 self.change_updated.emit(change, change_text)
 
-                if self.payment_ready and not (hasattr(self, '_payment_completing') and self._payment_completing):
+                if self.payment_ready and not self._payment_completing:
                     self._payment_completing = True  # Prevent duplicate processing
                     self.payment_status_updated.emit("Payment sufficient")
                     self.disable_payment_mode() # Disable acceptors
@@ -170,7 +171,6 @@ class PaymentModel(QObject):
                 self.change_updated.emit(0, change_text)
 
         except Exception as e:
-            print(f"Couldn'do payment status update: {e}")
             self.payment_status_updated.emit(f"Payment error: {str(e)}")
 
     def _format_best_payment_status(self) -> str:
@@ -221,27 +221,28 @@ class PaymentModel(QObject):
         except Exception as e:
             print(f"Error logging transaction immediately: {e}")
 
-    def update_coin_inventory_after_payment(self):
+    def update_coin_inventory_after_payment(self, coin_data=None, add=True):
         try:
+            if coin_data is None:
+                coin_data = self.cash_received
+            
             # Add received coins to inventory
-            if self.cash_received:
-                self._update_coin_inventory_items(self.cash_received, add=True)
-
-            print(f"Coin inventory updated")
-                
-        except Exception as e:
-            print(f"Error updating coin inventory: {e}")
-
-    def _update_coin_inventory_items(self, coin_data, add=True):
-        try:
+            if not coin_data:
+                return
+            
+            # Get current inventory once 
+            current_inventory = self.db_manager.get_cash_inventory()
+            
             for denomination, count in coin_data.items():
                 if count > 0:
                     is_bill = denomination >= 20
                     
-                    # Get current count
-                    current_inventory = self.db_manager.get_cash_inventory()
-                    current_count = 0
+                    # Only process coins 1 and 5 peso when dispensing change
+                    if not add and denomination not in [1, 5]:
+                        continue
                     
+                    # Find current count from inventory
+                    current_count = 0
                     for item in current_inventory:
                         if (item.get('denomination') == denomination and 
                             item.get('type') == ('bill' if is_bill else 'coin')):
@@ -264,11 +265,12 @@ class PaymentModel(QObject):
                     operation_symbol = "+" if add else "-"
                     print(f"Updated {denomination} {'bill' if is_bill else 'coin'}: {current_count} {operation_symbol}{count} = {new_count}")
             
-            print("Coin inventory items updated")
+            print("Coin inventory updated")
                     
         except Exception as e:
-            print(f"Error updating coin inventory items: {e}")
+            print(f"Error updating coin inventory: {e}")
 
+    # Completed payment, logging, and dispensing change
     def complete_payment(self): # Returns true if success
         try:
             # Validate payment data exists
@@ -280,18 +282,11 @@ class PaymentModel(QObject):
             print(f"Payment calculation - received: {self.amount_received}, cost: {self.total_cost}, change: {change_amount}")
 
             # Create transaction data and log immediately so it exists regardless of print outcome
-            pdf_path = None
-            selected_pages = []
-            copies = 1
-            color_mode = 'Color'
-
-            if self.payment_data:
-                pdf_info = self.payment_data.get('pdf_data') or {}
-                pdf_path = pdf_info.get('path')
-                selected_pages = self.payment_data.get('selected_pages') or []
-                copies = int(self.payment_data.get('copies') or 1)
-                color_mode = self.payment_data.get('color_mode') or 'Color'
-
+            pdf_info = self.payment_data.get('pdf_data') or {}
+            pdf_path = pdf_info.get('path')
+            selected_pages = self.payment_data.get('selected_pages') or []
+            copies = int(self.payment_data.get('copies') or 1)
+            color_mode = self.payment_data.get('color_mode') or 'Color'
             file_name = os.path.basename(pdf_path) if pdf_path else 'unknown.pdf'
 
             self.transaction_data = {
@@ -308,7 +303,7 @@ class PaymentModel(QObject):
             self.db_manager.log_transaction(self.transaction_data)
 
             # Stop any existing dispense thread to prevent conflicts
-            if hasattr(self, 'dispense_thread') and self.dispense_thread and self.dispense_thread.isRunning():
+            if self.dispense_thread and self.dispense_thread.isRunning():
                 self.dispense_thread.terminate()
                 self.dispense_thread.wait(1000)
                 self.dispense_thread = None
@@ -345,8 +340,7 @@ class PaymentModel(QObject):
         except Exception as e:
             print(f"ERROR: Error in payment completion: {e}")
             # Reset payment completing flag on error
-            if hasattr(self, '_payment_completing'):
-                self._payment_completing = False
+            self._payment_completing = False
             return False, f"Payment completion failed: {str(e)}"
 
     def _on_dispensing_finished(self, result):
@@ -363,29 +357,21 @@ class PaymentModel(QObject):
 
                 # Store dispensed change data for later database update
                 self.change_dispensed = {1: coins_1, 5: coins_5}
-                print(f"Stored dispensed change data: {self.change_dispensed}")
 
                 # Update database immediately when coins are dispensed
                 if coins_1 > 0 or coins_5 > 0:
-                    print(f"Updating database immediately with dispensed coins: P1={coins_1}, P5={coins_5}")
-                    self._subtract_dispensed_coins_from_inventory(coins_1, coins_5)
+                    print(f"Updating database with dispensed coins: P1={coins_1}, P5={coins_5}")
+                    coin_data = {1: coins_1, 5: coins_5}
+                    self.update_coin_inventory_after_payment(coin_data=coin_data, add=False)
                     # Prevent double subtraction later in the post-print step
                     self.change_dispensed = None
-                    print("change_dispensed cleared after immediate decrement to avoid double subtraction")
 
-                print("Change dispensing completed, proceeding to print")
                 self._start_printing()
             else:
-                # Fallback for old boolean format
-                print(f"Old format result: {result}")
-                if result:
-                    print("Dispensing complete.")
-                    self._start_printing()
-                else:
-                    print("CRITICAL: Error dispensing change.")
-                    self._navigate_to_thank_you()
+                print("Error dispensing change.")
+                self._navigate_to_thank_you()
         except Exception as e:
-            print(f"ERROR: Exception in _on_dispensing_finished: {e}")
+            print(f"Exception in _on_dispensing_finished: {e}")
             # Fallback to navigation even if there's an error
             self._navigate_to_thank_you()
 
@@ -409,36 +395,9 @@ class PaymentModel(QObject):
         except Exception as e:
             print(f"Error cleaning up dispense thread: {e}")
 
-    def _subtract_dispensed_coins_from_inventory(self, coins_1, coins_5):
-        try:
-            # Get current coin counts from inventory
-            inventory = self.db_manager.get_cash_inventory()
-            current_counts = {1: 0, 5: 0} # Cooler way to do it than using 2 separate variables
-            
-            for item in inventory:
-                if item['type'] == 'coin': # Only update coin counts
-                    denom = item['denomination']
-                    if denom in current_counts: # Only update if the denomination is in the current counts
-                        current_counts[denom] = item['count'] # Update the count
-
-            # Calculate new counts (prevent negative)
-            new_counts = {
-                1: max(0, current_counts[1] - coins_1),
-                5: max(0, current_counts[5] - coins_5)
-            }
-
-            # Update database
-            self.db_manager.update_cash_inventory(1, new_counts[1], 'coin')
-            self.db_manager.update_cash_inventory(5, new_counts[5], 'coin')
-
-            print(f"Coin inventory updated: P1 {current_counts[1]} -> {new_counts[1]}, P5 {current_counts[5]} -> {new_counts[5]}")
-
-        except Exception as e:
-            print(f"Error subtracting dispensed coins from inventory: {e}")
-
     def _start_printing(self):
         try:
-            # Store print job details in main app for thank you screen
+            # Defensive write so that printer targets the same metadata
             print_job_details = {
                 'file_path': self.payment_data['pdf_data']['path'],
                 'selected_pages': self.payment_data.get('selected_pages', [1]),
@@ -475,15 +434,14 @@ class PaymentModel(QObject):
             self.log_transaction(self.payment_info)
             self.update_coin_inventory_after_payment()
             print(f"Database updated")
-            self.payment_completed.emit(self.payment_info)
+            self.payment_completed.emit(self.payment_info) # Run printing in main
         else:
             print("No payment data available to create payment info")
 
 
     def reset_payment_state(self):
         # Reset payment completing flag
-        if hasattr(self, '_payment_completing'):
-            self._payment_completing = False
+        self._payment_completing = False
 
         # Reset payment amounts
         self.amount_received = 0
@@ -532,9 +490,8 @@ class PaymentModel(QObject):
                         count=new_count,
                         type='bill' if is_bill else 'coin'
                     )
-                print(f"DEBUG: Inventory updated with received money")
             except Exception as inv_err:
-                print(f"WARNING: Failed to update cash inventory on cancel: {inv_err}")
+                print(f"Failed to update cash inventory on cancel: {inv_err}")
 
         self.on_leave()
         self.reset_payment_state()
@@ -545,7 +502,6 @@ class PaymentModel(QObject):
         # Reset payment state
         self.amount_received = 0
         self.cash_received = {}
-        self.payment_processing = False
         self._payment_completing = False  # Reset payment completion flag
 
         self.amount_received_updated.emit(0)

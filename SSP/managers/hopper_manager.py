@@ -81,12 +81,12 @@ class HopperController:
             print(f"[{self.name}] Hopper motor ENABLED")
             return True
         except Exception as e:
-            print(f"[{self.name}] ERROR: Failed to enable hopper: {e}")
+            print(f"[{self.name}] Failed to enable hopper: {e}")
             return False
 
     def _disable_hopper(self):
         if not self.pi or not self.pi.connected:
-            print(f"[{self.name}] ERROR: pigpio connection not available")
+            print(f"[{self.name}] pigpio connection not available")
             return False
         try:
             self.pi.write(self.enable_pin, 1) # Inactive high
@@ -94,7 +94,7 @@ class HopperController:
             print(f"[{self.name}] Hopper motor DISABLED")
             return True
         except Exception as e:
-            print(f"[{self.name}] ERROR: Failed to disable hopper: {e}")
+            print(f"[{self.name}] Failed to disable hopper: {e}")
             return False
 
     def _sensor_callback(self, gpio, level, tick):
@@ -165,13 +165,13 @@ class HopperController:
         while attempt <= MAX_RETRY_ATTEMPTS:
             print(f"[{self.name}] Attempt {attempt}/{MAX_RETRY_ATTEMPTS}...")
             if self._dispense_single_coin_attempt():
-                print(f"[{self.name}] SUCCESS: Coin dispensed and verified on attempt {attempt}.")
+                print(f"[{self.name}] Coin dispensed and verified on attempt {attempt}.")
                 success = True
                 break
             else:
-                print(f"[{self.name}] FAILED: Attempt {attempt} was unsuccessful.")
+                print(f"[{self.name}] Attempt {attempt} was unsuccessful.")
                 if self.coin_passage_count > 1:
-                    print(f"[{self.name}] CRITICAL: Dispensed too many coins. Aborting.")
+                    print(f"[{self.name}] Dispensed too many coins. Aborting.")
                     break # Don't retry if we over-dispensed
                 if attempt < MAX_RETRY_ATTEMPTS:
                     print(f"[{self.name}] Retrying in {RETRY_DELAY}s...")
@@ -179,7 +179,7 @@ class HopperController:
             attempt += 1
 
         if not success:
-            print(f"[{self.name}] CRITICAL FAILURE: Could not dispense a single coin after {MAX_RETRY_ATTEMPTS} attempts.")
+            print(f"[{self.name}] Could not dispense a single coin after {MAX_RETRY_ATTEMPTS} attempts.")
 
         # Brief pause to allow system to settle before next command
         time.sleep(COIN_DELAY)
@@ -195,7 +195,6 @@ class ChangeDispenser:
         
         # Create a controller for each hopper defined in config
         for name, config in HOPPER_CONFIGS.items():
-            print(f"Initializing Hopper '{name}' on Signal={config['signal_pin']}, Enable={config['enable_pin']}")
             self.hoppers[name] = HopperController(
                 pi_instance=self.pi,
                 name=name,
@@ -203,82 +202,9 @@ class ChangeDispenser:
                 enable_pin=config['enable_pin']
             )
 
-    # If pigpio connection is lost, try to reconnect
-    def check_connection(self):
-        if not self.pi or not self.pi.connected:
-            print("pigpio connection lost, attempting to reconnect...")
-            try:
-                # Clean up existing connection
-                if self.pi:
-                    self.cleanup_all_hoppers()
-                    self.pi.stop()
-                
-                # Create new connection
-                self.pi = pigpio.pi()
-                if self.pi.connected:
-                    print("pigpio connection restored")
-                    # Recreate all hopper controllers with new pi instance
-                    for name, config in HOPPER_CONFIGS.items():
-                        print(f"Reinitializing Hopper '{name}' with new pigpio connection")
-                        self.hoppers[name] = HopperController(
-                            pi_instance=self.pi,
-                            name=name,
-                            signal_pin=config['signal_pin'],
-                            enable_pin=config['enable_pin']
-                        )
-                    return True
-                else:
-                    print("Failed to restore pigpio connection")
-                    return False
-            except Exception as e:
-                print(f"Error reconnecting to pigpio: {e}")
-                return False
-        return True
-
-    # Recreate hopper controllers with the existing pigpio connection if needed
-    def reinitialize_hoppers(self):
-        if not self.pi or not self.pi.connected:
-            return False
-        
-        try:
-            # Clean up existing hoppers
-            self.cleanup_all_hoppers()
-            
-            # Recreate all hopper controllers
-            for name, config in HOPPER_CONFIGS.items():
-                print(f"Reinitializing Hopper '{name}' on Signal={config['signal_pin']}, Enable={config['enable_pin']}")
-                self.hoppers[name] = HopperController(
-                    pi_instance=self.pi,
-                    name=name,
-                    signal_pin=config['signal_pin'],
-                    enable_pin=config['enable_pin']
-                )
-            return True
-        except Exception as e:
-            print(f"Error reinitializing hoppers: {e}")
-            return False
-
     def dispense_change(self, amount: float, status_callback=None, required_coins=None):
         if amount <= 0:
             return {'success': True, 'coins_1': 0, 'coins_5': 0}
-
-        # Check connection before starting
-        if not self.check_connection():
-            error_msg = "Pigpio connection not available. Cannot dispense change."
-            print(error_msg)
-            if status_callback:
-                status_callback(error_msg)
-            return {'success': False, 'coins_1': 0, 'coins_5': 0, 'error': 'pigpio_connection_failed'}
-        
-        # Reinitialize hoppers if needed
-        if not self.hoppers:
-            print("Hoppers not initialized properly, reinitializing")
-            if not self.reinitialize_hoppers():
-                error_msg = "Failed to reinitialize hoppers. Cannot dispense change."
-                print(error_msg)
-                if status_callback:
-                    status_callback(error_msg)
-                return {'success': False, 'coins_1': 0, 'coins_5': 0, 'error': 'hopper_initialization_failed'}
 
         # Determine available inventory from database using a fresh connection (thread-safe)
         available_fives = None
@@ -293,7 +219,6 @@ class ChangeDispenser:
                     available_fives = int(item.get('count', 0))
                 elif item.get('type') == 'coin' and item.get('denomination') == 1:
                     available_ones = int(item.get('count', 0))
-            # print(f"DEBUG: Inventory - 5-peso: {available_fives}, 1-peso: {available_ones}")
         except Exception as e:
             print(f"Could not read coin inventory with fresh DB connection: {e}")
             available_fives = None
@@ -333,7 +258,6 @@ class ChangeDispenser:
             num_ones = desired_ones
         
         print(f"Dispensing 'P{amount:.2f}: {num_fives}x 5-peso, {num_ones}x 1-peso")
-        # print(f"DEBUG: Change calculation - Amount: {amount}, 5-peso coins: {num_fives}, 1-peso coins: {num_ones}")
         if status_callback:
             status_callback(f"Preparing to dispense ₱{amount:.2f}...")
 
@@ -342,23 +266,16 @@ class ChangeDispenser:
         actual_ones = 0
 
         # Dispense 5-peso coins
-        # print(f"DEBUG: Starting to dispense {num_fives} 5-peso coins using Hopper B")
         for i in range(num_fives):
             msg = f"Dispensing 5-peso coin ({i + 1} of {num_fives})"
             if status_callback: status_callback(msg)
             print(msg)
-            
-            # print(f"DEBUG: Calling hoppers['B'].dispense_single_coin() for 5-peso coin {i + 1}")
+
             success = self.hoppers['B'].dispense_single_coin()
-            # print(f"DEBUG: Hopper B dispense result: {success}")
 
             if success:
                 actual_fives += 1
-                # print(f"DEBUG: Successfully dispensed 5-peso coin {actual_fives}/{num_fives}")
             else:
-                error_msg = f"Failed to dispense 5-peso coin {i + 1}. Dispensed {actual_fives}/{num_fives}."
-                if status_callback: status_callback(error_msg)
-                print(error_msg)
                 # Continue and try to make up with ₱1 coins later
                 continue
 
@@ -366,8 +283,9 @@ class ChangeDispenser:
         makeup_ones = max(0, (num_fives - actual_fives) * 5)
         total_ones_to_dispense = num_ones + makeup_ones
         if makeup_ones > 0:
-            print(f"Making up shortfall of ₱5 coins with {makeup_ones} additional ₱1 coins")
+            print(f"Making up short ₱5 coins with {makeup_ones} ₱1 coins")
 
+        # Dispense 1-peso coins
         for i in range(total_ones_to_dispense):
             msg = f"Dispensing 1-peso coin ({i + 1} of {total_ones_to_dispense})"
             if status_callback: status_callback(msg)
@@ -377,11 +295,7 @@ class ChangeDispenser:
 
             if success:
                 actual_ones += 1
-                # print(f"DEBUG: Successfully dispensed 1-peso coin {actual_ones}/{total_ones_to_dispense}")
             else:
-                error_msg = f"Failed to dispense 1-peso coin {i + 1}. Dispensed {actual_ones}/{total_ones_to_dispense}."
-                if status_callback: status_callback(error_msg)
-                print(error_msg)
                 # Continue with what we have instead of failing completely
                 break
         
@@ -402,18 +316,16 @@ class ChangeDispenser:
             'expected_change': expected_change
         }
     
-    def cleanup_all_hoppers(self):
-        for name, hopper in self.hoppers.items():
-            try:
-                hopper.cleanup() # Predefined method to clean up hopper
-                print(f"[{name}] Hopper cleaned up")
-            except Exception as e:
-                print(f"[{name}] Error cleaning up hopper: {e}")
-        self.hoppers.clear() # Clear the hoppers dictionary
-    
     def cleanup(self):
         if self.pi:
-            self.cleanup_all_hoppers() # Clean up all hoppers
+            # Clean up all hoppers
+            for name, hopper in self.hoppers.items():
+                try:
+                    hopper.cleanup()
+                    print(f"[{name}] Hopper cleaned up")
+                except Exception as e:
+                    print(f"[{name}] Error cleaning up hopper: {e}")
+            self.hoppers.clear()
             
             try:
                 self.pi.stop()
