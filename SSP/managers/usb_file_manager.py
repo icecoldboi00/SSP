@@ -107,16 +107,19 @@ class USBFileManager:
             print(f"Set current USB drive: {drive_path}")
             self.operation_in_progress = True
                        
-            # Limit directory traversal to prevent system load
-            max_directories = 5
-            directory_count = 0
+            # Limit total number of files processed to prevent system load,
+            # but still allow scanning nested folders (previous directory cap skipped subfolders)
+            max_total_files = 200
+            total_files_processed = 0
             
             for root, _, files in os.walk(drive_path):
-                if directory_count >= max_directories:
-                    print(f"Reached directory limit ({max_directories}), stopping scan")
+                if self._should_stop:
+                    print("USB scan stopped by request")
                     break
                 
-                directory_count += 1
+                if total_files_processed >= max_total_files:
+                    print(f"Reached total file limit ({max_total_files}), stopping scan")
+                    break
                 
                 # Limit number of files per directory
                 max_files_per_dir = 30
@@ -129,6 +132,7 @@ class USBFileManager:
                     
                     if filename.lower().endswith('.pdf'):
                         file_count += 1
+                        total_files_processed += 1
                         source_path = os.path.join(root, filename)
                         
                         # Check file size to prevent memory issues
@@ -160,6 +164,10 @@ class USBFileManager:
                         except Exception as e:
                             print(f"Error processing {filename}: {str(e)}")
                             continue
+                
+                if total_files_processed >= max_total_files:
+                    print(f"Total file limit reached ({max_total_files}), exiting scan loop")
+                    break
                             
             # Mark operation as complete
             self.operation_in_progress = False
