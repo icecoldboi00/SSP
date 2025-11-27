@@ -451,6 +451,19 @@ class PaymentModel(QObject):
         # Reset payment data
         self.payment_data = None
 
+        # Reset print-related attributes
+        if hasattr(self, 'print_file_path'):
+            self.print_file_path = None
+        if hasattr(self, 'selected_pages'):
+            self.selected_pages = None
+        if hasattr(self, 'copies'):
+            self.copies = None
+        if hasattr(self, 'color_mode'):
+            self.color_mode = None
+
+        # Reset payment suggestion
+        self.best_payment_suggestion = None
+
         # Stop any running dispense thread
         if hasattr(self, 'dispense_thread') and self.dispense_thread and self.dispense_thread.isRunning():
             print("Stopping dispense thread during reset")
@@ -465,6 +478,7 @@ class PaymentModel(QObject):
         self.amount_received_updated.emit(0)
         self.change_updated.emit(0, "")
         self.payment_status_updated.emit("Payment screen ready")
+        self.suggestion_updated.emit("")
 
         print("Payment state reset")
 

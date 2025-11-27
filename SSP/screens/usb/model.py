@@ -77,6 +77,14 @@ class USBScreenModel(QObject):
             
             # Stop the monitoring loop
             self.monitoring_thread.stop_monitoring()
+            
+            # Wait for thread to finish (with timeout to prevent hanging)
+            if not self.monitoring_thread.wait(2000):  # Wait up to 2 seconds
+                print("Warning: USB monitoring thread did not stop within timeout")
+                # Force terminate if it's still running
+                if self.monitoring_thread.isRunning():
+                    self.monitoring_thread.terminate()
+                    self.monitoring_thread.wait(1000)  # Wait for termination
                  
             self.monitoring_thread = None
             print("USB monitoring stopped")

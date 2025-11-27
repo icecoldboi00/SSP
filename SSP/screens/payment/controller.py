@@ -1,3 +1,4 @@
+import os
 from PyQt5.QtWidgets import QWidget, QMessageBox
 from PyQt5.QtCore import pyqtSignal, QTimer
 from .model import PaymentModel
@@ -85,6 +86,32 @@ class PaymentController(QWidget):
                     # Temporarily disconnect to prevent navigation to print_options
                     self.model.go_back_requested.disconnect(self._go_back)
                     self.model.go_back()  # Adds money to inventory and cleans up
+                    
+                    # Clean up session directory since payment was cancelled
+                    try:
+                        self.main_app.usb_file_manager.cleanup_session_directory()
+                        print("Session directory cleaned up after payment cancellation")
+                    except Exception as cleanup_error:
+                        print(f"Error cleaning up session directory on cancel: {cleanup_error}")
+                    
+                    # Clear USB file manager state (files_in_use tracking)
+                    try:
+                        self.main_app.usb_file_manager.files_in_use.clear()
+                        self.main_app.usb_file_manager.operation_in_progress = False
+                        print("USB file manager state cleared after cancellation")
+                    except Exception as usb_cleanup_error:
+                        print(f"Error clearing USB file manager state: {usb_cleanup_error}")
+                    
+                    # Clear main app print job state (if any exists)
+                    try:
+                        if hasattr(self.main_app, 'current_print_job'):
+                            self.main_app.current_print_job = None
+                        if hasattr(self.main_app, 'current_payment_info'):
+                            self.main_app.current_payment_info = None
+                        print("Main app print job state cleared after cancellation")
+                    except Exception as app_cleanup_error:
+                        print(f"Error clearing main app state: {app_cleanup_error}")
+                    
                     # Navigate directly to idle screen
                     self.main_app.show_screen('idle')
                 finally:
