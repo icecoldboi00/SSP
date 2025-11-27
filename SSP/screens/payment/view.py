@@ -161,3 +161,26 @@ class PaymentScreenView(QWidget):
 
     def update_inline_suggestion(self, text: str):
         self.suggestion_label.setText(text or "")
+    
+    def update_payment_status(self, status_text: str):
+        if status_text:
+            self.insert_message_label.setText(status_text)
+            # Update styling based on status type
+            if "error" in status_text.lower() or "broken" in status_text.lower():
+                self.insert_message_label.setStyleSheet(
+                    "QLabel { color: #dc3545; font-size: 20px; font-weight: bold; padding: 5px; background-color: transparent; margin: 10px 0; }"
+                )
+            elif "sufficient" in status_text.lower() or "dispensing" in status_text.lower() or "complete" in status_text.lower():
+                self.insert_message_label.setStyleSheet(
+                    "QLabel { color: #155724; font-size: 20px; font-weight: bold; padding: 5px; background-color: transparent; margin: 10px 0; }"
+                )
+            else:
+                self.insert_message_label.setStyleSheet(
+                    "QLabel { color: #36454F; font-size: 20px; font-weight: normal; padding: 5px; background-color: transparent; margin: 10px 0; }"
+                )
+        else:
+            # Reset to default message
+            self.insert_message_label.setText("Insert coins or bills.")
+            self.insert_message_label.setStyleSheet(
+                "QLabel { color: #36454F; font-size: 20px; font-weight: normal; padding: 5px; background-color: transparent; margin: 10px 0; }"
+            )
