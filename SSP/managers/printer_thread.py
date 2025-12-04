@@ -32,7 +32,7 @@ class PrinterThread(QThread):
             # Build and execute CUPS print command
             command = self.build_print_command()
             config = get_config()
-            # Note: copies are handled in PDF, so temp PDF will have (pages × copies) pages
+            # Copies are handled in PDF, so temp PDF will have (pages × copies) pages
             total_pages_in_pdf = len(self.selected_pages) * self.copies
             print(f"Printing: {len(self.selected_pages)} selected pages × {self.copies} copies = {total_pages_in_pdf} total pages, {self.color_mode}")
             print(f"Command: {' '.join(command)}")
@@ -180,7 +180,7 @@ class PrinterThread(QThread):
             print(f"Temp PDF page count: {actual_pages} (expected: {expected_pages})")
             if actual_pages != expected_pages:
                 error_msg = f"Page count mismatch! Expected {expected_pages}, got {actual_pages}"
-                print(f"⚠ ERROR: {error_msg}")
+                print(f"ERROR: {error_msg}")
                 temp_doc.close()
                 original_doc.close()
                 raise ValueError(error_msg)
@@ -205,14 +205,14 @@ class PrinterThread(QThread):
                 print(f"Verified temp PDF has {verify_page_count} pages")
                 if verify_page_count != expected_pages:
                     error_msg = f"Saved PDF has wrong page count! Expected {expected_pages}, got {verify_page_count}"
-                    print(f"⚠ ERROR: {error_msg}")
+                    print(f"ERROR: {error_msg}")
                     # Clean up the bad file
                     try:
                         os.remove(self.temp_pdf_path)
                     except:
                         pass
                     raise ValueError(error_msg)
-                print(f"✓ Temp PDF verified: {verify_page_count} pages, {self.copies} copies of {len(self.selected_pages)} selected pages")
+                print(f"Temp PDF verified: {verify_page_count} pages, {self.copies} copies of {len(self.selected_pages)} selected pages")
             else:
                 raise Exception("Temp PDF file was not created")
             
@@ -221,6 +221,7 @@ class PrinterThread(QThread):
             self.print_failed.emit(f"Failed to create temporary PDF: {str(e)}")
             self.temp_pdf_path = None
 
+    # Check print job every 3 seconds see if there any error
     def wait_for_print_completion(self, job_id):
         import time
         
@@ -340,15 +341,15 @@ class PrinterThread(QThread):
                         # Check if post-completion monitoring is complete
                         time_since_completion = elapsed_time - completion_time
                         if time_since_completion >= post_completion_wait:
-                            print(f"Print job successful - no printers actively printing and CUPS job completed for {post_completion_wait}s")
+                            print(f"Print job successful no printers actively printing and CUPS job completed for {post_completion_wait}s")
                             return True
                 else:
                     # Printer became active again or CUPS job still active - reset completion timer
                     if completion_time is not None:
                         if printer_actively_printing:
-                            print(f"Printer became active again - resetting completion timer")
+                            print(f"Printer became active again resetting completion timer")
                         if cups_job_still_active:
-                            print(f"CUPS job still active - resetting completion timer")
+                            print(f"CUPS job still active resetting completion timer")
                         completion_time = None
                     if printer_actively_printing:
                         print(f"Waiting for printer '{target_printer}' to finish printing...")
@@ -414,7 +415,6 @@ class PrinterThread(QThread):
         
         print(f"Print command: {' '.join(command)}")
         print(f"Copies value: {self.copies} (type: {type(self.copies)})")
-        print("Separator page option applied: job-sheets=none")
         
         return command
 

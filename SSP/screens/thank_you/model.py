@@ -47,8 +47,8 @@ class ThankYouModel(QObject):
         self.current_state = "waiting"
         self.print_job_finished = False  # Reset finished flag for new print job
         self.status_updated.emit(
-            "Thank you for printing with us",
-            "You may now remove your USB."
+            "Your document is being processed.",
+            "Please remove your USB drive."
         )
         self.redirect_timer.stop()
         
@@ -59,6 +59,7 @@ class ThankYouModel(QObject):
         if hasattr(main_app, 'printer_manager'):
             try:
                 main_app.printer_manager.print_job_successful.connect(self._on_print_success)
+                # Also connect to failures - ensures error is shown even if user navigates away
                 main_app.printer_manager.print_job_failed.connect(self._on_print_failed)
             except Exception as e:
                 print(f"Error connecting printer signals: {e}")
