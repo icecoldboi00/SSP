@@ -248,10 +248,10 @@ class ChangeDispenser:
                 if total_available_value <= 0:
                     print("No coins available in database. No dispense.")
                     return {'success': True, 'coins_1': 0, 'coins_5': 0, 'actual_change': 0, 'expected_change': int(amount)}
-                # Fallback: dispense all available coins
-                print("Insufficient coins for exact change. Dispensing all available coins.")
-                num_fives = max(0, available_fives)
-                num_ones = max(0, available_ones)
+                
+                # FIXED: Logic removed that previously set num_fives/num_ones to ALL available coins.
+                # We now keep the partial amounts calculated above.
+                print(f"Insufficient coins for exact change. Dispensing partial amount: P{disp_value} (Target: P{amount})")
         else:
             # Inventory unknown; proceed with desired targets
             num_fives = desired_fives
@@ -315,7 +315,7 @@ class ChangeDispenser:
             'actual_change': actual_change,
             'expected_change': expected_change
         }
-    
+
     def cleanup(self):
         if self.pi:
             # Clean up all hoppers
