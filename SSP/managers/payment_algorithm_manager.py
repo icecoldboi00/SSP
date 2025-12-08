@@ -70,8 +70,6 @@ class PaymentAlgorithmManager:
         if change_amount <= 0:
             return True, "No change needed", {1: 0, 5: 0}
         
-        # No artificial cap here; feasibility is determined by inventory below
-        
         # Get current coin inventory
         coin_inventory = self.get_coin_inventory()
         
@@ -79,25 +77,21 @@ class PaymentAlgorithmManager:
         desired = self.calculate_change_breakdown(change_amount)
         change_int = int(round(change_amount))
         
-        # Adapt breakdown to available inventory: use as many 5s as possible (but not more than available), then fill with 1s
+        # Try to make exact change with available coins
         use_fives = min(desired.get(5, 0), max(0, coin_inventory.get(5, 0)))
         remaining_after_fives = change_int - (use_fives * 5)
         if remaining_after_fives < 0:
             remaining_after_fives = 0
         use_ones = remaining_after_fives
         
-        # If not enough 1s to cover remainder, try reducing 5s to free up smaller remainder
         available_ones = max(0, coin_inventory.get(1, 0))
-        while use_ones > available_ones and use_fives > 0:
-            use_fives -= 1
-            remaining_after_fives = change_int - (use_fives * 5)
-            use_ones = remaining_after_fives
         
-        # Final feasibility check against inventory
+        # If not enough 1s to cover remainder, we can't dispense exact change
+        # But we still accept the payment - just won't dispense change
         if use_ones > available_ones:
-            return False, (
-                f"Insufficient coins for change ₱{change_int}. Available: ₱5={coin_inventory.get(5,0)}, ₱1={coin_inventory.get(1,0)}"
-            ), {1: use_ones, 5: use_fives}
+            return True, (
+                f"Payment accepted. Cannot dispense exact change ₱{change_int} (only ₱{use_fives * 5 + available_ones} available). No change will be given."
+            ), {1: 0, 5: 0}  # Return empty coins since we won't dispense
         
         required_coins = {1: use_ones, 5: use_fives}
         
@@ -107,7 +101,7 @@ class PaymentAlgorithmManager:
             if threshold and threshold > 0:
                 remaining_after_change = coin_inventory.get(denom, 0) - required_coins.get(denom, 0)
                 if remaining_after_change < threshold:
-                    return False, f"Dispensing change would leave insufficient ₱{denom} coins (would have {remaining_after_change}, minimum required: {threshold})", required_coins
+                    return True, f"Payment accepted. Cannot dispense change due to minimum reserve requirements. No change will be given.", {1: 0, 5: 0}  # Accept payment but no change
         
         return True, "Change can be dispensed", required_coins
     

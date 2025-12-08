@@ -14,7 +14,7 @@ HOPPER_CONFIGS = {
         'enable_pin': 24   # Hopper enable control 
     },
     'B': {
-        'signal_pin': 19,   # Coin pulse input for 5 Peso
+        'signal_pin': 26,   # Coin pulse input for 5 Peso
         'enable_pin': 25   # Hopper enable control 
     }
 }
