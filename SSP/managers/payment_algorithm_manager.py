@@ -3,36 +3,17 @@ from database.db_manager import DatabaseManager
 
 class PaymentAlgorithmManager:
     def __init__(self, db_manager: DatabaseManager):
-        self.db_manager = db_manager
-        # Coin denominations available in the system
-        self.COIN_DENOMINATIONS = [1, 5]  # ₱1 and ₱5 coins
+            self.db_manager = db_manager
+            # Coin denominations available in the system
+            self.COIN_DENOMINATIONS = [1, 5]  # ₱1 and ₱5 coins
 
-        # Read configurable thresholds from settings table (defaults allow dispensing with few coins)
-        min_1 = self.db_manager.get_setting('min_coin_threshold_1', 0)
-        min_5 = self.db_manager.get_setting('min_coin_threshold_5', 0)
-        if isinstance(min_1, str):
+            # Maximum change that can be dispensed (configurable)
+            # Defaults to 50.0 if not set in database
+            max_change_cfg = self.db_manager.get_setting('max_change_limit', 50)
             try:
-                min_1 = int(min_1)
+                self.MAX_CHANGE_LIMIT = float(max_change_cfg) if max_change_cfg is not None else 50.0
             except Exception:
-                min_1 = 0
-        if isinstance(min_5, str):
-            try:
-                min_5 = int(min_5)
-            except Exception:
-                min_5 = 0
-
-        # Minimum thresholds for coin availability (reserve coins). Defaults to 0 so change works even with few coins.
-        self.MIN_COIN_THRESHOLDS = {
-            1: max(0, min_1),
-            5: max(0, min_5)
-        }
-
-        # Maximum change that can be dispensed (configurable)
-        max_change_cfg = self.db_manager.get_setting('max_change_limit', 50)
-        try:
-            self.MAX_CHANGE_LIMIT = float(max_change_cfg) if max_change_cfg is not None else 50.0
-        except Exception:
-            self.MAX_CHANGE_LIMIT = 50.0
+                self.MAX_CHANGE_LIMIT = 50.0
     
     def get_coin_inventory(self) -> Dict[int, int]:
         try:
@@ -53,124 +34,121 @@ class PaymentAlgorithmManager:
             print(f"Error getting coin inventory: {e}")
             return {1: 0, 5: 0}
     
-    def calculate_change_breakdown(self, change_amount: float) -> Dict[int, int]:
-        if change_amount <= 0:
-            return {1: 0, 5: 0}
-        
-        # Round to nearest peso (assuming no centavos in this system)
-        change_amount = int(round(change_amount))
-        
-        # Greedy distribution without considering inventory
-        coins_5 = int(change_amount // 5)
-        coins_1 = int(change_amount % 5)
-        
-        return {1: coins_1, 5: coins_5}
+    def check_strict_change(self, amount: float) -> Tuple[bool, Dict[int, int]]:
+            if amount <= 0:
+                return True, {1: 0, 5: 0}
+
+            amount = int(round(amount))
+            inventory = self.get_coin_inventory()
+            
+            # Available coins (No thresholds subtracted)
+            avail_5 = max(0, inventory.get(5, 0))
+            avail_1 = max(0, inventory.get(1, 0))
+            
+            # Greedy Calculation: How many 5s do we ideally want?
+            needed_5 = amount // 5
+            
+            # Take as many 5s as we actually have (up to needed amount)
+            take_5 = min(needed_5, avail_5)
+            
+            # The remainder MUST be covered by 1s
+            remainder = amount - (take_5 * 5)
+            take_1 = remainder
+            
+            # Strict Verification: Do we have enough 1s?
+            if take_1 <= avail_1:
+                return True, {1: take_1, 5: take_5}
+            else:
+                return False, {1: take_1, 5: take_5}
     
     def can_dispense_change(self, change_amount: float) -> Tuple[bool, str, Dict[int, int]]:
-        if change_amount <= 0:
-            return True, "No change needed", {1: 0, 5: 0}
-        
-        # No artificial cap here; feasibility is determined by inventory below
-        
-        # Get current coin inventory
-        coin_inventory = self.get_coin_inventory()
-        
-        # Desired greedy breakdown
-        desired = self.calculate_change_breakdown(change_amount)
-        change_int = int(round(change_amount))
-        
-        # Adapt breakdown to available inventory: use as many 5s as possible (but not more than available), then fill with 1s
-        use_fives = min(desired.get(5, 0), max(0, coin_inventory.get(5, 0)))
-        remaining_after_fives = change_int - (use_fives * 5)
-        if remaining_after_fives < 0:
-            remaining_after_fives = 0
-        use_ones = remaining_after_fives
-        
-        # If not enough 1s to cover remainder, try reducing 5s to free up smaller remainder
-        available_ones = max(0, coin_inventory.get(1, 0))
-        while use_ones > available_ones and use_fives > 0:
-            use_fives -= 1
-            remaining_after_fives = change_int - (use_fives * 5)
-            use_ones = remaining_after_fives
-        
-        # Final feasibility check against inventory
-        if use_ones > available_ones:
-            return False, (
-                f"Insufficient coins for change ₱{change_int}. Available: ₱5={coin_inventory.get(5,0)}, ₱1={coin_inventory.get(1,0)}"
-            ), {1: use_ones, 5: use_fives}
-        
-        required_coins = {1: use_ones, 5: use_fives}
-        
-        # Check minimum thresholds (reserve some coins for future transactions)
-        # Only enforce when threshold > 0
-        for denom, threshold in self.MIN_COIN_THRESHOLDS.items():
-            if threshold and threshold > 0:
-                remaining_after_change = coin_inventory.get(denom, 0) - required_coins.get(denom, 0)
-                if remaining_after_change < threshold:
-                    return False, f"Dispensing change would leave insufficient ₱{denom} coins (would have {remaining_after_change}, minimum required: {threshold})", required_coins
-        
-        return True, "Change can be dispensed", required_coins
-    
+            """
+            Public method to check if change is possible. 
+            Uses check_strict_change for consistency.
+            """
+            if change_amount <= 0:
+                return True, "No change needed", {1: 0, 5: 0}
+            
+            # Use the strict checker for validation
+            success, required_coins = self.check_strict_change(change_amount)
+            
+            if success:
+                return True, "Change can be dispensed", required_coins
+            else:
+                # Re-fetch inventory just for the error message detail
+                inv = self.get_coin_inventory()
+                return False, (
+                    f"Insufficient coins for change ₱{int(change_amount)}. "
+                    f"Available: ₱5={inv.get(5,0)}, ₱1={inv.get(1,0)}"
+                ), required_coins
+            
     def find_best_payment_amount(self, total_cost: float) -> Dict:
-        # We operate in whole pesos. Determine dynamic maximum change from inventory.
-        coin_inventory = self.get_coin_inventory()
-        th5 = self.MIN_COIN_THRESHOLDS.get(5, 0)
-        th1 = self.MIN_COIN_THRESHOLDS.get(1, 0)
-        available_5 = max(0, coin_inventory.get(5, 0) - (th5 if th5 > 0 else 0))
-        available_1 = max(0, coin_inventory.get(1, 0) - (th1 if th1 > 0 else 0))
-        max_possible_change = int((available_5 * 5) + available_1)
+            # 1. Get Inventory
+            coin_inventory = self.get_coin_inventory()
+            
+            # 2. Calculate Total Monetary Value of Inventory
+            available_5 = max(0, coin_inventory.get(5, 0))
+            available_1 = max(0, coin_inventory.get(1, 0))
+            total_inventory_value = int((available_5 * 5) + available_1)
+            
+            # 3. Apply the 50 Peso Cap (or whatever is in DB)
+            # We take the smaller of the two: either what we physically have, or the limit.
+            max_possible_change = min(total_inventory_value, int(self.MAX_CHANGE_LIMIT))
 
-        best_change = 0
+            # 4. Find the Real Mathematical Limit (The "Best Change")
+            best_change = 0
+            base = int(round(total_cost))
 
-        base = int(round(total_cost))
-        for change in range(max_possible_change, -1, -1):
-            can, _, _ = self.can_dispense_change(change)
-            if can:
-                best_change = change
-                break
+            # Search downwards for the highest possible change we can STRICTLY dispense
+            for change in range(max_possible_change, -1, -1):
+                can, _ = self.check_strict_change(change)
+                if can:
+                    best_change = change
+                    break
 
-        # If no change is possible, return exact
-        if best_change == 0:
+            # 5. If absolutely no change is possible, force Exact Payment immediately
+            if best_change == 0:
+                return {
+                    'amount': float(base),
+                    'change': 0.0,
+                    'required_coins': {1: 0, 5: 0},
+                    'reason': 'Exact payment'
+                }
+
+            # 6. The "Clean Number" Logic (Snap to Grid)
+            ceiling = base + best_change
+            
+            chosen_amount = None
+            chosen_required = None
+            
+            # Search downwards from Ceiling to Cost
+            for amount in range(ceiling, base - 1, -1):
+                # Prefer multiples of 5 (e.g., 25, 30, 40) for cleaner user experience
+                if amount % 5 == 0:
+                    change_needed = amount - base
+                    
+                    # Verify Reality: Can we actually dispense this specific change?
+                    can, req = self.check_strict_change(change_needed)
+                    
+                    if can:
+                        chosen_amount = amount
+                        chosen_required = req
+                        break
+            
+            # 7. Fallback Logic (If no clean number found)
+            if chosen_amount is None:
+                chosen_amount = base
+                chosen_required = {1: 0, 5: 0}
+                delta = 0
+            else:
+                delta = chosen_amount - base
+
             return {
-                'amount': float(base),
-                'change': 0.0,
-                'required_coins': {1: 0, 5: 0},
-                'reason': 'Exact payment'
+                'amount': float(chosen_amount),
+                'change': float(delta),
+                'required_coins': chosen_required,
+                'reason': (
+                    'Exact payment' if delta == 0
+                    else f'Max payment we can receive: ₱{chosen_amount:.2f}'
+                )
             }
-
-        ceiling = base + best_change
-        accepted = [1, 5, 10, 20, 50, 100]
-        # Filter to realistic denominations within [total_cost, ceiling]
-        viable = [d for d in accepted if d >= base and d <= ceiling]
-        viable.sort()
-
-        chosen_amount = None
-        chosen_required = None
-        # Try largest first, also validate change feasibility for that denomination
-        for d in reversed(viable):
-            change_needed = d - base
-            if change_needed < 0:
-                continue
-            can, _, req = self.can_dispense_change(change_needed)
-            if can:
-                chosen_amount = d
-                chosen_required = req
-                break
-
-        if chosen_amount is None:
-            # Fallback to exact if no denomination fits
-            chosen_amount = base
-            chosen_required = {1: 0, 5: 0}
-            delta = 0
-        else:
-            delta = chosen_amount - base
-
-        return {
-            'amount': float(chosen_amount),
-            'change': float(delta),
-            'required_coins': chosen_required,
-            'reason': (
-                'Exact payment' if delta == 0
-                else f'Max payment we can receive: ₱{chosen_amount:.2f} (available ₱{delta:.2f})'
-            )
-        }
