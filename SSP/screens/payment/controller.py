@@ -32,6 +32,7 @@ class PaymentController(QWidget):
         self.model.amount_received_updated.connect(self._on_amount_received_updated)
         self.model.change_updated.connect(self.view.update_change_display)
         self.model.suggestion_updated.connect(self.view.update_inline_suggestion)
+        self.model.max_limit_updated.connect(self.view.update_max_limit) # NEW: Connect max limit
         self.model.payment_completed.connect(self._handle_payment_completed)
         self.model.go_back_requested.connect(self._go_back)
     

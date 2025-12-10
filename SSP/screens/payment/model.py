@@ -10,6 +10,7 @@ class PaymentModel(QObject):
     payment_data_updated = pyqtSignal(dict)  # payment_data
     payment_status_updated = pyqtSignal(str)  # status_message
     suggestion_updated = pyqtSignal(str)      # inline best payment suggestion
+    max_limit_updated = pyqtSignal(str)       # NEW: max accepted payment
     amount_received_updated = pyqtSignal(float)  # amount_received
     change_updated = pyqtSignal(float, str)  # change_amount, change_text
     payment_completed = pyqtSignal(dict)  # payment_info passed to main
@@ -54,11 +55,14 @@ class PaymentModel(QObject):
         if 'color_mode' in payment_data:
             self.color_mode = payment_data['color_mode']
 
-        # Compute best payment suggestion inline based on current coin inventory
-        best = self.payment_algorithm.find_best_payment_amount(self.total_cost)
-        self.best_payment_suggestion = best
-        self.suggestion_updated.emit(self._format_best_payment_status())
+        # 1. Get Smart Suggestion (e.g. "Suggested: P25")
+        suggestion_text = self.payment_algorithm.get_payment_suggestion(self.total_cost)
+        self.suggestion_updated.emit(suggestion_text)
 
+        # 2. Get Max Limit (e.g. "Max Accepted: P50")
+        max_payment_data = self.payment_algorithm.find_best_payment_amount(self.total_cost)
+        max_amount = max_payment_data.get('amount', self.total_cost)
+        self.max_limit_updated.emit(f"Max Accepted: P{max_amount:.2f}")
 
         # Prepare summary data for UI
         doc_name = os.path.basename(payment_data['pdf_data']['path'])
@@ -172,15 +176,6 @@ class PaymentModel(QObject):
 
         except Exception as e:
             self.payment_status_updated.emit(f"Payment error: {str(e)}")
-
-    def _format_best_payment_status(self) -> str:
-        if not self.best_payment_suggestion:
-            return ""
-        amt = self.best_payment_suggestion.get('amount', self.total_cost)
-        chg = self.best_payment_suggestion.get('change', 0)
-        if chg == 0:
-            return "Please pay in EXACT AMOUNT. No available change."
-        return f"Max payment we can receive: P{amt:.2f} (available P{chg:.2f})"
 
     def _auto_complete_payment(self):
         self.payment_status_updated.emit("Dispensing change please wait...")
@@ -479,6 +474,7 @@ class PaymentModel(QObject):
         self.change_updated.emit(0, "")
         self.payment_status_updated.emit("Payment screen ready")
         self.suggestion_updated.emit("")
+        self.max_limit_updated.emit("") # Clear max limit label
 
         print("Payment state reset")
 

@@ -52,6 +52,12 @@ class PaymentScreenView(QWidget):
         self.suggestion_label.setStyleSheet("QLabel { color: #36454F; font-size: 32px; font-weight: bold; padding: 2px 0; }")
         main_layout.addWidget(self.suggestion_label)
 
+        # Max Payment label (Secondary info)
+        self.max_payment_label = QLabel("")
+        self.max_payment_label.setAlignment(Qt.AlignCenter)
+        self.max_payment_label.setStyleSheet("QLabel { color: #6c757d; font-size: 18px; font-weight: normal; padding: 0px 0; }")
+        main_layout.addWidget(self.max_payment_label)
+
         # Amount received label
         self.amount_received_label = QLabel("Amount Received: P0.00")
         self.amount_received_label.setAlignment(Qt.AlignCenter)
@@ -161,6 +167,9 @@ class PaymentScreenView(QWidget):
 
     def update_inline_suggestion(self, text: str):
         self.suggestion_label.setText(text or "")
+
+    def update_max_limit(self, text: str):
+        self.max_payment_label.setText(text or "")
     
     def update_payment_status(self, status_text: str):
         if status_text:
