@@ -8,7 +8,6 @@ class PaymentAlgorithmManager:
         self.COIN_DENOMINATIONS = [1, 5]  # ₱1 and ₱5 coins
     
     def get_coin_inventory(self) -> Dict[int, int]:
-        """Fetch current coin counts from the database."""
         try:
             inventory = self.db_manager.get_cash_inventory()
             coin_inventory = {}
@@ -28,10 +27,6 @@ class PaymentAlgorithmManager:
             return {1: 0, 5: 0}
     
     def check_strict_change(self, amount: float) -> Tuple[bool, Dict[int, int]]:
-        """
-        Strictly checks if change can be dispensed using a greedy approach 
-        (Max 5s first, then 1s) without trying to "trade down".
-        """
         if amount <= 0:
             return True, {1: 0, 5: 0}
 
@@ -59,10 +54,6 @@ class PaymentAlgorithmManager:
             return False, {1: take_1, 5: take_5}
 
     def can_dispense_change(self, change_amount: float) -> Tuple[bool, str, Dict[int, int]]:
-        """
-        Public method to check if change is possible. 
-        Uses check_strict_change for consistency.
-        """
         if change_amount <= 0:
             return True, "No change needed", {1: 0, 5: 0}
         
@@ -80,11 +71,6 @@ class PaymentAlgorithmManager:
             ), required_coins
 
     def get_payment_suggestion(self, total_cost: float) -> str:
-        """
-        Returns a string for the UI suggesting the best payment amount.
-        Logic: Finds the smallest convenient amount (multiple of 5, 10, or bill) 
-        >= total_cost that we can strictly dispense change for.
-        """
         base = int(round(total_cost))
         
         # 1. Generate Candidates (Multiples of 5, 10, and Bills)
@@ -115,16 +101,12 @@ class PaymentAlgorithmManager:
             # Use strict check to ensure we have the specific coins
             can, _ = self.check_strict_change(change_needed)
             if can:
-                return f"Suggested Payment: P{amount}"
+                return f"Suggested Denomination: P{amount}"
                 
         # 3. Fallback: If no convenient amount works, suggest Exact
-        return f"Suggested Payment: P{base} (Exact)"
+        return f"Suggested Denomination: P{base} (Exact)"
 
     def find_best_payment_amount(self, total_cost: float) -> Dict:
-        """
-        Calculates the maximum bill the machine can accept.
-        Kept for backward compatibility and internal limits.
-        """
         # 1. Get Inventory
         coin_inventory = self.get_coin_inventory()
         
