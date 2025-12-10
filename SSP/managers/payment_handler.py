@@ -269,7 +269,7 @@ class PaymentHandler(QObject):
             self.accepting_payments = True
             
             print("Payment acceptors enabled")
-            self.payment_status.emit("Payment acceptors enabled - Insert coins or bills")
+            self.payment_status.emit("Insert coins or bills")
             
             return True
             

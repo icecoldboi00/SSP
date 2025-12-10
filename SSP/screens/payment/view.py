@@ -24,7 +24,7 @@ class PaymentScreenView(QWidget):
         foreground_widget = QWidget()
         foreground_widget.setStyleSheet("background-color: transparent;")
         main_layout = QVBoxLayout(foreground_widget)
-        main_layout.setContentsMargins(30, 20, 30, 30)
+        main_layout.setContentsMargins(30, 40, 30, 30)
         main_layout.setSpacing(10)
         main_layout.addStretch(1)
 
