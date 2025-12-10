@@ -55,7 +55,7 @@ class PaymentScreenView(QWidget):
         # Max Payment label (Secondary info)
         self.max_payment_label = QLabel("")
         self.max_payment_label.setAlignment(Qt.AlignCenter)
-        self.max_payment_label.setStyleSheet("QLabel { color: #6c757d; font-size: 18px; font-weight: normal; padding: 0px 0; }")
+        self.max_payment_label.setStyleSheet("QLabel { color: #36454F; font-size: 32px; font-weight: bold; padding: 2px 0; }")
         main_layout.addWidget(self.max_payment_label)
 
         # Amount received label

@@ -115,10 +115,10 @@ class PaymentAlgorithmManager:
             # Use strict check to ensure we have the specific coins
             can, _ = self.check_strict_change(change_needed)
             if can:
-                return f"Suggested: P{amount}"
+                return f"Suggested Payment: P{amount}"
                 
         # 3. Fallback: If no convenient amount works, suggest Exact
-        return f"Suggested: P{base} (Exact)"
+        return f"Suggested Payment: P{base} (Exact)"
 
     def find_best_payment_amount(self, total_cost: float) -> Dict:
         """
