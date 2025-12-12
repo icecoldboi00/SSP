@@ -99,15 +99,26 @@ class ThankYouModel(QObject):
         # Check if this is a paper jam error
         is_paper_jam = "paper jam" in message.lower() or "jam" in message.lower()
         
+        # Check if this is a low/no paper error
+        is_low_paper = (
+            "no paper" in message.lower() or 
+            "media-empty" in message.lower() or 
+            "media-needed" in message.lower() or
+            "media empty" in message.lower() or
+            "out of paper" in message.lower()
+        )
+        
         # Sanitize common verbose CUPS errors for better UX
         if "CUPS Error" in message:
             clean_message = "Could not communicate with the printer."
         elif is_paper_jam:
             clean_message = "Paper jam detected."
+        elif is_low_paper:
+            clean_message = "Low or no paper detected."
         else:
             clean_message = "An error occurred."
         
-        self.error_type = "paper_jam" if is_paper_jam else "printing_error"
+        self.error_type = "paper_jam" if is_paper_jam else ("low_paper" if is_low_paper else "printing_error")
         
         self.status_updated.emit(
             "ERROR OCCURRED",
@@ -118,7 +129,13 @@ class ThankYouModel(QObject):
         # Only log to database here
         try:
             from utils.error_logger import log_error
-            log_error("Printing Error", message, "thank_you_screen")
+            # Log with appropriate error type
+            if is_low_paper:
+                log_error("Low Paper", message, "thank_you_screen")
+            elif is_paper_jam:
+                log_error("Paper Jam", message, "thank_you_screen")
+            else:
+                log_error("Printing Error", message, "thank_you_screen")
         except Exception as db_error:
             print(f"Failed to log error to database: {db_error}")
         
@@ -133,15 +150,30 @@ class ThankYouModel(QObject):
             self.redirect_timer.stop()
         
         if paper_count == 0:
+            error_message = "No paper available. Paper count: 0"
             self.status_updated.emit(
                 "NO PAPER AVAILABLE",
                 "The printer is out of paper. Please contact an administrator.\nFor incomplete transactions please contact phone number\n+63 976 291 2863"
             )
-        else:  # paper_count == 1
+        elif paper_count <= 3:
+            error_message = f"Low paper detected. Paper count: {paper_count}"
             self.status_updated.emit(
                 "LOW PAPER WARNING",
-                "Only 1 page remaining. Please contact an administrator.\nFor incomplete transactions please contact phone number\n+63 976 291 2863"
+                f"Only {paper_count} page(s) remaining. Please contact an administrator.\nFor incomplete transactions please contact phone number\n+63 976 291 2863"
             )
+        else:
+            error_message = f"Low paper warning. Paper count: {paper_count}"
+            self.status_updated.emit(
+                "LOW PAPER WARNING",
+                f"Only {paper_count} page(s) remaining. Please contact an administrator.\nFor incomplete transactions please contact phone number\n+63 976 291 2863"
+            )
+        
+        # Log error to database
+        try:
+            from utils.error_logger import log_error
+            log_error("Low Paper", error_message, "thank_you_screen")
+        except Exception as db_error:
+            print(f"Failed to log error to database: {db_error}")
         
         # Show admin override button
         self.admin_override_requested.emit()
