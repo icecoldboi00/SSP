@@ -71,7 +71,7 @@ class AdminScreenView(QWidget):
         back_button.clicked.connect(self.back_clicked.emit)
         
         # Make back button smaller width
-        back_button.setFixedWidth(200)  # Reduced width
+        back_button.setFixedWidth(220)  # Reduced width
         back_button.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
 
         layout.addWidget(content_frame, 1)
