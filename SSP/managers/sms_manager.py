@@ -21,17 +21,34 @@ class SMSManager(QObject):
             # Basic AT check
             ser.write(b'AT\r')
             time.sleep(1)
+            ser.read(100)  # Clear response buffer
             
             # Set SMS to text mode
             ser.write(b'AT+CMGF=1\r')
             time.sleep(1)
+            ser.read(100)  # Clear response buffer
             
-            # Set the recipient's phone number
+            # Set the recipient's phone number and wait for prompt
             cmd = f'AT+CMGS="{self.phone_number}"\r'
             ser.write(cmd.encode())
             time.sleep(1)
             
-            # Send the message followed immediately by Ctrl+Z (0x1A)
+            # Wait for the ">" prompt from the modem before sending message
+            prompt_received = False
+            timeout = 5
+            start_time = time.time()
+            while time.time() - start_time < timeout:
+                if ser.in_waiting > 0:
+                    response = ser.read(ser.in_waiting).decode(errors="ignore")
+                    if ">" in response:
+                        prompt_received = True
+                        break
+                time.sleep(0.1)
+            
+            if not prompt_received:
+                print("Warning: Did not receive '>' prompt from modem")
+            
+            # Now send the message followed by Ctrl+Z (0x1A)
             ser.write(message.encode() + bytes([26]))
             ser.flush()
             
@@ -69,7 +86,7 @@ def get_sms_manager():
 
 def send_no_paper_sms():
     manager = get_sms_manager()
-    return manager.send_sms("No paper,please refill.")
+    return manager.send_sms("No paper, please refill.")
 
 def send_low_paper_sms():
     manager = get_sms_manager()
