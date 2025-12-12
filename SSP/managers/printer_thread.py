@@ -1,6 +1,7 @@
 import os
 import subprocess
 import tempfile
+import time  # Explicitly imported here as it is used in the wait method
 import fitz  # PyMuPDF
 from PyQt5.QtCore import QThread, pyqtSignal
 from config import get_config
@@ -29,7 +30,6 @@ class PrinterThread(QThread):
 
             # Build and execute CUPS print command
             command = self.build_print_command()
-            config = get_config()
             
             # Update log to reflect physical pages vs PDF pages
             total_physical_pages = len(self.selected_pages) * self.copies
@@ -41,12 +41,13 @@ class PrinterThread(QThread):
             if not os.path.exists(self.temp_pdf_path):
                 raise FileNotFoundError(f"Temporary PDF not found: {self.temp_pdf_path}")
             
+            # Executing print command WITHOUT timeout
             process = subprocess.run(
                 command, 
                 capture_output=True, 
                 text=True, 
-                check=True,
-                timeout=config.printer_timeout
+                check=True
+                # Removed timeout parameter here
             )
     
             # Validate print job was accepted by CUPS
@@ -127,8 +128,6 @@ class PrinterThread(QThread):
             pages_0_indexed = [p - 1 for p in self.selected_pages]
             temp_doc = fitz.open()
             
-            # Only create ONE copy of the selected pages in the PDF
-            # We let CUPS handle the copies via the -n flag
             for page_num in pages_0_indexed:
                 temp_doc.insert_pdf(original_doc, from_page=page_num, to_page=page_num)
             
@@ -154,15 +153,7 @@ class PrinterThread(QThread):
             self.temp_pdf_path = None
 
     def wait_for_print_completion(self, job_id):
-        import time
-        config = get_config()
-        
-        # Calculate timeout based on total PHYSICAL pages (including copies)
-        total_pages = len(self.selected_pages) * self.copies
-        base_timeout = max(180, total_pages * 90)
-        max_wait_time = min(base_timeout, 1800)
-        max_wait_time = max(max_wait_time, config.printer_timeout * 10)
-        
+        # Configuration for wait intervals
         min_print_time = 15
         post_completion_wait = 5
         check_interval = 3
@@ -175,7 +166,8 @@ class PrinterThread(QThread):
         time.sleep(initial_startup_delay)
         elapsed_time += initial_startup_delay
         
-        while elapsed_time < max_wait_time:
+        # CHANGED: Replaced timeout loop with while True (infinite loop until success or error)
+        while True:
             try:
                 target_printer = self.printer_name
                 printer_actively_printing = False
@@ -229,6 +221,7 @@ class PrinterThread(QThread):
                 cups_job_still_active = self._check_cups_job_status(job_id)
                 
                 if not printer_actively_printing and not cups_job_still_active:
+                    # Enforce minimum print time to avoid false positives at startup
                     if elapsed_time < min_print_time:
                         time.sleep(check_interval)
                         elapsed_time += check_interval
@@ -237,9 +230,11 @@ class PrinterThread(QThread):
                     if completion_time is None:
                         completion_time = elapsed_time
                     else:
+                        # Wait for buffer period after job disappears
                         if elapsed_time - completion_time >= post_completion_wait:
                             return True
                 else:
+                    # Job became active again or is still running, reset completion timer
                     completion_time = None
                     
                 time.sleep(check_interval)
@@ -249,11 +244,6 @@ class PrinterThread(QThread):
                 print(f"Error checking print status: {e}")
                 time.sleep(check_interval)
                 elapsed_time += check_interval
-        
-        print(f"Print job timed out after {max_wait_time} seconds")
-        if not self._check_cups_job_status(job_id):
-            return True
-        return False
     
     def _check_cups_job_status(self, job_id):
         try:
@@ -276,11 +266,7 @@ class PrinterThread(QThread):
             "-o", "job-sheets=none"
         ]
         
-        # KEY CHANGE: Always let CUPS handle copies via -n flag
-        # This is much more efficient than duplicating pages in the PDF
         command.extend(["-n", str(self.copies)])
-        
-        # Add file path
         command.append(self.temp_pdf_path)
         
         return command
