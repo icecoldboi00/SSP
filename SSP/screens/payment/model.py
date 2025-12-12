@@ -206,7 +206,7 @@ class PaymentModel(QObject):
                 'total_cost': payment_info.get('total_cost', 0),
                 'amount_paid': payment_info.get('amount_received', 0),
                 'change_given': payment_info.get('change', 0),
-                'status': 'paid'  # Mark as paid, will update to 'completed' after printing
+                'status': 'completed'  # Mark as paid, will update to 'completed' after printing
             }
             
             # Log to database using PaymentModel's db_manager
@@ -292,7 +292,7 @@ class PaymentModel(QObject):
                 'total_cost': float(self.total_cost or 0),
                 'amount_paid': float(self.amount_received or 0),
                 'change_given': float(change_amount or 0),
-                'status': 'completed'
+                'status': 'paid'
             }
             print(f"Transaction data created")
             self.db_manager.log_transaction(self.transaction_data)

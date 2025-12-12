@@ -6,8 +6,6 @@ from PyQt5.QtCore import QThread, pyqtSignal
 from config import get_config
 from managers.sms_manager import send_paper_jam_sms, send_printing_error_sms, send_no_paper_sms
 
-
-
 class PrinterThread(QThread):
     print_success = pyqtSignal(str)  # Emits temp_pdf_path for ink analysis
     print_failed = pyqtSignal(str)
@@ -24,7 +22,7 @@ class PrinterThread(QThread):
 
     def run(self):
         try:
-            # Create temporary PDF with selected pages
+            # Create temporary PDF with selected pages (Single copy only)
             self.create_temp_pdf_with_selected_pages()
             if not self.temp_pdf_path:
                 return
@@ -32,9 +30,10 @@ class PrinterThread(QThread):
             # Build and execute CUPS print command
             command = self.build_print_command()
             config = get_config()
-            # Copies are handled in PDF, so temp PDF will have (pages × copies) pages
-            total_pages_in_pdf = len(self.selected_pages) * self.copies
-            print(f"Printing: {len(self.selected_pages)} selected pages × {self.copies} copies = {total_pages_in_pdf} total pages, {self.color_mode}")
+            
+            # Update log to reflect physical pages vs PDF pages
+            total_physical_pages = len(self.selected_pages) * self.copies
+            print(f"Printing: {len(self.selected_pages)} pages x {self.copies} copies = {total_physical_pages} total pages")
             print(f"Command: {' '.join(command)}")
             print(f"Temp PDF: {self.temp_pdf_path}")
             
@@ -70,15 +69,12 @@ class PrinterThread(QThread):
             # Mark as succeeded so temp PDF isn't cleaned up in finally block
             self._print_succeeded = True
             
-            # Emit success signal with temp PDF path for ink analysis
-            # Main app will clean up temp PDF after ink analysis completes
+            # Emit success signal with temp PDF path
             self.print_success.emit(self.temp_pdf_path)
 
         except Exception as e:
             self._handle_print_error(f"An unexpected error occurred: {str(e)}")
         finally:
-            # Clean up temp PDF if print failed
-            # Main app will clean it up after ink analysis if success
             if not hasattr(self, '_print_succeeded'):
                 self.cleanup_temp_pdf()
 
@@ -100,14 +96,11 @@ class PrinterThread(QThread):
 
     def _handle_print_error(self, error_message):
         print(f"ERROR: {error_message}")
-        
-        # Send SMS notification
         try:
             send_printing_error_sms(error_message)
         except Exception as sms_error:
             print(f"Failed to send SMS notification: {sms_error}")
         
-        # Log error to database
         try:
             from utils.error_logger import log_error
             log_error("Printing Error", error_message, "printer_manager")
@@ -119,125 +112,62 @@ class PrinterThread(QThread):
     def create_temp_pdf_with_selected_pages(self):
         try:
             print(f"Creating temp PDF with pages: {self.selected_pages}")
-            print(f"Source file: {self.file_path}")
             
-            # Verify source file exists
             if not os.path.exists(self.file_path):
                 raise FileNotFoundError(f"Source PDF file not found: {self.file_path}")
             
             original_doc = fitz.open(self.file_path)
-            print(f"Original PDF has {len(original_doc)} pages")
-            
-            # Validate page numbers
             max_page = len(original_doc)
+            
+            # Validate pages
             invalid_pages = [p for p in self.selected_pages if p < 1 or p > max_page]
             if invalid_pages:
-                raise ValueError(f"Invalid page numbers: {invalid_pages}. PDF has {max_page} pages.")
+                raise ValueError(f"Invalid page numbers: {invalid_pages}")
             
             pages_0_indexed = [p - 1 for p in self.selected_pages]
-            print(f"Converting to 0-indexed pages: {pages_0_indexed}")
-            
             temp_doc = fitz.open()
             
-            # Copy selected pages
-            # For single-page documents with multiple copies: use CUPS -n flag (don't duplicate in PDF)
-            # For multi-page documents: duplicate pages in PDF to avoid separator pages
-            is_single_page = len(self.selected_pages) == 1
+            # Only create ONE copy of the selected pages in the PDF
+            # We let CUPS handle the copies via the -n flag
+            for page_num in pages_0_indexed:
+                temp_doc.insert_pdf(original_doc, from_page=page_num, to_page=page_num)
             
-            if self.copies < 1:
-                raise ValueError(f"Invalid copies value: {self.copies}. Must be at least 1.")
-            
-            if is_single_page and self.copies > 1:
-                # Single page with multiple copies: just copy the page once, use CUPS -n flag
-                print(f"Single page document with {self.copies} copies - using CUPS -n flag")
-                for page_num in pages_0_indexed:
-                    print(f"Copying page {page_num + 1} (0-indexed: {page_num})")
-                    temp_doc.insert_pdf(original_doc, from_page=page_num, to_page=page_num)
-            else:
-                # Multi-page or single copy: duplicate pages in PDF itself to avoid separator pages
-                # Order: All pages of copy 1, then all pages of copy 2, etc.
-                # Example: 2 copies of pages [1,2,3] = [page1, page2, page3, page1, page2, page3]
-                pages_added = 0
-                for copy_num in range(self.copies):
-                    for page_num in pages_0_indexed:
-                        print(f"Copy {copy_num + 1}/{self.copies}: Copying page {page_num + 1} (0-indexed: {page_num})")
-                        temp_doc.insert_pdf(original_doc, from_page=page_num, to_page=page_num)
-                        pages_added += 1
-                        
-                        # Verify page was actually added
-                        if len(temp_doc) != pages_added:
-                            raise ValueError(f"Failed to add page {page_num + 1} - page count mismatch")
-            
-            # Verify page count before saving
-            # For single-page with multiple copies, PDF should have 1 page (CUPS will handle copies)
-            # For multi-page, PDF should have all pages duplicated
-            if is_single_page and self.copies > 1:
-                expected_pages = 1  # Single page, CUPS will duplicate
-            else:
-                expected_pages = len(self.selected_pages) * self.copies
-            
+            expected_pages = len(self.selected_pages)
             actual_pages = len(temp_doc)
-            print(f"Temp PDF page count: {actual_pages} (expected: {expected_pages})")
-            if actual_pages != expected_pages:
-                error_msg = f"Page count mismatch! Expected {expected_pages}, got {actual_pages}"
-                print(f"ERROR: {error_msg}")
-                temp_doc.close()
-                original_doc.close()
-                raise ValueError(error_msg)
             
-            # Save to temporary file
+            if actual_pages != expected_pages:
+                raise ValueError(f"Page count mismatch! Expected {expected_pages}, got {actual_pages}")
+            
             fd, self.temp_pdf_path = tempfile.mkstemp(suffix=".pdf", prefix="printjob-")
             os.close(fd)
-            print(f"Saving temp PDF to: {self.temp_pdf_path}")
+            
             temp_doc.save(self.temp_pdf_path, garbage=4, deflate=True)
             temp_doc.close()
             original_doc.close()
             
-            # Verify temp file was created and check page count
-            if os.path.exists(self.temp_pdf_path):
-                file_size = os.path.getsize(self.temp_pdf_path)
-                print(f"Temp PDF created successfully: {file_size} bytes")
-                
-                # Double-check page count by opening the saved file
-                verify_doc = fitz.open(self.temp_pdf_path)
-                verify_page_count = len(verify_doc)
-                verify_doc.close()
-                print(f"Verified temp PDF has {verify_page_count} pages")
-                if verify_page_count != expected_pages:
-                    error_msg = f"Saved PDF has wrong page count! Expected {expected_pages}, got {verify_page_count}"
-                    print(f"ERROR: {error_msg}")
-                    # Clean up the bad file
-                    try:
-                        os.remove(self.temp_pdf_path)
-                    except:
-                        pass
-                    raise ValueError(error_msg)
-                print(f"Temp PDF verified: {verify_page_count} pages, {self.copies} copies of {len(self.selected_pages)} selected pages")
-            else:
+            if not os.path.exists(self.temp_pdf_path):
                 raise Exception("Temp PDF file was not created")
-            
+                
         except Exception as e:
             print(f"Failed to create temporary PDF: {str(e)}")
             self.print_failed.emit(f"Failed to create temporary PDF: {str(e)}")
             self.temp_pdf_path = None
 
-    # Check print job every 3 seconds see if there any error
     def wait_for_print_completion(self, job_id):
         import time
-        
         config = get_config()
-        # Calculate timeout based on number of pages and copies
-        # Base timeout: 1.5 minutes per page, minimum 3 minutes, maximum 30 minutes
-        # This is a safety limit - job will complete as soon as printer is done
-        estimated_pages = len(self.selected_pages) * self.copies
-        base_timeout = max(180, estimated_pages * 90)  # At least 3 min, or 1.5 min per page
-        max_wait_time = min(base_timeout, 1800)  # Cap at 30 minutes (safety limit)
-        max_wait_time = max(max_wait_time, config.printer_timeout * 10)  # At least config timeout
         
-        min_print_time = 15  # Minimum time to wait for physical printing (15 seconds)
-        post_completion_wait = 5  # Wait 15 seconds after completion detection to ensure all pages printed
+        # Calculate timeout based on total PHYSICAL pages (including copies)
+        total_pages = len(self.selected_pages) * self.copies
+        base_timeout = max(180, total_pages * 90)
+        max_wait_time = min(base_timeout, 1800)
+        max_wait_time = max(max_wait_time, config.printer_timeout * 10)
+        
+        min_print_time = 15
+        post_completion_wait = 5
         check_interval = 3
-        initial_startup_delay = 5  # Wait 5 seconds before first check to let printer start
+        initial_startup_delay = 5
+        
         elapsed_time = 0
         completion_time = None
         media_empty_sms_sent = False
@@ -247,114 +177,70 @@ class PrinterThread(QThread):
         
         while elapsed_time < max_wait_time:
             try:
-                # Check printer status using alerts-based detection
-                # Use the configured printer name instead of a hardcoded value
                 target_printer = self.printer_name
                 printer_actively_printing = False
                 
-                # Get printer alerts to determine status
                 alerts_result = subprocess.run(['lpstat', '-l', '-p', target_printer], 
                                              capture_output=True, text=True)
+                
                 if alerts_result.returncode == 0:
-                    # If lpstat reports "now printing", consider it actively printing
                     try:
                         lpstat_out_lower = alerts_result.stdout.lower()
                         if " now printing " in lpstat_out_lower or lpstat_out_lower.startswith(f"printer {target_printer.lower()} now printing"):
                             printer_actively_printing = True
-                            print(f"Printer '{target_printer}' is actively printing (lpstat now printing)")
                     except Exception:
                         pass
-                    # Look for alerts line in the output
+                        
                     for line in alerts_result.stdout.split('\n'):
                         line = line.strip()
                         if line.startswith("Alerts:"):
                             alerts_text = line.replace("Alerts:", "").strip()
-                            print(f"Printer alerts for {target_printer}: {alerts_text}")
-                            
                             if alerts_text and alerts_text != "none":
                                 alerts_found = [alert.strip() for alert in alerts_text.split()]
                                 
-                                # Check if printer is actively printing (has cups-waiting-for-job-completed)
                                 if "cups-waiting-for-job-completed" in alerts_found:
                                     printer_actively_printing = True
-                                    print(f"Printer '{target_printer}' still processing/printing (cups-waiting-for-job-completed)")
                                 
-                                # Check for specific error conditions
                                 if "media-jam-error" in alerts_found or "paper-jam" in alerts_found:
-                                    print(f"Paper jam detected on {target_printer}")
-                                    try:
-                                        send_paper_jam_sms()
-                                    except Exception as e:
-                                        print(f"Failed to send SMS: {e}")
                                     self.print_failed.emit(f"Paper jam detected on {target_printer}")
+                                    try: send_paper_jam_sms()
+                                    except: pass
                                     return False
                                 elif "media-empty-error" in alerts_found or "media-needed-error" in alerts_found:
-                                    print(f"No paper detected on {target_printer}")
-                                    try:
-                                        send_no_paper_sms()
-                                    except Exception as e:
-                                        print(f"Failed to send SMS: {e}")
                                     self.print_failed.emit(f"No paper detected on {target_printer}")
+                                    try: send_no_paper_sms()
+                                    except: pass
                                     return False
                                 elif "media-empty-report" in alerts_found:
-                                    # Treat as hard no-paper error to surface on UI
-                                    print(f"Paper tray empty report on {target_printer}")
                                     if not media_empty_sms_sent:
-                                        try:
+                                        try: 
                                             send_no_paper_sms()
                                             media_empty_sms_sent = True
-                                            print("No paper SMS sent (report)")
-                                        except Exception as e:
-                                            print(f"Failed to send SMS: {e}")
+                                        except: pass
                                     self.print_failed.emit(f"No paper detected on {target_printer}")
                                     return False
                                 elif "offline" in alerts_found or "stopped" in alerts_found:
-                                    print(f"Printer offline: {target_printer}")
                                     self.print_failed.emit(f"Printer {target_printer} is offline")
                                     return False
                                 elif "error" in alerts_found:
-                                    print(f"Printer error detected on {target_printer}")
                                     self.print_failed.emit(f"Printer error on {target_printer}")
                                     return False
-                            else:
-                                # No alerts found
-                                print(f"Printer '{target_printer}': no alerts")
-                            break
-                
-                # Check CUPS job status directly as additional verification
+
                 cups_job_still_active = self._check_cups_job_status(job_id)
                 
-                # Enhanced completion logic with minimum wait time
                 if not printer_actively_printing and not cups_job_still_active:
-                    # Ensure minimum print time has passed
                     if elapsed_time < min_print_time:
-                        print(f"Waiting for minimum print time ({min_print_time}s) - {elapsed_time}s elapsed")
                         time.sleep(check_interval)
                         elapsed_time += check_interval
                         continue
                     
-                    # No printer is actively printing and CUPS job is done, minimum time has passed
                     if completion_time is None:
                         completion_time = elapsed_time
-                        print(f"Print job appears completed after {elapsed_time}s (printer idle, CUPS job done), monitoring for {post_completion_wait}s...")
                     else:
-                        # Check if post-completion monitoring is complete
-                        time_since_completion = elapsed_time - completion_time
-                        if time_since_completion >= post_completion_wait:
-                            print(f"Print job successful no printers actively printing and CUPS job completed for {post_completion_wait}s")
+                        if elapsed_time - completion_time >= post_completion_wait:
                             return True
                 else:
-                    # Printer became active again or CUPS job still active - reset completion timer
-                    if completion_time is not None:
-                        if printer_actively_printing:
-                            print(f"Printer became active again resetting completion timer")
-                        if cups_job_still_active:
-                            print(f"CUPS job still active resetting completion timer")
-                        completion_time = None
-                    if printer_actively_printing:
-                        print(f"Waiting for printer '{target_printer}' to finish printing...")
-                    if cups_job_still_active:
-                        print(f"Waiting for CUPS job {job_id} to complete...")
+                    completion_time = None
                     
                 time.sleep(check_interval)
                 elapsed_time += check_interval
@@ -365,27 +251,19 @@ class PrinterThread(QThread):
                 elapsed_time += check_interval
         
         print(f"Print job timed out after {max_wait_time} seconds")
-        # Final check: verify CUPS job status one more time
         if not self._check_cups_job_status(job_id):
-            print(f"CUPS job {job_id} appears completed despite timeout - marking as success")
             return True
         return False
     
     def _check_cups_job_status(self, job_id):
         try:
-            # Check if job is still in CUPS queue
             result = subprocess.run(['lpstat', '-o'], capture_output=True, text=True, timeout=5)
             if result.returncode == 0:
-                # Look for the job ID in the output
                 for line in result.stdout.split('\n'):
                     if job_id in line:
-                        # Job still in queue
                         return True
-                # Job not found in queue - it's completed
-                return False
             return False
-        except Exception as e:
-            print(f"Error checking CUPS job status: {e}")
+        except Exception:
             return True
 
     def build_print_command(self):
@@ -395,26 +273,15 @@ class PrinterThread(QThread):
             "lp",
             "-d", self.printer_name,
             "-o", f"print-color-mode={mode_str}",
+            "-o", "job-sheets=none"
         ]
         
-        is_single_page_multiple_copies = len(self.selected_pages) == 1 and self.copies > 1
+        # KEY CHANGE: Always let CUPS handle copies via -n flag
+        # This is much more efficient than duplicating pages in the PDF
+        command.extend(["-n", str(self.copies)])
         
-        # Try to disable separator pages
-        command.extend(["-o", "job-sheets=none"])
-        
-        # - Single page with multiple copies: use CUPS -n flag 
-        # - Multi-page documents: pages are already duplicated in PDF, so use -n 1
-        if is_single_page_multiple_copies:
-            command.extend(["-n", str(self.copies)])
-        else:
-            command.extend(["-n", "1"])
-
-        
-        # Add file path at the end
+        # Add file path
         command.append(self.temp_pdf_path)
-        
-        print(f"Print command: {' '.join(command)}")
-        print(f"Copies value: {self.copies} (type: {type(self.copies)})")
         
         return command
 
@@ -424,4 +291,3 @@ class PrinterThread(QThread):
                 os.remove(self.temp_pdf_path)
             except OSError as e:
                 print(f"Error cleaning up temp file: {e}")
-
