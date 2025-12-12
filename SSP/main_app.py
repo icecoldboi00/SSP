@@ -157,7 +157,7 @@ class PrintingSystemApp(QMainWindow):
         # Update paper count before clearing print job info
         self._update_paper_count_after_print()
         
-        # Clean up session directory
+        # Clean up session directory - ONLY on success
         self.usb_file_manager.cleanup_session_directory()
         
         # Trigger ink analysis before clearing print job info
@@ -210,7 +210,9 @@ class PrintingSystemApp(QMainWindow):
     def on_print_failed(self, error_message):
         print(f"Print job failed: {error_message}")
         
-        self.usb_file_manager.cleanup_session_directory()
+        # --- FIX APPLIED HERE ---
+        # REMOVED: self.usb_file_manager.cleanup_session_directory()
+        # Leaving the file allows for retries and prevents "File Not Found" errors
         
         # Send SMS notification for all print failures
         try:
@@ -247,6 +249,9 @@ class PrintingSystemApp(QMainWindow):
             self.usb_screen.model.stop_usb_monitoring()
 
             cleanup_sms()
+            
+            # Ensure files are cleaned up when the app actually closes
+            self.usb_file_manager.cleanup_session_directory()
 
             try:
                 from utils.error_logger import cleanup_db_connections
@@ -291,5 +296,3 @@ def main():
 
 if __name__ == '__main__':
     main()
-
-# Functions in here are for database, file cleaning, or other system-level operations that are not screen-specific.
