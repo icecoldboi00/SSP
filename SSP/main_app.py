@@ -210,10 +210,6 @@ class PrintingSystemApp(QMainWindow):
     def on_print_failed(self, error_message):
         print(f"Print job failed: {error_message}")
         
-        # --- FIX APPLIED HERE ---
-        # REMOVED: self.usb_file_manager.cleanup_session_directory()
-        # Leaving the file allows for retries and prevents "File Not Found" errors
-        
         # Send SMS notification for all print failures
         try:
             from managers.sms_manager import send_printing_error_sms
@@ -224,7 +220,7 @@ class PrintingSystemApp(QMainWindow):
         # Log error to database
         try:
             from utils.error_logger import log_error
-            log_error("Print Job Failed", error_message, "main_app")
+            log_error("Printing Error", error_message, "main_app")
         except Exception as db_error:
             print(f"Failed to log error to database: {db_error}")
         
