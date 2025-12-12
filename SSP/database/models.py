@@ -38,7 +38,7 @@ def init_db():
     print("Created transactions table")
 
     # Create CashInventory table
-    # Use composite PRIMARY KEY to allow both coin and bill for same denomination (e.g., 20 coin and 20 bill)
+    # Use composite PRIMARY KEY to allow both coin and bill for same denomination
     # Check if table exists and has old schema (single PRIMARY KEY on denomination)
     try:
         cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='cash_inventory'")
@@ -252,6 +252,12 @@ def init_db():
             # Delete 20 coin entry
             cursor.execute("DELETE FROM cash_inventory WHERE denomination = 20 AND type = 'coin'")
             print("Migrated 20 peso coin to 20 peso bill")
+        
+        # Clean up: remove any test entries with denomination 999 if they exist
+        cursor.execute("DELETE FROM cash_inventory WHERE denomination = 999")
+        test_deleted = cursor.rowcount
+        if test_deleted > 0:
+            print(f"Removed {test_deleted} test entry/entries with denomination 999")
 
     conn.commit()
     conn.close()
