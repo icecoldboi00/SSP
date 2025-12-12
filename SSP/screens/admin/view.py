@@ -393,8 +393,8 @@ class AdminScreenView(QWidget):
 
     def _get_coin_color(self, count: int) -> str:
         """Determines the display color based on the coin count."""
-        if count <= 20: return "#dc3545"  # Red - Low
-        if count <= 50: return "#ffc107"  # Yellow - Medium
+        if count <= 5: return "#dc3545"  # Red - Low
+        if count <= 15: return "#ffc107"  # Yellow - Medium
         return "#28a745"  # Green - Good
 
     def _update_cmyk_levels(self):
