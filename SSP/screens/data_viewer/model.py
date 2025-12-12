@@ -59,7 +59,7 @@ class DataViewerModel(QObject):
             print("Resetting bill counts...")
             # Reset all bill denominations (20, 50, 100) to 0
             self.db_manager.update_cash_inventory(10, 0, 'coin')
-            self.db_manager.update_cash_inventory(20, 0, 'bill')
+            self.db_manager.update_cash_inventory(20, 0, 'coin/bill')
             self.db_manager.update_cash_inventory(50, 0, 'bill')
             self.db_manager.update_cash_inventory(100, 0, 'bill')
             print("Bill counts reset successfully")

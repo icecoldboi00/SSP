@@ -233,9 +233,12 @@ class PaymentModel(QObject):
             for denomination, count in coin_data.items():
                 if count > 0:
                     # Determine cash type based on denomination
-                    # Bills: 20, 50, 100, 500+ (20 peso treated as bill)
+                    # Bills: 50, 100, 500+ (always bills)
+                    # 20 peso: coin/bill (can be either)
                     # Coins: 1, 5, 10 (always coins)
-                    if denomination >= 20:
+                    if denomination == 20:
+                        cash_type = 'coin/bill'
+                    elif denomination >= 50:
                         cash_type = 'bill'
                     else:
                         cash_type = 'coin'
@@ -482,8 +485,10 @@ class PaymentModel(QObject):
                 for denomination, count in self.cash_received.items():
                     if not count:
                         continue
-                    # Determine type: bills are 20+, coins are 1, 5, 10 (20 peso treated as bill)
-                    if denomination >= 20:
+                    # Determine type: bills are 50+, 20 peso is coin/bill, coins are 1, 5, 10
+                    if denomination == 20:
+                        cash_type = 'coin/bill'
+                    elif denomination >= 50:
                         cash_type = 'bill'
                     else:
                         cash_type = 'coin'

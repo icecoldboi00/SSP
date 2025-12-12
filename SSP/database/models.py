@@ -189,10 +189,10 @@ def init_db():
             INSERT INTO cash_inventory (denomination, count, type, last_updated)
             VALUES (5, 50, 'coin', ?)
         """, (now,))
-        # Initialize bills: 20 peso, 50 peso, 100 peso (20 peso treated as bill)
+        # Initialize bills: 20 peso, 50 peso, 100 peso (20 peso type is coin/bill)
         cursor.execute("""
             INSERT INTO cash_inventory (denomination, count, type, last_updated)
-            VALUES (20, 0, 'bill', ?)
+            VALUES (20, 0, 'coin/bill', ?)
         """, (now,))
         cursor.execute("""
             INSERT INTO cash_inventory (denomination, count, type, last_updated)
@@ -204,18 +204,18 @@ def init_db():
         """, (now,))
         print("Initialized default cash inventory (1, 5 coins and 20, 50, 100 bills)")
     else:
-        # Ensure 20 bill, 50 bill, and 100 bill exist (add if missing)
+        # Ensure 20 coin/bill, 50 bill, and 100 bill exist (add if missing)
         now = datetime.now()
-        # Check and add 20 bill if missing (treat 20 peso as bill)
-        cursor.execute("SELECT COUNT(*) FROM cash_inventory WHERE denomination = 20 AND type = 'bill'")
+        # Check and add 20 coin/bill if missing
+        cursor.execute("SELECT COUNT(*) FROM cash_inventory WHERE denomination = 20 AND type = 'coin/bill'")
         if cursor.fetchone()[0] == 0:
-            # Remove any old 20 coin entry if it exists
-            cursor.execute("DELETE FROM cash_inventory WHERE denomination = 20 AND type = 'coin'")
+            # Remove any old 20 coin or bill entries if they exist
+            cursor.execute("DELETE FROM cash_inventory WHERE denomination = 20 AND (type = 'coin' OR type = 'bill')")
             cursor.execute("""
                 INSERT INTO cash_inventory (denomination, count, type, last_updated)
-                VALUES (20, 0, 'bill', ?)
+                VALUES (20, 0, 'coin/bill', ?)
             """, (now,))
-            print("Added 20 peso bill to inventory")
+            print("Added 20 peso coin/bill to inventory")
         # Check and add 50 bill if missing
         cursor.execute("SELECT COUNT(*) FROM cash_inventory WHERE denomination = 50 AND type = 'bill'")
         if cursor.fetchone()[0] == 0:
@@ -232,26 +232,41 @@ def init_db():
                 VALUES (100, 0, 'bill', ?)
             """, (now,))
             print("Added 100 peso bill to inventory")
-        # Clean up: remove any 20 coin entries if they exist (migrate to 20 bill)
-        cursor.execute("SELECT COUNT(*) FROM cash_inventory WHERE denomination = 20 AND type = 'coin'")
+        # Clean up: migrate any old 20 coin or bill entries to coin/bill
+        cursor.execute("SELECT COUNT(*) FROM cash_inventory WHERE denomination = 20 AND (type = 'coin' OR type = 'bill')")
         if cursor.fetchone()[0] > 0:
-            # Get count from 20 coin and add to 20 bill
-            cursor.execute("SELECT count FROM cash_inventory WHERE denomination = 20 AND type = 'coin'")
-            coin_count_result = cursor.fetchone()
-            if coin_count_result:
-                coin_count = coin_count_result[0] if isinstance(coin_count_result, tuple) else coin_count_result.get('count', 0)
-                # Get current 20 bill count
-                cursor.execute("SELECT count FROM cash_inventory WHERE denomination = 20 AND type = 'bill'")
-                bill_count_result = cursor.fetchone()
-                bill_count = bill_count_result[0] if (bill_count_result and isinstance(bill_count_result, tuple)) else (bill_count_result.get('count', 0) if bill_count_result else 0)
-                # Update 20 bill with combined count
+            # Get counts from 20 coin and bill entries
+            cursor.execute("SELECT count, type FROM cash_inventory WHERE denomination = 20 AND (type = 'coin' OR type = 'bill')")
+            old_entries = cursor.fetchall()
+            total_count = 0
+            for entry in old_entries:
+                if isinstance(entry, tuple):
+                    total_count += entry[0] if len(entry) > 0 else 0
+                else:
+                    total_count += entry.get('count', 0)
+            
+            # Get current 20 coin/bill count if it exists
+            cursor.execute("SELECT count FROM cash_inventory WHERE denomination = 20 AND type = 'coin/bill'")
+            coin_bill_result = cursor.fetchone()
+            coin_bill_count = 0
+            if coin_bill_result:
+                coin_bill_count = coin_bill_result[0] if isinstance(coin_bill_result, tuple) else coin_bill_result.get('count', 0)
+            
+            # Update or insert 20 coin/bill with combined count
+            if coin_bill_count > 0:
                 cursor.execute("""
                     UPDATE cash_inventory SET count = ?, last_updated = ?
-                    WHERE denomination = 20 AND type = 'bill'
-                """, (bill_count + coin_count, now))
-            # Delete 20 coin entry
-            cursor.execute("DELETE FROM cash_inventory WHERE denomination = 20 AND type = 'coin'")
-            print("Migrated 20 peso coin to 20 peso bill")
+                    WHERE denomination = 20 AND type = 'coin/bill'
+                """, (coin_bill_count + total_count, now))
+            else:
+                cursor.execute("""
+                    INSERT INTO cash_inventory (denomination, count, type, last_updated)
+                    VALUES (20, ?, 'coin/bill', ?)
+                """, (total_count, now))
+            
+            # Delete old 20 coin and bill entries
+            cursor.execute("DELETE FROM cash_inventory WHERE denomination = 20 AND (type = 'coin' OR type = 'bill')")
+            print("Migrated 20 peso coin/bill entries to coin/bill type")
         
         # Clean up: remove any test entries with denomination 999 if they exist
         cursor.execute("DELETE FROM cash_inventory WHERE denomination = 999")
