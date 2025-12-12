@@ -28,7 +28,6 @@ class PaymentModel(QObject):
         self.amount_received = 0
         self.payment_data = None
         self.cash_received = {}  # {denomination: count}
-        self.cash_type_tracking = {}  # {denomination: 'coin' or 'bill'} - tracks type for ambiguous denominations like 20
         self.payment_ready = False
         self._payment_completing = False  # Prevent duplicate payment completions
 
@@ -131,9 +130,6 @@ class PaymentModel(QObject):
 
         self.amount_received += coin_value
         self.cash_received[coin_value] = self.cash_received.get(coin_value, 0) + 1
-        # Track type for ambiguous denominations (like 20 peso which can be coin or bill)
-        if coin_value == 20:
-            self.cash_type_tracking[coin_value] = 'coin'
         
         self.amount_received_updated.emit(self.amount_received)
         self._update_payment_status()
@@ -155,12 +151,6 @@ class PaymentModel(QObject):
 
         self.amount_received += bill_value
         self.cash_received[bill_value] = self.cash_received.get(bill_value, 0) + 1
-        # Track type for ambiguous denominations (like 20 peso which can be coin or bill)
-        if bill_value == 20:
-            self.cash_type_tracking[bill_value] = 'bill'
-        else:
-            # All other bills (50, 100, 500+) are always bills
-            self.cash_type_tracking[bill_value] = 'bill'
         
         self.amount_received_updated.emit(self.amount_received)
         self._update_payment_status()
@@ -242,15 +232,11 @@ class PaymentModel(QObject):
             
             for denomination, count in coin_data.items():
                 if count > 0:
-                    # Determine cash type based on denomination and tracked type
-                    # Bills: 50, 100, 500+ (always bills)
+                    # Determine cash type based on denomination
+                    # Bills: 20, 50, 100, 500+ (20 peso treated as bill)
                     # Coins: 1, 5, 10 (always coins)
-                    # 20 peso: can be either coin or bill - use tracked type
-                    if denomination >= 50:
+                    if denomination >= 20:
                         cash_type = 'bill'
-                    elif denomination == 20:
-                        # Use tracked type if available, otherwise default to coin
-                        cash_type = self.cash_type_tracking.get(denomination, 'coin')
                     else:
                         cash_type = 'coin'
                     
@@ -446,7 +432,6 @@ class PaymentModel(QObject):
         self.amount_received = 0
         self.total_cost = 0
         self.cash_received = {}
-        self.cash_type_tracking = {}
 
         # Reset payment data
         self.payment_data = None
@@ -497,11 +482,9 @@ class PaymentModel(QObject):
                 for denomination, count in self.cash_received.items():
                     if not count:
                         continue
-                    # Determine type: bills are 50+, coins are 1, 5, 10, and 20 (if tracked as coin)
-                    if denomination >= 50:
+                    # Determine type: bills are 20+, coins are 1, 5, 10 (20 peso treated as bill)
+                    if denomination >= 20:
                         cash_type = 'bill'
-                    elif denomination == 20:
-                        cash_type = self.cash_type_tracking.get(denomination, 'coin')
                     else:
                         cash_type = 'coin'
                     key = (cash_type, int(denomination))
@@ -523,7 +506,6 @@ class PaymentModel(QObject):
         # Reset payment state
         self.amount_received = 0
         self.cash_received = {}
-        self.cash_type_tracking = {}
         self._payment_completing = False  # Reset payment completion flag
 
         self.amount_received_updated.emit(0)

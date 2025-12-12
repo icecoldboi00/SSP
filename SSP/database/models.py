@@ -45,39 +45,42 @@ def init_db():
         table_exists = cursor.fetchone() is not None
         
         if table_exists:
-            # Check if we can insert both 20 coin and 20 bill (test for composite key support)
+            # Try to check if table has composite key by checking table schema
+            # If migration is needed, it will be detected when trying to insert duplicate denomination with different type
             try:
-                test_time = datetime.now()
-                cursor.execute("INSERT INTO cash_inventory (denomination, type, count, last_updated) VALUES (999, 'test', 0, ?)", (test_time,))
-                cursor.execute("INSERT INTO cash_inventory (denomination, type, count, last_updated) VALUES (999, 'test2', 0, ?)", (test_time,))
-                cursor.execute("DELETE FROM cash_inventory WHERE denomination = 999")
-                conn.commit()
-                # If we got here, composite key works - table is already correct
-                print("Cash inventory table already has composite key schema")
-            except sqlite3.IntegrityError:
-                # Can't insert duplicate denomination - old schema detected, need to migrate
-                print("Detected old cash_inventory schema, migrating to new composite key schema...")
-                # Create new table with correct schema
-                cursor.execute('''
-                CREATE TABLE cash_inventory_new (
-                    denomination REAL NOT NULL,
-                    type TEXT NOT NULL,
-                    count INTEGER NOT NULL,
-                    last_updated DATETIME NOT NULL,
-                    PRIMARY KEY (denomination, type)
-                )
-                ''')
-                # Copy data from old table
-                cursor.execute('''
-                INSERT OR IGNORE INTO cash_inventory_new (denomination, type, count, last_updated)
-                SELECT denomination, type, count, last_updated FROM cash_inventory
-                ''')
-                # Drop old table
-                cursor.execute('DROP TABLE cash_inventory')
-                # Rename new table
-                cursor.execute('ALTER TABLE cash_inventory_new RENAME TO cash_inventory')
-                conn.commit()
-                print("Migration complete")
+                # Try to get table info to check schema
+                cursor.execute("PRAGMA table_info(cash_inventory)")
+                columns = cursor.fetchall()
+                # Check if we have both denomination and type columns
+                has_denomination = any(col[1] == 'denomination' for col in columns)
+                has_type = any(col[1] == 'type' for col in columns)
+                
+                if has_denomination and has_type:
+                    # Table exists with both columns, assume it's correct (or will be migrated on first insert conflict)
+                    print("Cash inventory table exists")
+                else:
+                    # Old schema - migrate
+                    print("Detected old cash_inventory schema, migrating to new composite key schema...")
+                    cursor.execute('''
+                    CREATE TABLE cash_inventory_new (
+                        denomination REAL NOT NULL,
+                        type TEXT NOT NULL,
+                        count INTEGER NOT NULL,
+                        last_updated DATETIME NOT NULL,
+                        PRIMARY KEY (denomination, type)
+                    )
+                    ''')
+                    cursor.execute('''
+                    INSERT OR IGNORE INTO cash_inventory_new (denomination, type, count, last_updated)
+                    SELECT denomination, type, count, last_updated FROM cash_inventory
+                    ''')
+                    cursor.execute('DROP TABLE cash_inventory')
+                    cursor.execute('ALTER TABLE cash_inventory_new RENAME TO cash_inventory')
+                    conn.commit()
+                    print("Migration complete")
+            except Exception as migrate_error:
+                # If migration check fails, table might already be correct
+                print(f"Schema check note: {migrate_error}")
         else:
             # Table doesn't exist, create with new schema
             cursor.execute('''
@@ -177,7 +180,7 @@ def init_db():
     cash_count = cursor.fetchone()[0]
     if cash_count == 0:
         now = datetime.now()
-        # Initialize coins: 1 peso, 5 peso, 20 peso coin
+        # Initialize coins: 1 peso, 5 peso
         cursor.execute("""
             INSERT INTO cash_inventory (denomination, count, type, last_updated)
             VALUES (1, 100, 'coin', ?)
@@ -186,11 +189,7 @@ def init_db():
             INSERT INTO cash_inventory (denomination, count, type, last_updated)
             VALUES (5, 50, 'coin', ?)
         """, (now,))
-        cursor.execute("""
-            INSERT INTO cash_inventory (denomination, count, type, last_updated)
-            VALUES (20, 0, 'coin', ?)
-        """, (now,))
-        # Initialize bills: 20 peso, 50 peso, 100 peso
+        # Initialize bills: 20 peso, 50 peso, 100 peso (20 peso treated as bill)
         cursor.execute("""
             INSERT INTO cash_inventory (denomination, count, type, last_updated)
             VALUES (20, 0, 'bill', ?)
@@ -203,18 +202,20 @@ def init_db():
             INSERT INTO cash_inventory (denomination, count, type, last_updated)
             VALUES (100, 0, 'bill', ?)
         """, (now,))
-        print("Initialized default cash inventory (1, 5, 20 coins and 20, 50, 100 bills)")
+        print("Initialized default cash inventory (1, 5 coins and 20, 50, 100 bills)")
     else:
-        # Ensure 20 coin, 50 bill, and 100 bill exist (add if missing)
+        # Ensure 20 bill, 50 bill, and 100 bill exist (add if missing)
         now = datetime.now()
-        # Check and add 20 coin if missing
-        cursor.execute("SELECT COUNT(*) FROM cash_inventory WHERE denomination = 20 AND type = 'coin'")
+        # Check and add 20 bill if missing (treat 20 peso as bill)
+        cursor.execute("SELECT COUNT(*) FROM cash_inventory WHERE denomination = 20 AND type = 'bill'")
         if cursor.fetchone()[0] == 0:
+            # Remove any old 20 coin entry if it exists
+            cursor.execute("DELETE FROM cash_inventory WHERE denomination = 20 AND type = 'coin'")
             cursor.execute("""
                 INSERT INTO cash_inventory (denomination, count, type, last_updated)
-                VALUES (20, 0, 'coin', ?)
+                VALUES (20, 0, 'bill', ?)
             """, (now,))
-            print("Added 20 peso coin to inventory")
+            print("Added 20 peso bill to inventory")
         # Check and add 50 bill if missing
         cursor.execute("SELECT COUNT(*) FROM cash_inventory WHERE denomination = 50 AND type = 'bill'")
         if cursor.fetchone()[0] == 0:
@@ -231,6 +232,26 @@ def init_db():
                 VALUES (100, 0, 'bill', ?)
             """, (now,))
             print("Added 100 peso bill to inventory")
+        # Clean up: remove any 20 coin entries if they exist (migrate to 20 bill)
+        cursor.execute("SELECT COUNT(*) FROM cash_inventory WHERE denomination = 20 AND type = 'coin'")
+        if cursor.fetchone()[0] > 0:
+            # Get count from 20 coin and add to 20 bill
+            cursor.execute("SELECT count FROM cash_inventory WHERE denomination = 20 AND type = 'coin'")
+            coin_count_result = cursor.fetchone()
+            if coin_count_result:
+                coin_count = coin_count_result[0] if isinstance(coin_count_result, tuple) else coin_count_result.get('count', 0)
+                # Get current 20 bill count
+                cursor.execute("SELECT count FROM cash_inventory WHERE denomination = 20 AND type = 'bill'")
+                bill_count_result = cursor.fetchone()
+                bill_count = bill_count_result[0] if (bill_count_result and isinstance(bill_count_result, tuple)) else (bill_count_result.get('count', 0) if bill_count_result else 0)
+                # Update 20 bill with combined count
+                cursor.execute("""
+                    UPDATE cash_inventory SET count = ?, last_updated = ?
+                    WHERE denomination = 20 AND type = 'bill'
+                """, (bill_count + coin_count, now))
+            # Delete 20 coin entry
+            cursor.execute("DELETE FROM cash_inventory WHERE denomination = 20 AND type = 'coin'")
+            print("Migrated 20 peso coin to 20 peso bill")
 
     conn.commit()
     conn.close()
