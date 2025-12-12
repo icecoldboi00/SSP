@@ -139,7 +139,10 @@ class PaymentModel(QObject):
             return
 
         self.amount_received += coin_value
-        # Note: We don't add special coins to cash_received since they won't be added to database inventory
+        # Track special coins separately - they will be added to database with type "coin (unused)"
+        # Use a special key to distinguish from regular coins
+        special_key = f"{coin_value}_special"
+        self.cash_received[special_key] = self.cash_received.get(special_key, 0) + 1
         
         # Emit signals to update UI
         self.amount_received_updated.emit(self.amount_received)
@@ -230,21 +233,32 @@ class PaymentModel(QObject):
             # Get current inventory once 
             current_inventory = self.db_manager.get_cash_inventory()
             
-            for denomination, count in coin_data.items():
+            for denomination_key, count in coin_data.items():
                 if count > 0:
-                    # Determine cash type based on denomination
+                    # Check if this is a special coin (format: "5_special")
+                    is_special = False
+                    if isinstance(denomination_key, str) and denomination_key.endswith('_special'):
+                        is_special = True
+                        denomination = int(denomination_key.replace('_special', ''))
+                    else:
+                        denomination = denomination_key
+                    
+                    # Determine cash type based on denomination and special status
                     # Bills: 50, 100, 500+ (always bills)
                     # 20 peso: coin/bill (can be either)
-                    # Coins: 1, 5, 10 (always coins)
-                    if denomination == 20:
+                    # Special coins: coin (unused)
+                    # Regular coins: 1, 5, 10 (always coins)
+                    if is_special:
+                        cash_type = 'coin (unused)'
+                    elif denomination == 20:
                         cash_type = 'coin/bill'
                     elif denomination >= 50:
                         cash_type = 'bill'
                     else:
                         cash_type = 'coin'
                     
-                    # Only process coins 1 and 5 peso when dispensing change
-                    if not add and denomination not in [1, 5]:
+                    # Only process coins 1 and 5 peso when dispensing change (not special coins)
+                    if not add and (is_special or denomination not in [1, 5]):
                         continue
                     
                     # Find current count from inventory
@@ -477,23 +491,37 @@ class PaymentModel(QObject):
         if self.amount_received > 0 and self.cash_received:
             print(f"Adding received money to inventory - {self.cash_received}")
             try:
-                current_inventory = {}
-                for item in (self.db_manager.get_cash_inventory() or []):
-                    if item.get('type') == 'coin' or item.get('type') == 'bill':
-                        current_inventory[(item.get('type'), int(item.get('denomination')))] = int(item.get('count') or 0)
-
-                for denomination, count in self.cash_received.items():
+                for denomination_key, count in self.cash_received.items():
                     if not count:
                         continue
-                    # Determine type: bills are 50+, 20 peso is coin/bill, coins are 1, 5, 10
-                    if denomination == 20:
+                    # Check if this is a special coin (format: "5_special")
+                    is_special = False
+                    if isinstance(denomination_key, str) and denomination_key.endswith('_special'):
+                        is_special = True
+                        denomination = int(denomination_key.replace('_special', ''))
+                    else:
+                        denomination = denomination_key
+                    
+                    # Determine type: bills are 50+, 20 peso is coin/bill, special coins are coin (unused), coins are 1, 5, 10
+                    if is_special:
+                        cash_type = 'coin (unused)'
+                    elif denomination == 20:
                         cash_type = 'coin/bill'
                     elif denomination >= 50:
                         cash_type = 'bill'
                     else:
                         cash_type = 'coin'
-                    key = (cash_type, int(denomination))
-                    new_count = current_inventory.get(key, 0) + int(count)
+                    
+                    # Get current count and add to it
+                    current_inventory = self.db_manager.get_cash_inventory()
+                    current_count = 0
+                    for item in current_inventory:
+                        if (item.get('denomination') == denomination and 
+                            item.get('type') == cash_type):
+                            current_count = item.get('count', 0)
+                            break
+                    
+                    new_count = current_count + int(count)
                     self.db_manager.update_cash_inventory(
                         denomination=int(denomination),
                         count=new_count,

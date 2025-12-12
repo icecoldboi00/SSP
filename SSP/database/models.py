@@ -189,6 +189,11 @@ def init_db():
             INSERT INTO cash_inventory (denomination, count, type, last_updated)
             VALUES (5, 50, 'coin', ?)
         """, (now,))
+        # Initialize special 5 peso coin (unused - cannot be given as change)
+        cursor.execute("""
+            INSERT INTO cash_inventory (denomination, count, type, last_updated)
+            VALUES (5, 0, 'coin (unused)', ?)
+        """, (now,))
         # Initialize bills: 20 peso, 50 peso, 100 peso (20 peso type is coin/bill)
         cursor.execute("""
             INSERT INTO cash_inventory (denomination, count, type, last_updated)
@@ -204,8 +209,16 @@ def init_db():
         """, (now,))
         print("Initialized default cash inventory (1, 5 coins and 20, 50, 100 bills)")
     else:
-        # Ensure 20 coin/bill, 50 bill, and 100 bill exist (add if missing)
+        # Ensure 20 coin/bill, 50 bill, 100 bill, and special 5 peso coin exist (add if missing)
         now = datetime.now()
+        # Check and add special 5 peso coin (unused) if missing
+        cursor.execute("SELECT COUNT(*) FROM cash_inventory WHERE denomination = 5 AND type = 'coin (unused)'")
+        if cursor.fetchone()[0] == 0:
+            cursor.execute("""
+                INSERT INTO cash_inventory (denomination, count, type, last_updated)
+                VALUES (5, 0, 'coin (unused)', ?)
+            """, (now,))
+            print("Added special 5 peso coin (unused) to inventory")
         # Check and add 20 coin/bill if missing
         cursor.execute("SELECT COUNT(*) FROM cash_inventory WHERE denomination = 20 AND type = 'coin/bill'")
         if cursor.fetchone()[0] == 0:
