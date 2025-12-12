@@ -27,7 +27,8 @@ class PaymentModel(QObject):
         self.total_cost = 0
         self.amount_received = 0
         self.payment_data = None
-        self.cash_received = {}
+        self.cash_received = {}  # {denomination: count}
+        self.cash_type_tracking = {}  # {denomination: 'coin' or 'bill'} - tracks type for ambiguous denominations like 20
         self.payment_ready = False
         self._payment_completing = False  # Prevent duplicate payment completions
 
@@ -130,6 +131,9 @@ class PaymentModel(QObject):
 
         self.amount_received += coin_value
         self.cash_received[coin_value] = self.cash_received.get(coin_value, 0) + 1
+        # Track type for ambiguous denominations (like 20 peso which can be coin or bill)
+        if coin_value == 20:
+            self.cash_type_tracking[coin_value] = 'coin'
         
         self.amount_received_updated.emit(self.amount_received)
         self._update_payment_status()
@@ -150,6 +154,14 @@ class PaymentModel(QObject):
             return
 
         self.amount_received += bill_value
+        self.cash_received[bill_value] = self.cash_received.get(bill_value, 0) + 1
+        # Track type for ambiguous denominations (like 20 peso which can be coin or bill)
+        if bill_value == 20:
+            self.cash_type_tracking[bill_value] = 'bill'
+        else:
+            # All other bills (50, 100, 500+) are always bills
+            self.cash_type_tracking[bill_value] = 'bill'
+        
         self.amount_received_updated.emit(self.amount_received)
         self._update_payment_status()
 
@@ -230,7 +242,17 @@ class PaymentModel(QObject):
             
             for denomination, count in coin_data.items():
                 if count > 0:
-                    is_bill = denomination >= 20
+                    # Determine cash type based on denomination and tracked type
+                    # Bills: 50, 100, 500+ (always bills)
+                    # Coins: 1, 5, 10 (always coins)
+                    # 20 peso: can be either coin or bill - use tracked type
+                    if denomination >= 50:
+                        cash_type = 'bill'
+                    elif denomination == 20:
+                        # Use tracked type if available, otherwise default to coin
+                        cash_type = self.cash_type_tracking.get(denomination, 'coin')
+                    else:
+                        cash_type = 'coin'
                     
                     # Only process coins 1 and 5 peso when dispensing change
                     if not add and denomination not in [1, 5]:
@@ -240,7 +262,7 @@ class PaymentModel(QObject):
                     current_count = 0
                     for item in current_inventory:
                         if (item.get('denomination') == denomination and 
-                            item.get('type') == ('bill' if is_bill else 'coin')):
+                            item.get('type') == cash_type):
                             current_count = item.get('count', 0)
                             break
                     
@@ -254,11 +276,11 @@ class PaymentModel(QObject):
                     self.db_manager.update_cash_inventory(
                         denomination=denomination,
                         count=new_count,
-                        type='bill' if is_bill else 'coin'
+                        type=cash_type
                     )
                     
                     operation_symbol = "+" if add else "-"
-                    print(f"Updated {denomination} {'bill' if is_bill else 'coin'}: {current_count} {operation_symbol}{count} = {new_count}")
+                    print(f"Updated {denomination} {cash_type}: {current_count} {operation_symbol}{count} = {new_count}")
             
             print("Coin inventory updated")
                     
@@ -424,6 +446,7 @@ class PaymentModel(QObject):
         self.amount_received = 0
         self.total_cost = 0
         self.cash_received = {}
+        self.cash_type_tracking = {}
 
         # Reset payment data
         self.payment_data = None
@@ -474,13 +497,19 @@ class PaymentModel(QObject):
                 for denomination, count in self.cash_received.items():
                     if not count:
                         continue
-                    is_bill = denomination >= 20
-                    key = ('bill' if is_bill else 'coin', int(denomination))
+                    # Determine type: bills are 50+, coins are 1, 5, 10, and 20 (if tracked as coin)
+                    if denomination >= 50:
+                        cash_type = 'bill'
+                    elif denomination == 20:
+                        cash_type = self.cash_type_tracking.get(denomination, 'coin')
+                    else:
+                        cash_type = 'coin'
+                    key = (cash_type, int(denomination))
                     new_count = current_inventory.get(key, 0) + int(count)
                     self.db_manager.update_cash_inventory(
                         denomination=int(denomination),
                         count=new_count,
-                        type='bill' if is_bill else 'coin'
+                        type=cash_type
                     )
             except Exception as inv_err:
                 print(f"Failed to update cash inventory on cancel: {inv_err}")
@@ -494,6 +523,7 @@ class PaymentModel(QObject):
         # Reset payment state
         self.amount_received = 0
         self.cash_received = {}
+        self.cash_type_tracking = {}
         self._payment_completing = False  # Reset payment completion flag
 
         self.amount_received_updated.emit(0)
