@@ -82,7 +82,7 @@ class PrintingSystemApp(QMainWindow):
     # Paper count check and redirect if low
     def check_paper_count_and_redirect(self):
         paper_count = self.admin_screen.get_paper_count()
-        if paper_count <= 3: # Stop kiosk at 3 pages
+        if paper_count <= 0: # Stop kiosk at 3 pages
             print(f"Low paper detected: {paper_count} pages remaining. Redirecting to error screen.")
             self.show_screen('thank_you')
             self.thank_you_screen.show_no_paper_error(paper_count)

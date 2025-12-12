@@ -206,7 +206,7 @@ class PaymentModel(QObject):
                 'total_cost': payment_info.get('total_cost', 0),
                 'amount_paid': payment_info.get('amount_received', 0),
                 'change_given': payment_info.get('change', 0),
-                'status': 'completed'  # Mark as paid, will update to 'completed' after printing
+                'status': 'completed'  # Final status
             }
             
             # Log to database using PaymentModel's db_manager
@@ -276,26 +276,8 @@ class PaymentModel(QObject):
             change_amount = self.amount_received - self.total_cost
             print(f"Payment calculation - received: {self.amount_received}, cost: {self.total_cost}, change: {change_amount}")
 
-            # Create transaction data and log immediately so it exists regardless of print outcome
-            pdf_info = self.payment_data.get('pdf_data') or {}
-            pdf_path = pdf_info.get('path')
-            selected_pages = self.payment_data.get('selected_pages') or []
-            copies = int(self.payment_data.get('copies') or 1)
-            color_mode = self.payment_data.get('color_mode') or 'Color'
-            file_name = os.path.basename(pdf_path) if pdf_path else 'unknown.pdf'
-
-            self.transaction_data = {
-                'file_name': file_name,
-                'pages': len(selected_pages),
-                'copies': copies,
-                'color_mode': color_mode,
-                'total_cost': float(self.total_cost or 0),
-                'amount_paid': float(self.amount_received or 0),
-                'change_given': float(change_amount or 0),
-                'status': 'paid'
-            }
-            print(f"Transaction data created")
-            self.db_manager.log_transaction(self.transaction_data)
+            # NOTE: Intermediate "paid" logging removed to prevent duplicate history entries.
+            # The final "completed" log is handled in _navigate_to_thank_you via log_transaction()
 
             # Stop any existing dispense thread to prevent conflicts
             if self.dispense_thread and self.dispense_thread.isRunning():
