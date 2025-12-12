@@ -373,7 +373,7 @@ class InkAnalysisManager:
                         self.low_ink_alerts_sent[cartridge_name] = False
                         print(f"Low ink alert flag reset for {cartridge_name} ({level:.1f}%) - cartridge refilled")
             
-            # Send SMS alerts if any cartridges are low
+            # Send SMS alerts and log to database if any cartridges are low
             if low_cartridges:
                 try:
                     from managers.sms_manager import send_multiple_low_ink_sms
@@ -383,10 +383,25 @@ class InkAnalysisManager:
                         from managers.sms_manager import send_low_ink_sms
                         send_low_ink_sms(cartridge_name, level)
                         print(f"SMS alert sent for low {cartridge_name} ink ({level:.1f}%)")
+                        
+                        # Log to error database
+                        try:
+                            from utils.error_logger import log_error
+                            log_error("Low Ink", f"{cartridge_name} ink is low ({level:.1f}%)", "ink_analysis_manager")
+                        except Exception as log_err:
+                            print(f"Failed to log low ink error to database: {log_err}")
                     else:
                         # Multiple cartridges low
                         send_multiple_low_ink_sms(low_cartridges)
                         print(f"SMS alert sent for {len(low_cartridges)} low ink cartridges")
+                        
+                        # Log to error database
+                        try:
+                            from utils.error_logger import log_error
+                            cartridge_list = ", ".join([f"{name} ({level:.1f}%)" for name, level in low_cartridges])
+                            log_error("Low Ink", f"Multiple ink cartridges are low: {cartridge_list}", "ink_analysis_manager")
+                        except Exception as log_err:
+                            print(f"Failed to log low ink error to database: {log_err}")
                 except Exception as e:
                     print(f"Error sending low ink SMS alert: {e}")
             else:
