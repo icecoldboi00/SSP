@@ -42,6 +42,7 @@ class DataViewerController(QWidget):
         self.view.refresh_transactions_clicked.connect(self.model.load_transactions)
         self.view.refresh_cash_inventory_clicked.connect(self.model.load_cash_inventory)
         self.view.refresh_error_log_clicked.connect(self.model.load_error_log)
+        self.view.reset_coin_counts_clicked.connect(self.model.reset_coin_counts)
         
         # --- Model -> View ---
         self.model.transactions_loaded.connect(self.view.update_transactions_table)

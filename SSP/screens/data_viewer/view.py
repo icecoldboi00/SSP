@@ -14,6 +14,7 @@ class DataViewerScreenView(QWidget):
     refresh_transactions_clicked = pyqtSignal()
     refresh_cash_inventory_clicked = pyqtSignal()
     refresh_error_log_clicked = pyqtSignal()
+    reset_coin_counts_clicked = pyqtSignal()
     
     def __init__(self, background_image_path=None):
         super().__init__()
@@ -90,6 +91,13 @@ class DataViewerScreenView(QWidget):
         self.back_button.setStyleSheet(self.get_back_button_style())
         self.back_button.clicked.connect(self.back_clicked.emit)
         
+        # Reset Count Button
+        self.reset_count_button = QPushButton("Reset Count")
+        self.reset_count_button.setFixedWidth(200)
+        self.reset_count_button.setFixedHeight(48)
+        self.reset_count_button.setStyleSheet(self.get_reset_button_style())
+        self.reset_count_button.clicked.connect(self.reset_coin_counts_clicked.emit)
+        
         # Refresh Data Button
         self.refresh_data_button = QPushButton("Refresh Data")
         self.refresh_data_button.setFixedWidth(200)
@@ -99,6 +107,7 @@ class DataViewerScreenView(QWidget):
         
         buttons_layout.addWidget(self.back_button)
         buttons_layout.addStretch()
+        buttons_layout.addWidget(self.reset_count_button)
         buttons_layout.addWidget(self.refresh_data_button)
         
         layout.addWidget(content_frame, 1)
@@ -329,4 +338,14 @@ class DataViewerScreenView(QWidget):
                 border: none; border-radius: 8px; padding: 8px;
             }
             QPushButton:hover { background-color: #2a5d1a; }
+        """
+    
+    def get_reset_button_style(self):
+        """Returns the style for the reset count button."""
+        return """
+            QPushButton {
+                background-color: #dc3545; color: white; font-size: 16px; font-weight: bold;
+                border: none; border-radius: 8px; padding: 8px;
+            }
+            QPushButton:hover { background-color: #c82333; }
         """

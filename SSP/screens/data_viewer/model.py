@@ -52,3 +52,19 @@ class DataViewerModel(QObject):
         self.load_transactions()
         self.load_cash_inventory()
         self.load_error_log()
+    
+    def reset_coin_counts(self):
+        """Resets the count of all bills (20, 50, 100) to 0."""
+        try:
+            print("Resetting bill counts...")
+            # Reset all bill denominations (20, 50, 100) to 0
+            self.db_manager.update_cash_inventory(20, 0, 'bill')
+            self.db_manager.update_cash_inventory(50, 0, 'bill')
+            self.db_manager.update_cash_inventory(100, 0, 'bill')
+            print("Bill counts reset successfully")
+            # Reload cash inventory to reflect changes
+            self.load_cash_inventory()
+            self.show_message.emit("Success", "Bill counts (20, 50, 100) have been reset to 0")
+        except Exception as e:
+            print(f"ERROR: Failed to reset bill counts: {e}")
+            self.show_message.emit("Error", f"Failed to reset bill counts: {str(e)}")
