@@ -118,12 +118,8 @@ class PrintingSystemApp(QMainWindow):
         # Show thank you screen after payment
         self.show_screen('thank_you')
         
-        # Verify file exists before printing
+        # Get file path for print job
         file_path = payment_info['pdf_data']['path']
-        if not self.usb_file_manager.verify_file_in_session(file_path):
-            print(f"PDF file not found in current session: {file_path}")
-            self.thank_you_screen.show_printing_error(f"PDF file not found: {os.path.basename(file_path)}")
-            return
         
         # Check printer availability before starting print job
         if not self.printer_manager.check_printer_availability():
