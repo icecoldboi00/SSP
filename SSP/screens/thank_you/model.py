@@ -42,23 +42,21 @@ class ThankYouModel(QObject):
         if not hasattr(main_app, 'current_print_job') or not main_app.current_print_job:
             print(f"No valid print job available")
             return
-        
-        # Attempt to safely eject the USB drive before starting the print job.
-        # At this point the selected PDF has already been copied to a temp session folder,
-        # so the original USB is no longer needed for printing.
+
+        # Eject USB on Raspberry Pi OS before printing starts.
+        # Printing uses the temp session copy, so it's safe to eject the original USB here.
         try:
+            usb_manager = None
             if hasattr(main_app, 'usb_screen') and hasattr(main_app.usb_screen, 'model'):
                 usb_manager = getattr(main_app.usb_screen.model, 'usb_manager', None)
-                if usb_manager:
-                    ok = usb_manager.eject_current_usb_drive()
-                    if not ok:
-                        print("USB eject reported failure (continuing to print)")
-                else:
-                    print("No USBFileManager instance available for eject")
+            if usb_manager and hasattr(usb_manager, 'eject_current_usb_drive'):
+                ok = usb_manager.eject_current_usb_drive()
+                if not ok:
+                    print("[USB EJECT] Reported failure (continuing to print)")
             else:
-                print("USB screen/model not available; skipping USB eject")
+                print("[USB EJECT] USB manager not available; skipping eject")
         except Exception as eject_error:
-            print(f"Error while trying to eject USB drive: {eject_error}")
+            print(f"[USB EJECT] Exception during eject attempt: {eject_error}")
         
         # Set initial state
         self.current_state = "waiting"
