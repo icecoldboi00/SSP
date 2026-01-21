@@ -50,7 +50,9 @@ class ThankYouModel(QObject):
             if hasattr(main_app, 'usb_screen') and hasattr(main_app.usb_screen, 'model'):
                 usb_manager = getattr(main_app.usb_screen.model, 'usb_manager', None)
                 if usb_manager:
-                    usb_manager.eject_current_usb_drive()
+                    ok = usb_manager.eject_current_usb_drive()
+                    if not ok:
+                        print("USB eject reported failure (continuing to print)")
                 else:
                     print("No USBFileManager instance available for eject")
             else:

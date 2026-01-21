@@ -6,6 +6,8 @@ import platform
 import threading
 import fitz
 from datetime import datetime
+import re
+import subprocess
 
 class USBFileManager:
     def __init__(self):
@@ -195,7 +197,6 @@ class USBFileManager:
             # Clear all tracking data
             self.files_in_use.clear()
             self.operation_in_progress = False
-            self.current_usb_drive = None
             self.last_known_drives.clear()
             
             # Clean up all temporary directories (old sessions only)
@@ -397,7 +398,7 @@ class USBFileManager:
         usb_path = self.current_usb_drive
         if not usb_path:
             print("No current USB drive to eject")
-            return
+            return False
 
         try:
             print(f"Auto-ejecting USB drive: {usb_path}")
@@ -406,41 +407,95 @@ class USBFileManager:
             self.files_in_use.clear()
             self.operation_in_progress = False
 
-            # Try to unmount the drive (Linux only)
+            # Try to unmount + power-off (Linux only). This matches what the file manager "Eject" menu does.
             if platform.system() == "Linux":
                 try:
-                    import subprocess
-                    # Find the device path for the mount point
+                    # Resolve mountpoint -> partition device (e.g. /dev/sdb1)
                     result = subprocess.run(
-                        ['findmnt', '-n', '-o', 'SOURCE', usb_path],
+                        ['findmnt', '-n', '-o', 'SOURCE', '--target', usb_path],
                         capture_output=True,
                         text=True,
                         timeout=5
                     )
                     if result.returncode == 0:
-                        device = result.stdout.strip()
-                        print(f"Unmounting device: {device}")
-                        # Use sudo to ensure unmount works
-                        unmount_result = subprocess.run(
-                            ['sudo', 'umount', usb_path],
-                            capture_output=True,
-                            text=True,
-                            timeout=10
-                        )
-                        if unmount_result.returncode == 0:
+                        part_dev = result.stdout.strip()
+                        print(f"Resolved mount to device: {part_dev}")
+
+                        # Prefer udisksctl (Eject menu behavior). Try without sudo first, then sudo -n.
+                        unmount_cmds = [
+                            ['udisksctl', 'unmount', '-b', part_dev],
+                            ['sudo', '-n', 'udisksctl', 'unmount', '-b', part_dev],
+                        ]
+                        unmounted = False
+                        last_err = ""
+                        for cmd in unmount_cmds:
+                            r = subprocess.run(cmd, capture_output=True, text=True, timeout=15)
+                            if r.returncode == 0:
+                                unmounted = True
+                                if r.stdout.strip():
+                                    print(r.stdout.strip())
+                                break
+                            last_err = (r.stderr or r.stdout or "").strip()
+
+                        # Fallback: plain umount (try without sudo then sudo -n)
+                        if not unmounted:
+                            print(f"udisksctl unmount failed: {last_err}")
+                            for cmd in (['umount', usb_path], ['sudo', '-n', 'umount', usb_path]):
+                                r = subprocess.run(cmd, capture_output=True, text=True, timeout=15)
+                                if r.returncode == 0:
+                                    unmounted = True
+                                    break
+
+                        powered_off = False
+                        if unmounted:
+                            # Determine parent device for power-off (e.g. /dev/sdb)
+                            parent = None
+                            r = subprocess.run(['lsblk', '-no', 'PKNAME', part_dev], capture_output=True, text=True, timeout=5)
+                            if r.returncode == 0 and r.stdout.strip():
+                                parent = '/dev/' + r.stdout.strip()
+                            else:
+                                parent = re.sub(r'(\d+)$', '', part_dev)
+
+                            if parent and parent.startswith('/dev/'):
+                                power_cmds = [
+                                    ['udisksctl', 'power-off', '-b', parent],
+                                    ['sudo', '-n', 'udisksctl', 'power-off', '-b', parent],
+                                ]
+                                last_err = ""
+                                for cmd in power_cmds:
+                                    r = subprocess.run(cmd, capture_output=True, text=True, timeout=15)
+                                    if r.returncode == 0:
+                                        powered_off = True
+                                        if r.stdout.strip():
+                                            print(r.stdout.strip())
+                                        break
+                                    last_err = (r.stderr or r.stdout or "").strip()
+
+                                if not powered_off:
+                                    print(f"udisksctl power-off failed: {last_err}")
+                            else:
+                                print(f"Could not determine parent device for power-off (part={part_dev})")
+
                             print("USB drive unmounted successfully")
+                            if powered_off:
+                                print("USB drive powered off successfully (menu eject)")
                         else:
-                            print(f"Failed to unmount USB drive: {unmount_result.stderr}")
+                            print("USB eject failed: could not unmount")
+                            return False
                     else:
-                        print("Could not find device for unmounting")
+                        print(f"Could not resolve device for mountpoint '{usb_path}': {(result.stderr or '').strip()}")
+                        return False
                 except Exception as e:
                     print(f"Could not unmount USB drive: {e}")
+                    return False
             else:
                 print(f"USB eject requested on unsupported platform ({platform.system()}); treating as safe to remove")
 
             print("USB drive is now safe to remove at any time")
+            return True
         except Exception as e:
             print(f"Error during auto-eject: {e}")
+            return False
         finally:
             # Always clear the pointer to the current drive
             self.current_usb_drive = None
