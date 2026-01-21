@@ -24,7 +24,6 @@ class USBFileManager:
         
         # Disk safety tracking
         self.current_usb_drive = None # One drive only at a time
-        self.eject_in_progress = False
         self.files_in_use = set()  # Track files currently being processed
         self.operation_in_progress = False 
         self._should_stop = False  # Flag to stop operations
@@ -434,7 +433,6 @@ class USBFileManager:
 
         try:
             print(f"[USB EJECT] Requested eject for mountpoint: {usb_path}")
-            self.eject_in_progress = True
 
             # Clear all safety tracking first so our app won't touch this drive again
             self.files_in_use.clear()
@@ -529,5 +527,4 @@ class USBFileManager:
         finally:
             # Always clear the pointer to the current drive
             self.current_usb_drive = None
-            self.eject_in_progress = False
 
