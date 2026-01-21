@@ -94,8 +94,13 @@ class USBScreenModel(QObject):
         self.handle_usb_scan_result([drive_path])
     
     def on_usb_removed(self, drive_path):
-        print(f"USB drive removed: {drive_path}")
-        self.status_changed.emit("USB drive removed.", 'success')
+        # Suppress self-initiated eject removals
+        if hasattr(self, 'usb_manager') and getattr(self.usb_manager, 'eject_in_progress', False):
+            print(f"USB drive removal detected but eject_in_progress=True; suppressing message for {drive_path}")
+            self.usb_manager.eject_in_progress = False
+        else:
+            print(f"USB drive removed: {drive_path}")
+            self.status_changed.emit("USB drive removed.", 'success')
         self.start_usb_monitoring()
     
     # Called when new usb drives are detected
