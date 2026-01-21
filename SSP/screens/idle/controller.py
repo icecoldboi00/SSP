@@ -39,5 +39,8 @@ class IdleController(QWidget):
 
     def on_enter(self):
         print("Idle screen entered.")
-        if self.main_app.check_paper_count_and_redirect(): # Check paper count or go to error screen if kulang
-            return 
+        # First check paper, then ink levels to optionally disable the kiosk
+        if self.main_app.check_paper_count_and_redirect():  # Check paper count or go to error screen if kulang
+            return
+        if self.main_app.check_ink_levels_and_redirect():  # Disable kiosk when ink is critically low
+            return

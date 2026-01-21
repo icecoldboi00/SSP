@@ -82,12 +82,43 @@ class PrintingSystemApp(QMainWindow):
     # Paper count check and redirect if low
     def check_paper_count_and_redirect(self):
         paper_count = self.admin_screen.get_paper_count()
-        if paper_count <= 3: # Stop kiosk at 3 pages
+        if paper_count <= 3:  # Stop kiosk at 3 pages
             print(f"Low paper detected: {paper_count} pages remaining. Redirecting to error screen.")
             self.show_screen('thank_you')
             self.thank_you_screen.show_no_paper_error(paper_count)
-            return True # Redirect to error screen
-        return False # Continue normally
+            return True  # Redirect to error screen
+        return False  # Continue normally
+
+    # Ink level check and redirect if any cartridge is critically low
+    def check_ink_levels_and_redirect(self):
+        try:
+            cmyk_levels = self.admin_screen.db_manager.get_cmyk_ink_levels()
+            if not cmyk_levels:
+                print("No CMYK ink data available, skipping ink level kiosk check")
+                return False
+
+            low_ink_threshold = 20.0
+            low_cartridges = {
+                name: level
+                for name, level in cmyk_levels.items()
+                if name in ('cyan', 'magenta', 'yellow', 'black') and level <= low_ink_threshold
+            }
+
+            if low_cartridges:
+                details = ", ".join(f"{name.capitalize()}: {level:.1f}%" for name, level in low_cartridges.items())
+                print(f"Critical low ink detected ({details}). Disabling kiosk and redirecting to error screen.")
+                # Redirect to thank you / error screen and show a clear low-ink message
+                self.show_screen('thank_you')
+                self.thank_you_screen.show_printing_error(
+                    "Ink levels are too low to continue printing.\n"
+                    "Please contact an administrator to replace the ink cartridges."
+                )
+                return True
+
+            return False
+        except Exception as e:
+            print(f"Error checking ink levels for kiosk disabling: {e}")
+            return False
 
     # Show screen method and calling on_leave and on_enter methods
     def show_screen(self, screen_name):

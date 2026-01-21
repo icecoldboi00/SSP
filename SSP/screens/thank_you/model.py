@@ -43,6 +43,21 @@ class ThankYouModel(QObject):
             print(f"No valid print job available")
             return
         
+        # Attempt to safely eject the USB drive before starting the print job.
+        # At this point the selected PDF has already been copied to a temp session folder,
+        # so the original USB is no longer needed for printing.
+        try:
+            if hasattr(main_app, 'usb_screen') and hasattr(main_app.usb_screen, 'model'):
+                usb_manager = getattr(main_app.usb_screen.model, 'usb_manager', None)
+                if usb_manager:
+                    usb_manager.eject_current_usb_drive()
+                else:
+                    print("No USBFileManager instance available for eject")
+            else:
+                print("USB screen/model not available; skipping USB eject")
+        except Exception as eject_error:
+            print(f"Error while trying to eject USB drive: {eject_error}")
+        
         # Set initial state
         self.current_state = "waiting"
         self.print_job_finished = False  # Reset finished flag for new print job
