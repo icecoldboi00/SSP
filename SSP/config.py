@@ -118,6 +118,26 @@ class Config:
     def phone_number(self) -> str:
         return self.get('PHONE_NUMBER', str)
     
+
+    # Coin and Bill Pinouts
+    
+    @property
+    def coin_pin(self) -> int:
+        return self.get('COIN_PIN', int)
+    
+    @property
+    def bill_pin(self) -> int:
+        return self.get('BILL_PIN', int)
+    
+    @property
+    def coin_inhibit_pin(self) -> int:
+        return self.get('COIN_INHIBIT_PIN', int)
+    
+    @property
+    def bill_inhibit_pin(self) -> int:
+        return self.get('BILL_INHIBIT_PIN', int)
+    
+    
     # Display settings
     
     @property

@@ -2,6 +2,7 @@ import time
 import threading
 from PyQt5.QtCore import QObject, pyqtSignal
 import pigpio
+from config import get_config
 
 
 class PaymentHandler(QObject):
@@ -12,13 +13,14 @@ class PaymentHandler(QObject):
     
     def __init__(self):
         super().__init__()
+        config = get_config()
         self.pi = None
         
-        # Pin configuration (exact from coinbill.py + GPIO 22 for coin inhibit)
-        self.COIN_PIN = 12          # Coin pulse input pin
-        self.BILL_PIN = 18         # Bill pulse input pin
-        self.COIN_INHIBIT_PIN = 22 # Coin acceptor disable pin (active low)
-        self.BILL_INHIBIT_PIN = 23 # Bill acceptor disable pin (active high)
+        # Pin configuration loaded dynamically from config
+        self.COIN_PIN = config.coin_pin                 # Coin pulse input pin
+        self.BILL_PIN = config.bill_pin                 # Bill pulse input pin
+        self.COIN_INHIBIT_PIN = config.coin_inhibit_pin # Coin acceptor disable pin (active low)
+        self.BILL_INHIBIT_PIN = config.bill_inhibit_pin # Bill acceptor disable pin (active high)
         
         # Pulse counting variables (exact from coinbill.py)
         self.coin_pulse_count = 0
