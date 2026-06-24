@@ -112,6 +112,12 @@ class Config:
     def pixel_count_threshold(self) -> int:
         return self.get('PIXEL_COUNT_THRESHOLD', int)
     
+
+    # Phone number configuration
+    @property
+    def phone_number(self) -> str:
+        return self.get('PHONE_NUMBER', str)
+    
     # Display settings
     
     @property

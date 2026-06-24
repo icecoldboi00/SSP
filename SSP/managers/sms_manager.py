@@ -1,11 +1,13 @@
 import serial
 import time
 from PyQt5.QtCore import QObject
+from config import get_config
 
 class SMSManager(QObject):
-    def __init__(self, phone_number="09762912863", serial_port="/dev/serial0", baudrate=9600):
+    def __init__(self, serial_port="/dev/serial0", baudrate=9600):
         super().__init__()
-        self.phone_number = phone_number
+        config = get_config()
+        self.phone_number = config.phone_number
         self.serial_port = serial_port
         self.baudrate = baudrate
     
