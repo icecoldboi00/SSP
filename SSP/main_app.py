@@ -123,11 +123,14 @@ class PrintingSystemApp(QMainWindow):
     # Coin level check and redirect if either 1-peso or 5-peso coins drop below the threshold
     def check_coin_levels_and_redirect(self):
         try:
-            # ---> THIS IS THE MAGIC LINE <---
-            # This forces the app to re-read the .env file so it sees your '15'
-            self.config._load_env_file() 
+            # 1. Force the app to read the file right now
+            self.config.reload()
             
-            # Fetch the current cash inventory from the database
+            # 2. Safely get the exact numbers from the config
+            min_one = self.config.min_one_php_count
+            min_five = self.config.min_five_php_count
+            
+            # 3. Fetch inventory safely from the database
             inventory = self.admin_screen.db_manager.get_cash_inventory()
             coins = {1: 0, 5: 0}
             
@@ -140,16 +143,15 @@ class PrintingSystemApp(QMainWindow):
                     except (ValueError, TypeError):
                         continue
             
-            # Print to terminal so you can verify it sees the new 15!
-            print(f"DEBUG - DB Coins -> ₱1: {coins[1]}, ₱5: {coins[5]}")
-            print(f"DEBUG - .env Thresholds -> ₱1: {self.config.min_one_php_count}, ₱5: {self.config.min_five_php_count}")
+            # 4. Print the absolute truth to your terminal
+            print(f"DEBUG: DB Coins -> ₱1: {coins[1]}, ₱5: {coins[5]}")
+            print(f"DEBUG: Thresholds -> ₱1: {min_one}, ₱5: {min_five}")
             
-            # Check if either 1-peso or 5-peso coins drop below the threshold
-            if coins[1] <= self.config.min_one_php_count or coins[5] <= self.config.min_five_php_count:
-                print(f"Low coins detected! Redirecting to error screen.")
+            # 5. Redirect if needed
+            if coins[1] <= min_one or coins[5] <= min_five:
+                print("Low coins detected! Redirecting to error screen.")
                 self.show_screen('thank_you')
                 
-                # Show the error with the override button
                 if hasattr(self.thank_you_screen, 'show_low_coins_error'):
                     self.thank_you_screen.show_low_coins_error(coins[1], coins[5])
                 else:
@@ -160,9 +162,15 @@ class PrintingSystemApp(QMainWindow):
                 return True
                 
             return False
-        except Exception as e:
-            print(f"Error checking coin levels: {e}")
+            
+        except KeyError as ke:
+            print(f"CRITICAL: Missing variable in your .env file: {ke}")
             return False
+        except Exception as e:
+            print(f"CRITICAL ERROR in check_coin_levels: {e}")
+            return False
+        
+        
     # Show screen method and calling on_leave and on_enter methods
     def show_screen(self, screen_name):
         # Call on_leave method for current screen

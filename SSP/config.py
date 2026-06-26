@@ -2,55 +2,61 @@ import os
 import sys
 from typing import Union
 
-
 class Config:
-    def __init__(self, env_file: str = ".env"):
-        self.env_file = env_file
-        self._check_env_file_exists()
-        self._load_env_file()
-    
-    def _check_env_file_exists(self):
-        if not os.path.exists(self.env_file):
-            print(f"Configuration file '{self.env_file}' not found!")
+    def __init__(self):
+        # 1. BULLETPROOF PATH: Find the exact folder where config.py lives
+        base_dir = os.path.dirname(os.path.abspath(__file__))
+        
+        # Check inside the SSP folder
+        ssp_env = os.path.join(base_dir, ".env")
+        # Check the parent folder (SSP-fieldtest)
+        parent_env = os.path.join(os.path.dirname(base_dir), ".env")
+        
+        if os.path.exists(parent_env):
+            self.env_file = parent_env
+        elif os.path.exists(ssp_env):
+            self.env_file = ssp_env
+        else:
+            print(f"CRITICAL ERROR: .env file not found in {base_dir} or parent directory!")
             sys.exit(1)
+            
+        self._settings = {}
+        self.reload()
     
-    def _load_env_file(self):
+    def reload(self):
+        """Reads the file fresh from the hard drive, bypassing system caches."""
+        self._settings.clear()
+        print(f"DEBUG: Reloading config from exactly -> {self.env_file}")
+        
         with open(self.env_file, 'r', encoding='utf-8') as f:
             for line in f:
                 line = line.strip()
-                
-                # Skip empty lines and comments
                 if not line or line.startswith('#'):
                     continue
-                
-                # Parse key=value pairs
                 if '=' in line:
                     key, value = line.split('=', 1)
                     key = key.strip()
                     value = value.strip()
                     
-                    # Remove inline comments (everything after #)
                     if '#' in value:
                         value = value.split('#')[0].strip()
-                    
-                    # Remove quotes if present
                     if value.startswith('"') and value.endswith('"'):
                         value = value[1:-1]
                     elif value.startswith("'") and value.endswith("'"):
                         value = value[1:-1]
                     
-                    # Set environment variable
-                    os.environ[key] = value
+                    # Store in our local dictionary instead of the OS environment
+                    self._settings[key] = value
     
     def get(self, key: str, value_type: type = str) -> Union[str, int, float, bool]:
-        if key not in os.environ:
-            raise KeyError(f"Configuration key '{key}' not found in .env file")
+        if key not in self._settings:
+            raise KeyError(f"Configuration key '{key}' not found in {self.env_file}")
         
-        value = os.environ[key]
+        value = self._settings[key]
         
         try:
             if value_type == bool:
-                return value.lower() in ('true', '1', 'yes', 'on')
+                return str(value).lower() in ('true', '1', 'yes', 'on')
             elif value_type == int:
                 return int(value)
             elif value_type == float:
