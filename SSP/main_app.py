@@ -17,7 +17,7 @@ from database.models import init_db
 from managers.usb_file_manager import USBFileManager
 from managers.printer_manager import PrinterManager
 from managers.sms_manager import cleanup_sms
-from config import get_config
+
 
 
 class PrintingSystemApp(QMainWindow):
@@ -44,8 +44,6 @@ class PrintingSystemApp(QMainWindow):
                 background-color: transparent;
             }
         """)
-
-        self.config = get_config()
         
         self.stacked_widget = QStackedWidget()
         self.setCentralWidget(self.stacked_widget)
@@ -124,6 +122,9 @@ class PrintingSystemApp(QMainWindow):
         
     # Coin level check and redirect if either 1-peso or 5-peso coins drop below the threshold
     def check_coin_levels_and_redirect(self):
+        from config import get_config
+
+        config = get_config()
         try:
             # Fetch the current cash inventory from the database
             inventory = self.admin_screen.db_manager.get_cash_inventory()
@@ -136,7 +137,7 @@ class PrintingSystemApp(QMainWindow):
                         coins[denom] = int(item.get('count', 0))
             
             # Check if either 1-peso or 5-peso coins drop below the threshold
-            if coins[1] <= self.config.min_one_php_count or coins[5] <= self.config.min_five_php_count:
+            if coins[1] <= config.min_one_php_count or coins[5] <= config.min_five_php_count:
                 print(f"Low coins detected! ₱1: {coins[1]}, ₱5: {coins[5]}. Redirecting to error screen.")
                 self.show_screen('thank_you')
                 self.thank_you_screen.show_low_coins_error(coins[1], coins[5])
