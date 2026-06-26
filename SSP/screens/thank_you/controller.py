@@ -55,6 +55,18 @@ class ThankYouController(QWidget):
     def show_no_paper_error(self, paper_count: int):
  
         self.model.show_no_paper_error(paper_count)
+
+    def show_low_coins_error(self, peso_1_count: int, peso_5_count: int):
+        message = (
+            "Machine is low on coins for change.\n"
+            f"₱1 Coins: {peso_1_count} remaining | ₱5 Coins: {peso_5_count} remaining\n\n"
+            "Please contact an administrator to refill the coins."
+        )
+        # We can reuse the printing error state in the model to show the message
+        self.model.show_printing_error(message)
+        
+        # Explicitly show the admin override button so the admin can bypass the screen
+        self._show_admin_override_button()
     
     def _show_admin_override_button(self):
         print("Showing admin override")

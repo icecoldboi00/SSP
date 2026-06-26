@@ -119,6 +119,31 @@ class PrintingSystemApp(QMainWindow):
         except Exception as e:
             print(f"Error checking ink levels for kiosk disabling: {e}")
             return False
+        
+    # Coin level check and redirect if either 1-peso or 5-peso coins drop below 10
+    def check_coin_levels_and_redirect(self):
+        try:
+            # Fetch the current cash inventory from the database
+            inventory = self.admin_screen.db_manager.get_cash_inventory()
+            coins = {1: 0, 5: 0}
+            
+            for item in inventory:
+                if item.get('type') == 'coin':
+                    denom = int(item.get('denomination'))
+                    if denom in coins:
+                        coins[denom] = int(item.get('count', 0))
+            
+            # Check if either 1-peso or 5-peso coins drop below 10
+            if coins[1] <= 10 or coins[5] <= 10:
+                print(f"Low coins detected! ₱1: {coins[1]}, ₱5: {coins[5]}. Redirecting to error screen.")
+                self.show_screen('thank_you')
+                self.thank_you_screen.show_low_coins_error(coins[1], coins[5])
+                return True
+                
+            return False
+        except Exception as e:
+            print(f"Error checking coin levels: {e}")
+            return False
 
     # Show screen method and calling on_leave and on_enter methods
     def show_screen(self, screen_name):
@@ -131,6 +156,11 @@ class PrintingSystemApp(QMainWindow):
         if screen_name not in ['admin', 'thank_you']:
             if self.check_paper_count_and_redirect():
                 print(f"Cannot navigate to {screen_name} - insufficient paper")
+                return
+            
+            # Check coin levels to block starting new sessions if low
+            if self.check_coin_levels_and_redirect():
+                print(f"Cannot navigate to {screen_name} - insufficient coins for change")
                 return
         
         # Switch to the new screen
