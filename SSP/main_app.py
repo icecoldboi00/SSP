@@ -124,6 +124,9 @@ class PrintingSystemApp(QMainWindow):
     def check_coin_levels_and_redirect(self):
         config = get_config()
         try:
+            # Force read the latest .env file
+            config._load_env_file()
+            
             # Fetch the current cash inventory from the database
             inventory = self.admin_screen.db_manager.get_cash_inventory()
             coins = {1: 0, 5: 0}
@@ -134,9 +137,23 @@ class PrintingSystemApp(QMainWindow):
                     if denom in coins:
                         coins[denom] = int(item.get('count', 0))
             
+            # The exact thresholds from your .env file
+            min_one = config.min_one_php_count
+            min_five = config.min_five_php_count
+            
+            # Figure out exactly which coin is failing the test
+            is_one_low = coins[1] <= min_one
+            is_five_low = coins[5] <= min_five
+            
+            # Print the exact math the computer is doing
+            print("\n--- COIN CHECK DIAGNOSTICS ---")
+            print(f"1-Peso Check: Are my {coins[1]} coins <= {min_one}? -> {is_one_low}")
+            print(f"5-Peso Check: Are my {coins[5]} coins <= {min_five}? -> {is_five_low}")
+            print("------------------------------\n")
+            
             # Check if either 1-peso or 5-peso coins drop below the threshold
-            if coins[1] <= config.min_one_php_count or coins[5] <= config.min_five_php_count:
-                print(f"Low coins detected! ₱1: {coins[1]}, ₱5: {coins[5]}. Redirecting to error screen.")
+            if is_one_low or is_five_low:
+                print("Redirecting to error screen because one of the coins is too low.")
                 self.show_screen('thank_you')
                 self.thank_you_screen.show_low_coins_error(coins[1], coins[5])
                 return True
