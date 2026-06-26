@@ -1,5 +1,6 @@
 from PyQt5.QtCore import QObject, pyqtSignal, QTimer
 import subprocess
+from config import get_config
 
 class ThankYouModel(QObject):
     status_updated = pyqtSignal(str, str)
@@ -9,6 +10,8 @@ class ThankYouModel(QObject):
     
     def __init__(self):
         super().__init__()
+        config = get_config()
+        self.phone_number = config.phone_number
         
         # Redirect timer for auto-navigation back to idle
         self.redirect_timer = QTimer()
@@ -134,10 +137,10 @@ class ThankYouModel(QObject):
             clean_message = "An error occurred."
         
         self.error_type = "paper_jam" if is_paper_jam else ("low_paper" if is_low_paper else "printing_error")
-        
+
         self.status_updated.emit(
             "ERROR OCCURRED",
-            f"Error: {clean_message}\nPlease contact an administrator.\nFor incomplete transactions please contact phone number\n+63 976 291 2863"
+            f"Error: {clean_message}\nPlease contact an administrator.\nFor incomplete transactions please contact phone number\n{self.phone_number}"
         )
         
         # SMS notification is sent by main_app.on_print_failed() not here bro
@@ -168,19 +171,19 @@ class ThankYouModel(QObject):
             error_message = "No paper available. Paper count: 0"
             self.status_updated.emit(
                 "NO PAPER AVAILABLE",
-                "The printer is out of paper. Please contact an administrator.\nFor incomplete transactions please contact phone number\n+63 976 291 2863"
+                f"The printer is out of paper. Please contact an administrator.\nFor incomplete transactions please contact phone number\n{self.phone_number}"
             )
         elif paper_count <= 3:
             error_message = f"Low paper detected. Paper count: {paper_count}"
             self.status_updated.emit(
                 "LOW PAPER WARNING",
-                f"Only {paper_count} page(s) remaining. Please contact an administrator.\nFor incomplete transactions please contact phone number\n+63 976 291 2863"
+                f"Only {paper_count} page(s) remaining. Please contact an administrator.\nFor incomplete transactions please contact phone number\n{self.phone_number}"
             )
         else:
             error_message = f"Low paper warning. Paper count: {paper_count}"
             self.status_updated.emit(
                 "LOW PAPER WARNING",
-                f"Only {paper_count} page(s) remaining. Please contact an administrator.\nFor incomplete transactions please contact phone number\n+63 976 291 2863"
+                f"Only {paper_count} page(s) remaining. Please contact an administrator.\nFor incomplete transactions please contact phone number\n{self.phone_number}"
             )
         
         # Log error to database
@@ -203,7 +206,7 @@ class ThankYouModel(QObject):
         
         self.status_updated.emit(
             "PAPER JAM DETECTED",
-            "Paper jam detected. Please contact an administrator.\nFor incomplete transactions please contact phone number\n+63 976 291 2863"
+            f"Paper jam detected. Please contact an administrator.\nFor incomplete transactions please contact phone number\n{self.phone_number}"
         )
         
         # Show admin override button
