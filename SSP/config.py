@@ -113,6 +113,16 @@ class Config:
         return self.get('PIXEL_COUNT_THRESHOLD', int)
     
 
+    # Coin threshold settings
+    @property
+    def min_one_php_count(self) -> int:
+        return self.get('MIN_ONE_PHP_COUNT', int)
+    
+    @property
+    def min_five_php_count(self) -> int:
+        return self.get('MIN_FIVE_PHP_COUNT', int)
+
+
     # Phone number configuration
     @property
     def phone_number(self) -> str:

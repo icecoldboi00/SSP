@@ -45,6 +45,8 @@ class PrintingSystemApp(QMainWindow):
             }
         """)
 
+        self.config = get_config()
+        
         self.stacked_widget = QStackedWidget()
         self.setCentralWidget(self.stacked_widget)
 
@@ -120,7 +122,7 @@ class PrintingSystemApp(QMainWindow):
             print(f"Error checking ink levels for kiosk disabling: {e}")
             return False
         
-    # Coin level check and redirect if either 1-peso or 5-peso coins drop below 10
+    # Coin level check and redirect if either 1-peso or 5-peso coins drop below the threshold
     def check_coin_levels_and_redirect(self):
         try:
             # Fetch the current cash inventory from the database
@@ -133,8 +135,8 @@ class PrintingSystemApp(QMainWindow):
                     if denom in coins:
                         coins[denom] = int(item.get('count', 0))
             
-            # Check if either 1-peso or 5-peso coins drop below 10
-            if coins[1] <= 10 or coins[5] <= 10:
+            # Check if either 1-peso or 5-peso coins drop below the threshold
+            if coins[1] <= self.config.min_one_php_count or coins[5] <= self.config.min_five_php_count:
                 print(f"Low coins detected! ₱1: {coins[1]}, ₱5: {coins[5]}. Redirecting to error screen.")
                 self.show_screen('thank_you')
                 self.thank_you_screen.show_low_coins_error(coins[1], coins[5])
