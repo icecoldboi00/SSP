@@ -137,7 +137,7 @@ class PrintingSystemApp(QMainWindow):
                         coins[denom] = int(item.get('count', 0))
             
             # Check if either 1-peso or 5-peso coins drop below the threshold
-            if coins[1] <= config.min_one_php_count or coins[5] <= config.min_five_php_count:
+            if coins[1] <= 10 or coins[5] <= 10:
                 print(f"Low coins detected! ₱1: {coins[1]}, ₱5: {coins[5]}. Redirecting to error screen.")
                 self.show_screen('thank_you')
                 self.thank_you_screen.show_low_coins_error(coins[1], coins[5])
