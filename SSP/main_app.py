@@ -122,31 +122,47 @@ class PrintingSystemApp(QMainWindow):
         
     # Coin level check and redirect if either 1-peso or 5-peso coins drop below the threshold
     def check_coin_levels_and_redirect(self):
-        config = get_config()
         try:
+            # ---> THIS IS THE MAGIC LINE <---
+            # This forces the app to re-read the .env file so it sees your '15'
+            self.config._load_env_file() 
+            
             # Fetch the current cash inventory from the database
-            self.config._load_env_file()
             inventory = self.admin_screen.db_manager.get_cash_inventory()
             coins = {1: 0, 5: 0}
             
             for item in inventory:
                 if item.get('type') == 'coin':
-                    denom = int(item.get('denomination'))
-                    if denom in coins:
-                        coins[denom] = int(item.get('count', 0))
+                    try:
+                        denom = int(float(item.get('denomination', 0)))
+                        if denom in coins:
+                            coins[denom] = int(item.get('count', 0))
+                    except (ValueError, TypeError):
+                        continue
+            
+            # Print to terminal so you can verify it sees the new 15!
+            print(f"DEBUG - DB Coins -> ₱1: {coins[1]}, ₱5: {coins[5]}")
+            print(f"DEBUG - .env Thresholds -> ₱1: {self.config.min_one_php_count}, ₱5: {self.config.min_five_php_count}")
             
             # Check if either 1-peso or 5-peso coins drop below the threshold
-            if coins[1] <= config.min_one_php_count or coins[5] <= config.min_five_php_count:
-                print(f"Low coins detected! ₱1: {coins[1]}, ₱5: {coins[5]}. Redirecting to error screen.")
+            if coins[1] <= self.config.min_one_php_count or coins[5] <= self.config.min_five_php_count:
+                print(f"Low coins detected! Redirecting to error screen.")
                 self.show_screen('thank_you')
-                self.thank_you_screen.show_low_coins_error(coins[1], coins[5])
+                
+                # Show the error with the override button
+                if hasattr(self.thank_you_screen, 'show_low_coins_error'):
+                    self.thank_you_screen.show_low_coins_error(coins[1], coins[5])
+                else:
+                    self.thank_you_screen.show_printing_error(
+                        f"Machine is low on coins for change.\n"
+                        f"₱1: {coins[1]} remaining | ₱5: {coins[5]} remaining"
+                    )
                 return True
                 
             return False
         except Exception as e:
             print(f"Error checking coin levels: {e}")
             return False
-
     # Show screen method and calling on_leave and on_enter methods
     def show_screen(self, screen_name):
         # Call on_leave method for current screen
